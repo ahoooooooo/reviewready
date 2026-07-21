@@ -1,0 +1,9 @@
+#:schema https://developers.openai.com/codex/config-schema.json
+
+# Keep project agents inside the repository and require explicit approval for
+# operations the workspace profile does not allow.
+default_permissions = ":workspace"
+approval_policy = "on-request"
+
+# Hooks are intentionally not enabled yet. Add them only after the validation
+# command is stable and a repeated failure demonstrates a mechanical gate is useful.

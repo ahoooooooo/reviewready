@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "changedFiles": ["src/index.ts"],
+  "body": "## Testing\n\nnpm test passed.\n\n- [x] I understand and take responsibility for this change.",
+  "labels": ["bug"],
+  "linkedIssues": [42],
+  "checks": [
+    {
+      "name": "test",
+      "conclusion": "success",
+      "app": "github-actions"
+    }
+  ],
+  "reviews": []
+}

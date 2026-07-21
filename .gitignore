@@ -1,0 +1,12 @@
+node_modules/
+dist/*
+!dist/action/
+dist/action/*
+!dist/action/index.js
+!dist/action/package.json
+coverage/
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example

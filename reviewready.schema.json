@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ReviewReady policy v1",
+  "description": "Deterministic evidence obligations required before human pull-request review.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "rules"],
+  "properties": {
+    "version": { "const": 1 },
+    "rules": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100,
+      "items": { "$ref": "#/$defs/rule" }
+    }
+  },
+  "$defs": {
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "matchValues": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100,
+      "items": { "$ref": "#/$defs/text" }
+    },
+    "matchSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "anyOf": [{ "required": ["any"] }, { "required": ["all"] }, { "required": ["none"] }],
+      "properties": {
+        "any": { "$ref": "#/$defs/matchValues" },
+        "all": { "$ref": "#/$defs/matchValues" },
+        "none": { "$ref": "#/$defs/matchValues" }
+      }
+    },
+    "condition": {
+      "type": "object",
+      "additionalProperties": false,
+      "anyOf": [{ "required": ["paths"] }, { "required": ["labels"] }],
+      "properties": {
+        "paths": { "$ref": "#/$defs/matchSet" },
+        "labels": { "$ref": "#/$defs/matchSet" }
+      }
+    },
+    "conclusion": {
+      "enum": [
+        "action_required",
+        "cancelled",
+        "failure",
+        "neutral",
+        "skipped",
+        "stale",
+        "success",
+        "timed_out"
+      ]
+    },
+    "requirement": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "heading"],
+          "properties": {
+            "type": { "const": "pr_body_section" },
+            "heading": { "$ref": "#/$defs/text" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type"],
+          "properties": {
+            "type": { "const": "linked_issue" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "name"],
+          "properties": {
+            "type": { "const": "check" },
+            "name": { "$ref": "#/$defs/text" },
+            "conclusions": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 8,
+              "items": { "$ref": "#/$defs/conclusion" },
+              "default": ["success"]
+            },
+            "app": { "$ref": "#/$defs/text" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "minimum"],
+          "properties": {
+            "type": { "const": "maintainer_review" },
+            "minimum": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "text"],
+          "properties": {
+            "type": { "const": "human_attestation" },
+            "text": { "$ref": "#/$defs/text" }
+          }
+        }
+      ]
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "when", "require"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,63}$"
+        },
+        "description": { "$ref": "#/$defs/text" },
+        "when": { "$ref": "#/$defs/condition" },
+        "require": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "items": { "$ref": "#/$defs/requirement" }
+        }
+      }
+    }
+  }
+}

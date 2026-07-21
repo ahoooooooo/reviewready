@@ -1,0 +1,71 @@
+{
+  "name": "reviewready",
+  "version": "1.0.0",
+  "description": "Deterministic evidence checks before a pull request consumes human review time.",
+  "homepage": "https://github.com/ahoooooooo/reviewready#readme",
+  "bugs": {
+    "url": "https://github.com/ahoooooooo/reviewready/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ahoooooooo/reviewready.git"
+  },
+  "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "github-actions",
+    "pull-request",
+    "code-review",
+    "policy-as-code",
+    "developer-tools",
+    "open-source",
+    "ai-agents",
+    "cli"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "bin": {
+    "reviewready": "dist/cli.js"
+  },
+  "files": [
+    "dist/*.js",
+    "dist/*.d.ts",
+    "reviewready.schema.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "bundle:action": "ncc build src/action.ts -o dist/action --minify",
+    "bundle": "npm run build && npm run bundle:action",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format:check": "prettier --check .",
+    "format": "prettier --write .",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm run test:coverage && npm run bundle",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@actions/core": "^3.0.1",
+    "@actions/github": "^9.1.1",
+    "micromatch": "^4.0.8",
+    "yaml": "^2.9.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/micromatch": "^4.0.10",
+    "@types/node": "^26.1.1",
+    "@vercel/ncc": "^0.44.1",
+    "@vitest/coverage-v8": "^4.1.10",
+    "eslint": "^10.7.0",
+    "prettier": "^3.9.6",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.65.0",
+    "vitest": "^4.1.10"
+  }
+}

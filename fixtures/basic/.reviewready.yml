@@ -1,0 +1,16 @@
+version: 1
+rules:
+  - id: source-change
+    description: Source changes need an explanation and successful tests.
+    when:
+      paths:
+        any: ["src/**"]
+    require:
+      - type: pr_body_section
+        heading: Testing
+      - type: linked_issue
+      - type: check
+        name: test
+        conclusions: [success]
+      - type: human_attestation
+        text: I understand and take responsibility for this change.

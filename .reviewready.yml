@@ -1,0 +1,29 @@
+# yaml-language-server: $schema=./reviewready.schema.json
+version: 1
+rules:
+  - id: source-change
+    description: Source changes need test evidence and human accountability.
+    when:
+      paths:
+        any: ["src/**"]
+    require:
+      - type: pr_body_section
+        heading: Testing
+      - type: check
+        name: check
+        conclusions: [success]
+      - type: human_attestation
+        text: I understand and take responsibility for this change.
+
+  - id: workflow-change
+    description: Workflow changes require a documented risk assessment.
+    when:
+      paths:
+        any: [".github/workflows/**", "action.yml"]
+    require:
+      - type: pr_body_section
+        heading: Risk
+      - type: maintainer_review
+        minimum: 1
+      - type: human_attestation
+        text: I understand and take responsibility for this change.

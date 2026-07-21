@@ -1,0 +1,27 @@
+name: ReviewReady
+description: Check whether a pull request has the evidence required for human review.
+author: ReviewReady contributors
+
+inputs:
+  token:
+    description: GitHub token used for read-only pull-request evidence.
+    required: true
+    default: ${{ github.token }}
+  policy-path:
+    description: Repository-relative path to the ReviewReady policy.
+    required: false
+    default: .reviewready.yml
+
+outputs:
+  status:
+    description: Either ready or not_ready.
+  report-json:
+    description: Versioned JSON evaluation result.
+
+runs:
+  using: node24
+  main: dist/action/index.js
+
+branding:
+  icon: check-circle
+  color: green
