@@ -1,8 +1,7 @@
 # ReviewReady v1 release evidence
 
-This file records the local release-candidate verification performed on
-2026-07-22 and the first public GitHub-hosted verification. It does not claim
-that the npm package, tags, or GitHub Release have been published.
+This file records the local and public release verification performed on
+2026-07-22 for ReviewReady v1.0.0.
 
 ## Complete local gate
 
@@ -44,6 +43,11 @@ An actual tarball was then installed into an isolated Windows temp directory.
 The installed node_modules/.bin/reviewready.cmd shim successfully validated the
 basic policy fixture. The clean install added 31 runtime packages.
 
+After publication, a fresh unaffiliated cache resolved the public registry
+tarball with SHA-1 `c388546602ae9b789ad43423b875cbe02d7d8a2f`. A clean registry
+install again added 31 runtime packages, and its `reviewready.cmd` shim validated
+the basic policy fixture successfully.
+
 ## CLI smoke tests
 
 Using Node.js v24.18.0:
@@ -80,13 +84,17 @@ docs/architecture.md.
 
 ## External publication checklist
 
-These steps require the owner's explicit account choices and authorization:
-
 - [x] confirm the final project and GitHub repository name;
 - [x] initialize Git and review the complete first commit;
 - [x] create the public repository and push;
 - [x] observe CI on GitHub-hosted runners;
-- recheck npm name availability;
-- publish @ahoooooo/reviewready@1.0.0 with the owner's npm credentials;
-- create immutable v1.0.0 and moving v1 Action tags;
-- create a GitHub Release and enable private vulnerability reporting.
+- [x] recheck npm name availability;
+- [x] publish @ahoooooo/reviewready@1.0.0 with the owner's npm credentials;
+- [x] create immutable v1.0.0 and moving v1 Action tags;
+- [x] create a GitHub Release and enable private vulnerability reporting.
+
+Public coordinates:
+
+- GitHub: https://github.com/ahoooooooo/reviewready
+- npm: https://www.npmjs.com/package/@ahoooooo/reviewready
+- Release: https://github.com/ahoooooooo/reviewready/releases/tag/v1.0.0
