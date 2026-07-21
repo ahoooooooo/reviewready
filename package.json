@@ -1,5 +1,5 @@
 {
-  "name": "reviewready",
+  "name": "@ahoooooo/reviewready",
   "version": "1.0.0",
   "description": "Deterministic evidence checks before a pull request consumes human review time.",
   "homepage": "https://github.com/ahoooooooo/reviewready#readme",

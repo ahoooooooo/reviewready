@@ -1,8 +1,8 @@
 # ReviewReady
 
 [![CI](https://github.com/ahoooooooo/reviewready/actions/workflows/ci.yml/badge.svg)](https://github.com/ahoooooooo/reviewready/actions/workflows/ci.yml)
-[![npm version](https://img.shields.io/npm/v/reviewready.svg)](https://www.npmjs.com/package/reviewready)
-[![npm downloads](https://img.shields.io/npm/dm/reviewready.svg)](https://www.npmjs.com/package/reviewready)
+[![npm version](https://img.shields.io/npm/v/%40ahoooooo%2Freviewready.svg)](https://www.npmjs.com/package/@ahoooooo/reviewready)
+[![npm downloads](https://img.shields.io/npm/dm/%40ahoooooo%2Freviewready.svg)](https://www.npmjs.com/package/@ahoooooo/reviewready)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ReviewReady is a deterministic evidence gate for pull requests. A repository
@@ -28,7 +28,7 @@ Use the Action in a GitHub workflow:
 Or install the CLI from npm (Node.js 24 or newer):
 
 ```console
-npm install --global reviewready
+npm install --global @ahoooooo/reviewready
 reviewready validate --policy .reviewready.yml
 ```
 

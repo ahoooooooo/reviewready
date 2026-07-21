@@ -1,8 +1,8 @@
 # ReviewReady v1 release evidence
 
 This file records the local release-candidate verification performed on
-2026-07-22. It does not claim that a GitHub repository, npm package, tag, or
-GitHub Release has been published.
+2026-07-22 and the first public GitHub-hosted verification. It does not claim
+that the npm package, tags, or GitHub Release have been published.
 
 ## Complete local gate
 
@@ -27,15 +27,16 @@ Observed result:
 
 ## Package verification
 
-The npm registry returned 404 for the unscoped name reviewready at verification
-time, meaning no public package was found. This is not a reservation and must be
-checked again immediately before publication.
+The npm registry returned 404 for the unscoped name reviewready, but publication
+was rejected because npm considered it too similar to the existing `review-ready`
+package. The owner approved `@ahoooooo/reviewready`; the scoped coordinate returned
+404 at verification time and must be checked again immediately before publication.
 
-npm pack --dry-run produced reviewready-1.0.0.tgz with:
+npm pack --dry-run produced ahoooooo-reviewready-1.0.0.tgz with:
 
 - 28 package entries;
-- packed size 14,593 bytes;
-- unpacked size 51,371 bytes;
+- packed size 14,833 bytes;
+- unpacked size 52,307 bytes;
 - CLI JavaScript and declarations;
 - README, MIT license, and the v1 policy JSON Schema.
 
@@ -64,8 +65,8 @@ Automated tests cover:
 - ready and not-ready Action outputs and job summaries.
 
 The production entry point bundles into dist/action/index.js with Node 24 action
-metadata in action.yml. A live GitHub-hosted run remains an external publication
-step because this workspace has no Git repository or remote.
+metadata in action.yml. GitHub-hosted CI passed against commit 8390cd7 after the
+public repository was created and main was pushed.
 
 ## Dependency and security evidence
 
@@ -81,11 +82,11 @@ docs/architecture.md.
 
 These steps require the owner's explicit account choices and authorization:
 
-- confirm the final project and GitHub repository name;
-- initialize Git and review the complete first commit;
-- create the public repository and push;
-- observe CI on GitHub-hosted runners;
+- [x] confirm the final project and GitHub repository name;
+- [x] initialize Git and review the complete first commit;
+- [x] create the public repository and push;
+- [x] observe CI on GitHub-hosted runners;
 - recheck npm name availability;
-- publish reviewready@1.0.0 with the owner's npm credentials;
+- publish @ahoooooo/reviewready@1.0.0 with the owner's npm credentials;
 - create immutable v1.0.0 and moving v1 Action tags;
 - create a GitHub Release and enable private vulnerability reporting.
