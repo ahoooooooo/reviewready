@@ -1,6 +1,6 @@
 {
   "name": "@ahoooooo/reviewready",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Deterministic evidence checks before a pull request consumes human review time.",
   "homepage": "https://github.com/ahoooooooo/reviewready#readme",
   "bugs": {
@@ -12,6 +12,10 @@
   },
   "type": "module",
   "license": "MIT",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
   "keywords": [
     "github-actions",
     "pull-request",
@@ -46,7 +50,9 @@
     "lint": "eslint .",
     "format:check": "prettier --check .",
     "format": "prettier --write .",
-    "check": "npm run format:check && npm run lint && npm run typecheck && npm run test:coverage && npm run bundle",
+    "verify:package": "node scripts/verify-package.mjs",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm run test:coverage && npm run bundle && npm run verify:package",
+    "prepublishOnly": "npm run check",
     "prepack": "npm run build"
   },
   "dependencies": {
