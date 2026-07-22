@@ -16,7 +16,14 @@
     "resolveJsonModule": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
+    "allowJs": true,
     "types": ["node", "vitest/globals"]
   },
-  "include": ["src/**/*.ts", "test/**/*.ts", "vitest.config.ts", "eslint.config.js"]
+  "include": [
+    "src/**/*.ts",
+    "test/**/*.ts",
+    "scripts/**/*.mjs",
+    "vitest.config.ts",
+    "eslint.config.js"
+  ]
 }

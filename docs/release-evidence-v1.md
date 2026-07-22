@@ -1,5 +1,10 @@
 # ReviewReady v1 release evidence
 
+> Historical record: npm v1.0.0 and v1.0.1 were fully unpublished on
+> 2026-07-22 after personal email metadata was discovered in public registry
+> history. The GitHub project remains public. The v1.0.2 recovery and its new
+> package-privacy gate are tracked in `docs/release-evidence-v1.0.2.md`.
+
 This file records the local and public release verification performed on
 2026-07-22 for ReviewReady v1.0.0.
 
