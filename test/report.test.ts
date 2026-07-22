@@ -72,6 +72,35 @@ rules:
     expect(renderMarkdown(malicious)).not.toContain("<script>");
   });
 
+  it("renders untrusted Markdown control characters as literal text", () => {
+    const markdownSensitive = evaluate(
+      parsePolicy(`
+version: 1
+rules:
+  - id: escaped
+    when:
+      paths:
+        any: ["src/**"]
+    require:
+      - type: pr_body_section
+        heading: 'backslash \\ and ~~strike~~ & <script>'
+`),
+      {
+        version: 1,
+        changedFiles: ["src/index.ts"],
+        body: "",
+        labels: [],
+        linkedIssues: [],
+        checks: [],
+        reviews: []
+      }
+    );
+
+    expect(renderMarkdown(markdownSensitive)).toContain(
+      String.raw`PR body section "backslash \\ and \~\~strike\~\~ &amp; &lt;script&gt;" has content`
+    );
+  });
+
   it("explains conditions and requirements in deterministic order", () => {
     const explanation = explainPolicy(policy);
 

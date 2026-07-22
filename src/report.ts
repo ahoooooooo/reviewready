@@ -33,14 +33,18 @@ function matchSetLabel(kind: "paths" | "labels", matchSet: MatchSet): string[] {
 }
 
 function escapeMarkdown(value: string): string {
-  return value
-    .replaceAll("\\", "\\\\")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replace(/[\r\n]+/gu, " ")
-    .replace(/([`*_{}()#+.!|])/gu, "\\$1")
-    .replaceAll("[", "\\[")
-    .replaceAll("]", "\\]");
+  return value.replace(/[\r\n]+/gu, " ").replace(/[&<>\\`*_{}[\]()#+.!|~-]/gu, (character) => {
+    switch (character) {
+      case "&":
+        return "&amp;";
+      case "<":
+        return "&lt;";
+      case ">":
+        return "&gt;";
+      default:
+        return `\\${character}`;
+    }
+  });
 }
 
 function splitResults(result: EvaluationResult): {
