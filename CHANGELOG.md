@@ -5,6 +5,13 @@ the project uses semantic versioning.
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-07-22
+
+### Security
+
+- Hardened Markdown report escaping so untrusted policy-derived text renders
+  literally and passes complete-sanitization analysis in CodeQL.
+
 ## [1.0.0] - 2026-07-22
 
 ### Added
