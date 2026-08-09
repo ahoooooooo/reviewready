@@ -7,7 +7,8 @@ checklist: unchecked items are not claims of completion.
 ## Scope and current public state
 
 - The GitHub repository and Marketplace Action remain public.
-- The npm package is temporarily unavailable during npm's unpublish cooldown.
+- `@ahoooooo/reviewready@1.0.2` is public and the npm `latest` tag points to
+  `1.0.2`.
 - v1.0.2 is the next permitted npm version; removed versions will not be reused.
 - A third-party npmmirror cache purge is tracked separately at
   <https://github.com/cnpm/cnpmcore/issues/1115>.
@@ -26,17 +27,20 @@ checklist: unchecked items are not claims of completion.
 ## Local release-candidate verification
 
 - [x] `npm run check` passes from the v1.0.2 source tree: 79 tests passed and all
-      configured coverage thresholds were met.
+      configured coverage thresholds were met (reverified 2026-08-10 after the
+      lockfile security update).
 - [x] `npm pack --dry-run --json --ignore-scripts` lists 28 approved files.
 - [x] The planned v1.0.2 tarball contents pass the package privacy audit.
 - [x] A clean temporary install can run policy validation and a ready fixture
       check without using the source tree.
-- [x] `npm audit` reports no known vulnerabilities for the locked tree.
+- [x] `npm audit` reports no known vulnerabilities for the locked tree
+      (reverified 2026-08-10).
 
-## Public verification (only after cooldown)
+## Public verification
 
-- [ ] Publish `@ahoooooo/reviewready@1.0.2` to the official npm registry.
-- [ ] Verify package metadata and tarball contents from the public registry.
-- [ ] Verify a clean install by exact version from the public registry.
+- [x] Publish `@ahoooooo/reviewready@1.0.2` to the official npm registry.
+- [x] Verify package metadata and tarball contents from the public registry.
+- [x] Verify a clean install by exact version from the public registry; policy
+      validation and the ready fixture check passed without the source tree.
 - [ ] Create or update GitHub release tags only after registry verification.
-- [ ] Record the final package integrity and public URLs here.
+- [x] Record the final package integrity and public URLs here: - Package: <https://www.npmjs.com/package/@ahoooooo/reviewready> - Tarball: <https://registry.npmjs.org/@ahoooooo/reviewready/-/reviewready-1.0.2.tgz> - Integrity: `sha512-C+yelTnjf9FkH9gv3YlFsDL9uj3J4t6/5fXOvovBX+efW/voLYVDqf9VdHNr99WukhmcM1YPqhcFMGuJeYlXiw==` - SHA-1: `d8b6633551f930339585ada67808234cfc89e8a9`

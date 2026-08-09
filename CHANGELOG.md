@@ -3,7 +3,7 @@
 All notable changes are documented here. The format follows Keep a Changelog and
 the project uses semantic versioning.
 
-## [Unreleased]
+## [1.0.2] - 2026-08-10
 
 ### Security
 
@@ -12,6 +12,8 @@ the project uses semantic versioning.
   formats, binary content, unsafe paths, and files outside the public allowlist.
 - Reject personal identity fields in the published package manifest and pin
   public publication to the official npm registry.
+- Refresh vulnerable transitive dependencies in the locked tree; `npm audit`
+  now reports zero vulnerabilities.
 
 ### Changed
 
