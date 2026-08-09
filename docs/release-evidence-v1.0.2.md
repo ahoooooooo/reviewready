@@ -42,5 +42,6 @@ checklist: unchecked items are not claims of completion.
 - [x] Verify package metadata and tarball contents from the public registry.
 - [x] Verify a clean install by exact version from the public registry; policy
       validation and the ready fixture check passed without the source tree.
-- [ ] Create or update GitHub release tags only after registry verification.
+- [x] Create or update GitHub release tags only after registry verification; both
+      `v1.0.2` and `v1` point to commit `95bb3cc`.
 - [x] Record the final package integrity and public URLs here: - Package: <https://www.npmjs.com/package/@ahoooooo/reviewready> - Tarball: <https://registry.npmjs.org/@ahoooooo/reviewready/-/reviewready-1.0.2.tgz> - Integrity: `sha512-C+yelTnjf9FkH9gv3YlFsDL9uj3J4t6/5fXOvovBX+efW/voLYVDqf9VdHNr99WukhmcM1YPqhcFMGuJeYlXiw==` - SHA-1: `d8b6633551f930339585ada67808234cfc89e8a9`
