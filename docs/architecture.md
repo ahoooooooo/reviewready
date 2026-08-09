@@ -32,9 +32,17 @@ The system validates every boundary, never executes input, and renders untrusted
 strings as data. `ready` is informational unless the adopter separately configures
 the job as a required status check.
 
-The Action supports `pull_request` and `pull_request_review` events. A workflow
-that requires other checks must schedule ReviewReady after those jobs; incomplete
-checks do not count as evidence.
+The Action supports `pull_request` and `pull_request_review` events. Review
+events may be submitted, edited, or dismissed; the adapter uses review
+timestamps when GitHub provides them. A workflow that requires other checks
+must schedule ReviewReady after those jobs; incomplete checks do not count as
+evidence.
+
+The GitHub adapter combines completed check runs with terminal commit statuses.
+It fails closed when GitHub pagination reports evidence beyond the safe v1
+limits instead of evaluating a silently truncated list. `merge_group` is
+intentionally unsupported because its payload does not contain enough
+per-pull-request evidence to evaluate the v1 policy safely.
 
 ## Error model
 

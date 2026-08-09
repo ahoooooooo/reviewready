@@ -65,8 +65,10 @@ The policy engine receives data, not an API client:
 - changed repository-relative paths;
 - PR body and labels;
 - linked issue numbers;
-- completed checks with name, conclusion, and optional app identity;
-- approving reviews with reviewer login and maintainer status;
+- completed checks or terminal commit statuses with name, conclusion, and
+  optional app identity;
+- reviews with reviewer login, maintainer status, and an optional submission
+  timestamp;
 - attestations supplied through exact checked markdown task-list items.
 
 GitHub-specific fetching and normalization live outside the engine.
@@ -90,6 +92,8 @@ stderr.
 - A missing, invalid, or unavailable authoritative policy fails closed as an error.
 - The Action requests read-only permissions. It does not post comments, change
   labels, approve, or merge.
+- GitHub evidence that cannot be collected completely at the adapter's bounded
+  pagination limits fails closed rather than being treated as complete.
 
 ## v1 quality bar
 

@@ -9,6 +9,15 @@ export const checkConclusions = [
   "timed_out"
 ] as const;
 
+export const policyLimits = {
+  maxPolicyBytes: 256 * 1024,
+  maxTextLength: 500,
+  maxMatchValues: 100,
+  maxRules: 100,
+  maxRequirementsPerRule: 50,
+  maxCheckConclusions: checkConclusions.length
+} as const;
+
 export type CheckConclusion = (typeof checkConclusions)[number];
 
 export interface MatchSet {
@@ -79,6 +88,11 @@ export interface PullRequestReview {
   readonly login: string;
   readonly state: ReviewState;
   readonly maintainer: boolean;
+  /**
+   * The review submission time, when supplied by a platform adapter. Inputs
+   * without timestamps retain their historical array-order semantics.
+   */
+  readonly submittedAt?: string | undefined;
 }
 
 export interface PullRequestInput {

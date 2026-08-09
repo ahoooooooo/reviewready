@@ -12,7 +12,8 @@ follow the same evidence requirements.
 5. Run the focused test, then npm run check.
 6. Complete the pull-request template and explain residual risk.
 
-Node.js 24 is required. Install the locked toolchain with:
+Node.js 22 or newer is required for the CLI and development toolchain. The
+packaged Action runs on Node.js 24. Install the locked toolchain with:
 
 ```console
 npm ci

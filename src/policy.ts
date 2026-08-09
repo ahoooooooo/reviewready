@@ -1,13 +1,11 @@
 import { parse } from "yaml";
 import { z } from "zod";
 
-import { checkConclusions, type Policy } from "./domain.js";
+import { checkConclusions, policyLimits, type Policy } from "./domain.js";
 import { PolicyError } from "./errors.js";
 
-const MAX_POLICY_BYTES = 256 * 1024;
-
-const text = z.string().trim().min(1).max(500);
-const matchValues = z.array(text).min(1).max(100);
+const text = z.string().trim().min(1).max(policyLimits.maxTextLength);
+const matchValues = z.array(text).min(1).max(policyLimits.maxMatchValues);
 
 const matchSetSchema = z
   .object({
@@ -48,7 +46,7 @@ const requirementSchema = z.discriminatedUnion("type", [
       conclusions: z
         .array(z.enum(checkConclusions))
         .min(1)
-        .max(checkConclusions.length)
+        .max(policyLimits.maxCheckConclusions)
         .default(["success"]),
       app: text.optional()
     })
@@ -77,12 +75,12 @@ const policySchema = z
             id: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/),
             description: z.string().trim().min(1).max(500).optional(),
             when: conditionSchema,
-            require: z.array(requirementSchema).min(1).max(50)
+            require: z.array(requirementSchema).min(1).max(policyLimits.maxRequirementsPerRule)
           })
           .strict()
       )
       .min(1)
-      .max(100)
+      .max(policyLimits.maxRules)
   })
   .strict();
 
@@ -135,7 +133,7 @@ function validateSemantics(policy: Policy): void {
 }
 
 export function parsePolicy(source: string): Policy {
-  if (Buffer.byteLength(source, "utf8") > MAX_POLICY_BYTES) {
+  if (Buffer.byteLength(source, "utf8") > policyLimits.maxPolicyBytes) {
     throw new PolicyError("POLICY_TOO_LARGE", "Policy exceeds the 256 KiB v1 size limit.");
   }
 
