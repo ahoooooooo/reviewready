@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 
 import { describe, expect, it } from "vitest";
 
+import { checkConclusions, policyLimits } from "../src/domain.js";
 import type { PolicyError } from "../src/errors.js";
 import { parsePolicy } from "../src/policy.js";
 
@@ -114,5 +115,43 @@ rules:
       $schema: "https://json-schema.org/draft/2020-12/schema",
       title: "ReviewReady policy v1"
     });
+  });
+
+  it("keeps the published JSON Schema limits and variants aligned with runtime policy parsing", async () => {
+    const schema = JSON.parse(await readFile("reviewready.schema.json", "utf8")) as {
+      properties: {
+        rules: { maxItems: number };
+      };
+      $defs: {
+        text: { maxLength: number };
+        matchValues: { maxItems: number };
+        conclusion: { enum: readonly string[] };
+        requirement: {
+          oneOf: readonly { properties: { type: { const: string } } }[];
+        };
+        rule: {
+          properties: {
+            require: { maxItems: number };
+          };
+        };
+      };
+    };
+
+    expect(schema.properties.rules.maxItems).toBe(policyLimits.maxRules);
+    expect(schema.$defs.text.maxLength).toBe(policyLimits.maxTextLength);
+    expect(schema.$defs.matchValues.maxItems).toBe(policyLimits.maxMatchValues);
+    expect(schema.$defs.rule.properties.require.maxItems).toBe(policyLimits.maxRequirementsPerRule);
+    expect(schema.$defs.conclusion.enum).toEqual([...checkConclusions]);
+    expect(
+      new Set(schema.$defs.requirement.oneOf.map((variant) => variant.properties.type.const))
+    ).toEqual(
+      new Set([
+        "pr_body_section",
+        "linked_issue",
+        "check",
+        "maintainer_review",
+        "human_attestation"
+      ])
+    );
   });
 });

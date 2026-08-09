@@ -48,5 +48,10 @@ Security invariants:
 - Repository permissions are evaluated at Action run time. Organization role
   changes can therefore change later evaluations.
 - GitHub APIs cap pull-request files at 3,000 and check runs at the 1,000 most
-  recent suites for a ref. Oversized cases may need explicit future handling.
+  recent suites for a ref. ReviewReady rejects responses at or beyond its safe
+  boundary, and rejects closing-issue pagination, rather than evaluating
+  incomplete evidence.
+- `merge_group` is not supported by the v1 Action. Its synthetic commit does
+  not carry a complete per-PR body/review/issue context, so enabling it without
+  an explicit aggregator would weaken the readiness guarantee.
 - Readiness is evidence presence, never correctness, safety, or approval.

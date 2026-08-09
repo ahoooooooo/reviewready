@@ -40,6 +40,7 @@ export interface GitHubCheckRun {
 export interface GitHubReview {
   readonly login: string | null;
   readonly state: string;
+  readonly submittedAt?: string | undefined;
 }
 
 interface RepositoryArguments {
@@ -140,7 +141,15 @@ export async function loadGitHubPullRequest(
 
     const reviewsWithState = rawReviews.flatMap((review) => {
       const state = reviewState(review.state);
-      return review.login === null || state === undefined ? [] : [{ login: review.login, state }];
+      return review.login === null || state === undefined
+        ? []
+        : [
+            {
+              login: review.login,
+              state,
+              ...(review.submittedAt === undefined ? {} : { submittedAt: review.submittedAt })
+            }
+          ];
     });
     const logins = [...new Set(reviewsWithState.map((review) => review.login))];
     const permissions = new Map(

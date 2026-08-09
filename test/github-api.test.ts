@@ -24,7 +24,8 @@ function fakeOctokit(overrides: Record<string, unknown> = {}): ReturnType<typeof
           : [
               {
                 user: { login: "maintainer" },
-                state: "APPROVED"
+                state: "APPROVED",
+                submitted_at: "2026-08-10T10:00:00Z"
               },
               {
                 user: null,
@@ -38,7 +39,8 @@ function fakeOctokit(overrides: Record<string, unknown> = {}): ReturnType<typeof
         repository: {
           pullRequest: {
             closingIssuesReferences: {
-              nodes: [{ number: 7 }, null]
+              nodes: [{ number: 7 }, null],
+              pageInfo: { hasNextPage: false }
             }
           }
         }
@@ -49,6 +51,7 @@ function fakeOctokit(overrides: Record<string, unknown> = {}): ReturnType<typeof
         listForRef: vi.fn(() =>
           Promise.resolve({
             data: {
+              total_count: 2,
               check_runs: [
                 {
                   name: "test",
@@ -67,6 +70,11 @@ function fakeOctokit(overrides: Record<string, unknown> = {}): ReturnType<typeof
       },
       pulls: { listFiles, listReviews },
       repos: {
+        getCombinedStatusForRef: vi.fn(() =>
+          Promise.resolve({
+            data: { statuses: [] }
+          })
+        ),
         getCollaboratorPermissionLevel: vi.fn(() =>
           Promise.resolve({ data: { permission: "write" } })
         )
@@ -95,15 +103,25 @@ describe("collectCheckRunPages", () => {
     expect(fetchPage).toHaveBeenNthCalledWith(2, 2);
   });
 
-  it("caps collection at GitHub's documented 1,000-run boundary", async () => {
-    const fetchPage = vi.fn(() =>
-      Promise.resolve(Array.from({ length: 100 }, () => completed("check")))
+  it("accepts exactly 1,000 runs only after confirming there is no next page", async () => {
+    const fetchPage = vi.fn((page: number) =>
+      Promise.resolve(page <= 10 ? Array.from({ length: 100 }, () => completed("check")) : [])
     );
 
     const runs = await collectCheckRunPages(fetchPage);
 
     expect(runs).toHaveLength(1000);
-    expect(fetchPage).toHaveBeenCalledTimes(10);
+    expect(fetchPage).toHaveBeenCalledTimes(11);
+  });
+
+  it("fails closed when a check-run page exists beyond the safe boundary", async () => {
+    const fetchPage = vi.fn(() =>
+      Promise.resolve(Array.from({ length: 100 }, () => completed("check")))
+    );
+
+    await expect(collectCheckRunPages(fetchPage)).rejects.toMatchObject({
+      code: "GITHUB_EVIDENCE_INCOMPLETE"
+    });
   });
 });
 
@@ -141,7 +159,7 @@ describe("createGitHubGateway", () => {
         pullNumber: 42
       })
     ).resolves.toEqual([
-      { login: "maintainer", state: "APPROVED" },
+      { login: "maintainer", state: "APPROVED", submittedAt: "2026-08-10T10:00:00Z" },
       { login: null, state: "COMMENTED" }
     ]);
     await expect(
@@ -158,6 +176,92 @@ describe("createGitHubGateway", () => {
         pullNumber: 42
       })
     ).resolves.toEqual([7]);
+  });
+
+  it("maps successful and failed commit statuses into check evidence", async () => {
+    const client = fakeOctokit();
+    vi.mocked(client.rest.repos.getCombinedStatusForRef).mockResolvedValueOnce({
+      data: {
+        statuses: [
+          { context: "lint/status", state: "success" },
+          { context: "deploy/status", state: "failure" },
+          { context: "pending/status", state: "pending" }
+        ]
+      }
+    } as never);
+    vi.mocked(getOctokit).mockReturnValue(client);
+    const api = createGitHubGateway("secret");
+
+    await expect(
+      api.listCheckRuns({ owner: "octocat", repo: "demo", ref: "head" })
+    ).resolves.toEqual([
+      { name: "test", conclusion: "success", app: "github-actions" },
+      { name: "without-app", conclusion: null },
+      { name: "lint/status", conclusion: "success" },
+      { name: "deploy/status", conclusion: "failure" }
+    ]);
+  });
+
+  it("rejects a check-run response that reports more than the safe limit", async () => {
+    const client = fakeOctokit();
+    vi.mocked(client.rest.checks.listForRef).mockResolvedValueOnce({
+      data: { total_count: 1001, check_runs: [] }
+    } as never);
+    vi.mocked(getOctokit).mockReturnValue(client);
+    const api = createGitHubGateway("secret");
+
+    await expect(
+      api.listCheckRuns({ owner: "octocat", repo: "demo", ref: "head" })
+    ).rejects.toMatchObject({ code: "GITHUB_EVIDENCE_INCOMPLETE" });
+  });
+
+  it("rejects a pull request file response at the API boundary", async () => {
+    const client = fakeOctokit();
+    vi.mocked(client.paginate).mockResolvedValueOnce(
+      Array.from({ length: 3000 }, () => ({ filename: "src/index.ts" }))
+    );
+    vi.mocked(getOctokit).mockReturnValue(client);
+    const api = createGitHubGateway("secret");
+
+    await expect(
+      api.listPullRequestFiles({ owner: "octocat", repo: "demo", pullNumber: 42 })
+    ).rejects.toMatchObject({ code: "GITHUB_EVIDENCE_INCOMPLETE" });
+  });
+
+  it("rejects a pull request review response at the normalized-input boundary", async () => {
+    const client = fakeOctokit();
+    vi.mocked(client.paginate).mockResolvedValueOnce(
+      Array.from({ length: 1000 }, () => ({
+        user: { login: "maintainer" },
+        state: "APPROVED"
+      }))
+    );
+    vi.mocked(getOctokit).mockReturnValue(client);
+    const api = createGitHubGateway("secret");
+
+    await expect(
+      api.listPullRequestReviews({ owner: "octocat", repo: "demo", pullNumber: 42 })
+    ).rejects.toMatchObject({ code: "GITHUB_EVIDENCE_INCOMPLETE" });
+  });
+
+  it("rejects closing-issue pagination instead of evaluating a partial list", async () => {
+    const client = fakeOctokit();
+    vi.mocked(client.graphql).mockResolvedValueOnce({
+      repository: {
+        pullRequest: {
+          closingIssuesReferences: {
+            nodes: Array.from({ length: 100 }, (_, index) => ({ number: index + 1 })),
+            pageInfo: { hasNextPage: true }
+          }
+        }
+      }
+    });
+    vi.mocked(getOctokit).mockReturnValue(client);
+    const api = createGitHubGateway("secret");
+
+    await expect(
+      api.listClosingIssueNumbers({ owner: "octocat", repo: "demo", pullNumber: 42 })
+    ).rejects.toMatchObject({ code: "GITHUB_EVIDENCE_INCOMPLETE" });
   });
 
   it("rejects non-raw content and maps unknown repository roles to none", async () => {

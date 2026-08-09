@@ -29,7 +29,8 @@ const inputSchema = z
           .object({
             login: shortText,
             state: z.enum(["approved", "changes_requested", "commented", "dismissed"]),
-            maintainer: z.boolean()
+            maintainer: z.boolean(),
+            submittedAt: z.iso.datetime({ offset: true }).optional()
           })
           .strict()
       )

@@ -17,23 +17,71 @@ interface MutableRequirementResult {
   evidence?: string;
 }
 
+function structuredKey(parts: readonly unknown[]): string {
+  return JSON.stringify(parts);
+}
+
 function requirementKey(requirement: Requirement): string {
   switch (requirement.type) {
     case "pr_body_section":
-      return `pr_body_section:${requirement.heading.toLocaleLowerCase("en-US")}`;
+      return structuredKey([requirement.type, requirement.heading.toLocaleLowerCase("en-US")]);
     case "linked_issue":
-      return "linked_issue";
+      return structuredKey([requirement.type]);
     case "check":
-      return `check:${requirement.name}:${[...requirement.conclusions].sort().join(",")}:${requirement.app ?? ""}`;
+      return structuredKey([
+        requirement.type,
+        requirement.name,
+        [...new Set(requirement.conclusions)].sort(),
+        requirement.app ?? null
+      ]);
     case "maintainer_review":
-      return `maintainer_review:${String(requirement.minimum)}`;
+      return structuredKey([requirement.type, requirement.minimum]);
     case "human_attestation":
-      return `human_attestation:${requirement.text}`;
+      return structuredKey([requirement.type, requirement.text]);
   }
 }
 
+interface MarkdownFence {
+  readonly marker: "`" | "~";
+  readonly length: number;
+}
+
+function fenceMarker(line: string): MarkdownFence | undefined {
+  const match = /^\s{0,3}(`{3,}|~{3,})/u.exec(line);
+  const marker = match?.[1];
+  if (marker === undefined) {
+    return undefined;
+  }
+  return {
+    marker: marker[0] as "`" | "~",
+    length: marker.length
+  };
+}
+
+function visibleMarkdownLines(body: string): string[] {
+  const visible: string[] = [];
+  let fence: MarkdownFence | undefined;
+
+  for (const line of body.split(/\r?\n/u)) {
+    const marker = fenceMarker(line);
+    if (fence !== undefined) {
+      if (marker?.marker === fence.marker && marker.length >= fence.length) {
+        fence = undefined;
+      }
+      continue;
+    }
+    if (marker !== undefined) {
+      fence = marker;
+      continue;
+    }
+    visible.push(line);
+  }
+
+  return visible;
+}
+
 function hasNonEmptySection(body: string, wantedHeading: string): boolean {
-  const lines = body.split(/\r?\n/u);
+  const lines = visibleMarkdownLines(body);
   const headingPattern = /^\s{0,3}(#{1,6})[ \t]+(.+?)[ \t]*#*[ \t]*$/u;
   for (let index = 0; index < lines.length; index += 1) {
     const match = headingPattern.exec(lines[index] ?? "");
@@ -45,22 +93,42 @@ function hasNonEmptySection(body: string, wantedHeading: string): boolean {
     for (let contentIndex = index + 1; contentIndex < lines.length; contentIndex += 1) {
       const line = lines[contentIndex] ?? "";
       if (headingPattern.test(line)) {
-        return false;
+        break;
       }
       if (line.trim().length > 0) {
         return true;
       }
     }
-    return false;
   }
   return false;
 }
 
 function hasAttestation(body: string, wantedText: string): boolean {
-  return body.split(/\r?\n/u).some((line) => {
+  return visibleMarkdownLines(body).some((line) => {
     const match = /^\s*[-*+]\s+\[[xX]\]\s+(.+?)\s*$/u.exec(line);
     return match?.[1]?.trim() === wantedText;
   });
+}
+
+function reviewTimestamp(review: PullRequestInput["reviews"][number]): number | undefined {
+  if (review.submittedAt === undefined) {
+    return undefined;
+  }
+  const timestamp = Date.parse(review.submittedAt);
+  return Number.isNaN(timestamp) ? undefined : timestamp;
+}
+
+function isLaterReview(
+  current: PullRequestInput["reviews"][number],
+  candidate: PullRequestInput["reviews"][number]
+): boolean {
+  const currentTimestamp = reviewTimestamp(current);
+  const candidateTimestamp = reviewTimestamp(candidate);
+
+  if (candidateTimestamp === undefined || currentTimestamp === undefined) {
+    return candidateTimestamp !== undefined || currentTimestamp === undefined;
+  }
+  return candidateTimestamp >= currentTimestamp;
 }
 
 function evaluateRequirement(
@@ -107,7 +175,13 @@ function evaluateRequirement(
       };
     }
     case "maintainer_review": {
-      const latestByLogin = new Map(input.reviews.map((review) => [review.login, review]));
+      const latestByLogin = new Map<string, PullRequestInput["reviews"][number]>();
+      for (const review of input.reviews) {
+        const current = latestByLogin.get(review.login);
+        if (current === undefined || isLaterReview(current, review)) {
+          latestByLogin.set(review.login, review);
+        }
+      }
       const count = [...latestByLogin.values()].filter(
         (review) => review.maintainer && review.state === "approved"
       ).length;

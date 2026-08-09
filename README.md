@@ -25,7 +25,7 @@ Use the Action in a GitHub workflow:
 - uses: ahooooooo/reviewready@v1
 ```
 
-Or install the CLI from npm (Node.js 24 or newer):
+Or install the CLI from npm (Node.js 22 or newer; the Action runs on Node.js 24):
 
 ```console
 npm install --global @ahoooooo/reviewready
@@ -85,12 +85,13 @@ on:
   pull_request:
     types: [opened, synchronize, edited, reopened, labeled, unlabeled]
   pull_request_review:
-    types: [submitted, dismissed]
+    types: [submitted, edited, dismissed]
 
 permissions:
   contents: read
   pull-requests: read
   checks: read
+  statuses: read
   issues: read
 
 jobs:
@@ -125,7 +126,7 @@ check if it should block merging.
 
 ## CLI
 
-Node.js 24 or newer is required. After installing `reviewready` globally, or as
+Node.js 22 or newer is required. After installing `reviewready` globally, or as
 a development dependency and invoking it with `npx`, run:
 
 ```console
@@ -161,15 +162,22 @@ negation are rejected.
 
 - pr_body_section: a Markdown heading exists and has non-empty content.
 - linked_issue: GitHub reports at least one closing issue reference.
-- check: a completed check has the exact name, allowed conclusion, and optional
-  GitHub App slug.
+- check: a completed check or commit status has the exact name, allowed
+  conclusion, and optional GitHub App slug for check runs.
 - maintainer_review: the latest review state from enough unique users with write,
-  maintain, or admin permission is approved.
+  maintain, or admin permission is approved. GitHub review timestamps are used
+  when available; timestamp-free local fixtures use their array order.
 - human_attestation: the PR body contains the exact checked task-list text.
 
 The full editor schema is [reviewready.schema.json](reviewready.schema.json).
 The executable behavior is specified in
 [docs/product-spec.md](docs/product-spec.md).
+
+ReviewReady v1 intentionally does not run on `merge_group`: GitHub's merge-group
+payload identifies the synthetic merge commit but does not provide a trustworthy
+per-PR body, labels, reviews, or closing-issue set. Keep the Action on
+`pull_request` and `pull_request_review`; add a separate merge-group-aware
+aggregator before making this check required for a merge queue.
 
 ## Security model
 

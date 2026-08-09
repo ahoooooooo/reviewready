@@ -103,6 +103,18 @@ describe("runAction", () => {
     expect(action.failures[0]).toContain("[GITHUB_EVENT_UNSUPPORTED]");
   });
 
+  it("rejects merge-group events instead of guessing per-PR evidence", async () => {
+    const action = runtime(gateway());
+    const createGateway = vi.fn(() => gateway());
+    action.eventName = "merge_group";
+    action.createGateway = createGateway;
+
+    await runAction(action);
+
+    expect(createGateway).not.toHaveBeenCalled();
+    expect(action.failures[0]).toContain("[GITHUB_EVENT_UNSUPPORTED]");
+  });
+
   it("reevaluates successfully when a review event arrives", async () => {
     const action = runtime(gateway());
     action.eventName = "pull_request_review";
