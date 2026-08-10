@@ -41,7 +41,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "bundle:action": "ncc build src/action.ts -o dist/action --minify",
+    "bundle:action": "ncc build src/action.ts -o dist/action --minify --license licenses.txt",
     "bundle": "npm run build && npm run bundle:action",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
