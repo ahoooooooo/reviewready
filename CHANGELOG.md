@@ -3,6 +3,26 @@
 All notable changes are documented here. The format follows Keep a Changelog and
 the project uses semantic versioning.
 
+## [1.0.3] - 2026-08-10
+
+### Security
+
+- Replaced delimiter-based requirement deduplication keys with structured keys to
+  prevent collisions.
+- Ignore fenced Markdown examples when evaluating required PR body sections and
+  human attestations.
+- Use GitHub review timestamps to select the latest review state and include
+  terminal commit statuses as check evidence.
+- Fail closed when changed-file, check-run, or closing-issue evidence cannot be
+  proven complete at GitHub API pagination boundaries.
+
+### Changed
+
+- Support Node.js 22 and newer for the CLI and development toolchain while
+  keeping the packaged Action on Node.js 24.
+- Add Node.js 22 compatibility CI and document that v1 intentionally does not
+  evaluate `merge_group` events.
+
 ## [1.0.2] - 2026-08-10
 
 ### Security
