@@ -93,7 +93,7 @@ jobs:
 
       - name: Commit only the generated notices when absent or changed
         run: |
-          git add -- dist/action/licenses.txt
+          git add -f -- dist/action/licenses.txt
           if git diff --cached --quiet; then
             exit 0
           fi
