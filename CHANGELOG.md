@@ -17,6 +17,8 @@ the project uses semantic versioning.
   issue #35, and the ordinary `pull_request` example is now explicitly advisory.
 - Install CI dependencies without lifecycle scripts and make high-severity npm
   advisories fail the primary quality job explicitly.
+- Generate and check in third-party license notices for dependencies bundled into
+  the distributed JavaScript Action.
 
 ### Documentation
 
@@ -32,7 +34,7 @@ the project uses semantic versioning.
 ### Changed
 
 - Cancel superseded CI runs for the same ref, bound job execution time, and verify
-  the complete committed Action bundle directory.
+  the complete committed Action bundle directory, including newly generated files.
 - Group future Dependabot minor and patch updates while leaving major upgrades for
   separate review.
 - Update the development dependency lockfile within existing major versions.
