@@ -6,11 +6,11 @@ ReviewReady provides security fixes for the latest published v1.x release and fo
 the current `main` branch. Fixes are not backported to every earlier patch release;
 users may be required to upgrade.
 
-| Version | Supported |
-| --- | --- |
-| Latest v1.x | Yes |
-| Earlier v1.x | Upgrade may be required |
-| Earlier than 1.0.0 | No |
+| Version            | Supported               |
+| ------------------ | ----------------------- |
+| Latest v1.x        | Yes                     |
+| Earlier v1.x       | Upgrade may be required |
+| Earlier than 1.0.0 | No                      |
 
 The mutable `v1` Action tag is a convenience pointer, not an immutable security
 boundary. High-assurance users should pin a verified release commit and use update
