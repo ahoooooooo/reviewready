@@ -17,26 +17,44 @@ It does **not** review code, establish correctness, detect AI authorship, approv
 or merge. There are no model calls, hosted service, database, or execution of
 pull-request code.
 
+## Current status
+
+The published CLI and Action are available for evaluation and advisory workflows.
+Do not treat v1.0.3 as the sole authoritative merge gate until the open P0
+correctness and workflow-root issues are resolved. In particular, a normal
+`pull_request` workflow is loaded from the pull-request merge ref and can be
+modified by the contribution it evaluates. Loading policy contents from the base
+SHA does not by itself protect the caller workflow, Action pin, or `policy-path`.
+
+Issue [#35](https://github.com/ahoooooooo/reviewready/issues/35) tracks the trusted
+enforcement topology. [SECURITY.md](SECURITY.md) lists the other current evidence
+boundary limitations. Existing immutable release tags will not be rewritten;
+corrections belong in a new patch release.
+
 ## Quick start
 
-Use the Action in a GitHub workflow:
-
-```yaml
-- uses: ahooooooo/reviewready@v1
-```
-
-The mutable `v1` tag is convenient. Repositories with a stronger supply-chain
-requirement should pin a verified release commit, as shown in the complete example
-below, and update that pin deliberately.
-
-Or install the CLI from npm (Node.js 22 or newer; the Action runs on Node.js 24):
+Install the CLI from npm. Node.js 22 or newer is required:
 
 ```console
 npm install --global @ahoooooo/reviewready
 reviewready validate --policy .reviewready.yml
 ```
 
-Version 1 has a stable policy contract, JSON result format, and CLI exit codes.
+The Action can also be used in an advisory workflow:
+
+```yaml
+- uses: ahooooooo/reviewready@14147f5d2084999065145f657ca36ac743e6151f # v1.0.3
+```
+
+The mutable `v1` tag is convenient, but an immutable verified commit is safer.
+The advisory workflow below must not be configured as the repository's only
+trusted merge authority unless its workflow and policy selection are protected by
+an independent repository or organization rule.
+
+Version 1 intends to keep the policy, result, and exit-code contracts stable.
+A v1.0.3 public JSON key-format regression is documented in issue
+[#25](https://github.com/ahoooooooo/reviewready/issues/25) and will be repaired
+without rewriting the existing release.
 
 ## How it works
 
@@ -56,6 +74,7 @@ rules:
       - type: linked_issue
       - type: check
         name: test
+        app: github-actions
         conclusions: [success]
       - type: human_attestation
         text: I understand and take responsibility for this change.
@@ -67,16 +86,16 @@ rules:
     require:
       - type: pr_body_section
         heading: Risk
-      - type: maintainer_review
-        minimum: 1
 ```
 
 All matching rules apply. Equivalent requirements are checked once and attributed
 to every rule that requested them.
 
-On GitHub, the Action fetches the policy at the pull request's immutable base SHA,
-then reads changed paths, completed checks, closing issue references, and reviews
-through read-only APIs. It never trusts a policy modified by the pull request.
+On GitHub, the Action fetches policy bytes from the pull request's immutable base
+SHA, then reads changed paths, checks, closing issue references, and reviews
+through read-only APIs. The policy content proposed by the pull request is not
+used. The workflow that invokes the Action is a separate trust boundary and must
+also be protected for authoritative enforcement.
 
 ### Editor schema
 
@@ -88,7 +107,7 @@ package as a development dependency can reference it directly:
 ```
 
 Action-only repositories can copy the schema into the repository or reference an
-immutable release URL, for example:
+immutable release URL:
 
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/ahoooooooo/reviewready/v1.0.3/reviewready.schema.json
@@ -99,22 +118,23 @@ relative schema is preferable when editor access to remote URLs is restricted.
 
 ## GitHub Action
 
-Use job-level permissions so the job that executes pull-request tests does not
-receive the metadata permissions needed only by ReviewReady. The ReviewReady job
-does not check out or execute pull-request code.
+### Advisory integration
+
+The following workflow is useful for evaluation. It runs tests on the pull-request
+merge ref and evaluates metadata with least-privilege job permissions. Because a
+`pull_request` workflow version comes from that merge ref, a pull request can also
+propose changes to this workflow. Protect the workflow and policy selection
+independently before relying on its result for enforcement.
 
 ```yaml
-name: review-ready
+name: review-ready-advisory
 
 on:
   pull_request:
     types: [opened, synchronize, edited, reopened, labeled, unlabeled, ready_for_review]
-  pull_request_review:
-    types: [submitted, edited, dismissed]
 
 jobs:
   test:
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -139,24 +159,44 @@ jobs:
       - uses: ahooooooo/reviewready@14147f5d2084999065145f657ca36ac743e6151f # v1.0.3
 ```
 
-Replace the example `test` commands with the target repository's own verification.
+Replace the example test commands with the target repository's own verification.
 When a policy requires another check, schedule ReviewReady after that job with
 `needs`; otherwise the required check may still be pending and cannot count as
-evidence. A review-event run uses completed checks already attached to the current
-head SHA.
+evidence. Specify the expected GitHub App in the policy where provider identity
+matters.
+
+### Authoritative enforcement
+
+A trusted deployment needs an enforcement workflow that the evaluated pull request
+cannot rewrite. Depending on repository ownership and available GitHub features,
+that may involve:
+
+- an organization ruleset that requires a selected workflow by source repository
+  and immutable ref;
+- repository rules that independently protect the ReviewReady workflow, policy,
+  Action pin, and policy path;
+- a metadata-only `pull_request_target` workflow from the trusted base branch with
+  explicit read-only permissions and **no checkout, download, cache restore,
+  build, import, or execution of pull-request code**;
+- delegating approval freshness and required human review to GitHub branch rules
+  when review events cannot be reconciled through a trusted workflow.
+
+These choices have different availability and security tradeoffs. Issue #35 will
+produce the supported reference topology for personal and organization-owned
+repositories. Until then, do not present a pull-request-modifiable check as a
+complete security boundary merely because its job name is required.
 
 The Action writes a job summary and exports:
 
 - `status`: `ready` or `not_ready`;
 - `report-json`: the versioned deterministic result.
 
-It fails the job when evidence is missing. Configure the job as a required status
-check if it should block merging.
+It fails the job when evidence is missing or cannot be loaded safely.
 
 ## CLI
 
-Node.js 22 or newer is required. After installing `reviewready` globally, or as
-a development dependency and invoking it with `npx`, run:
+After installing `reviewready` globally, or as a development dependency and
+invoking it with `npx`, run:
 
 ```console
 reviewready validate --policy fixtures/basic/.reviewready.yml
@@ -192,33 +232,35 @@ negation are rejected.
 - `pr_body_section`: a Markdown heading exists and has non-empty content.
 - `linked_issue`: GitHub reports at least one closing issue reference.
 - `check`: a completed check or commit status has the exact name, allowed
-  conclusion, and optional GitHub App slug for check runs.
-- `maintainer_review`: the latest review state from enough unique users with write,
-  maintain, or admin permission is approved. GitHub review timestamps are used
-  when available; timestamp-free local fixtures use their array order.
+  conclusion, and optional GitHub App slug for Check Runs.
+- `maintainer_review`: the latest qualifying maintainer opinion satisfies the
+  configured minimum. Current review-state limitations are tracked in issue #32.
 - `human_attestation`: the PR body contains the exact checked task-list text.
 
 The full editor schema is [reviewready.schema.json](reviewready.schema.json). The
 executable behavior is specified in [docs/product-spec.md](docs/product-spec.md).
 
-ReviewReady v1 intentionally does not run on `merge_group`: GitHub's merge-group
-payload identifies the synthetic merge commit but does not provide a trustworthy
-per-PR body, labels, reviews, or closing-issue set. Keep the Action on
-`pull_request` and `pull_request_review`; add a separate merge-group-aware
-aggregator before making this check required for a merge queue.
+ReviewReady v1 intentionally does not evaluate `merge_group`: GitHub's synthetic
+merge commit does not carry a complete per-PR body, review, and closing-issue
+context. Do not make the current check a merge-queue requirement without a
+separate trustworthy aggregation design.
 
 ## Security model
 
-- The effective policy comes from the base SHA, never the proposed head.
-- The Action uses GitHub APIs and does not check out or execute PR code.
+- Policy bytes are fetched from the base SHA, never from the proposed head.
+- The Action itself does not check out or execute pull-request code.
+- A caller workflow is authoritative only when its definition, Action pin, inputs,
+  and policy path are protected independently from the pull request.
 - User-controlled text is escaped in Markdown summaries.
 - Public errors omit stack traces, tokens, API response bodies, and local paths.
 - Invalid or unavailable authoritative input fails closed.
-- The recommended workflow uses `pull_request`, not privileged
-  `pull_request_target`.
+- `pull_request` is fork-safe for running untrusted CI with a read-only token, but
+  its workflow definition is not a trusted enforcement root.
+- `pull_request_target` uses a trusted base workflow, but becomes dangerous if it
+  checks out, downloads, imports, caches, or executes untrusted pull-request code.
 
 See [SECURITY.md](SECURITY.md) and [docs/architecture.md](docs/architecture.md) for
-the trust boundary, current known limitations, and high-assurance pinning advice.
+the trust model and current known limitations.
 
 ## Development
 
