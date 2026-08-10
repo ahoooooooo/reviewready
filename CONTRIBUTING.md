@@ -1,16 +1,21 @@
 # Contributing to ReviewReady
 
 Thank you for improving ReviewReady. Contributions from humans and coding agents
-follow the same evidence requirements.
+follow the same evidence requirements. Participation is governed by
+[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 
 ## Start here
 
-1. Read docs/product-spec.md, docs/architecture.md, and AGENTS.md.
+1. Read `docs/product-spec.md`, `docs/architecture.md`, and `AGENTS.md`.
 2. Open or select an issue with one observable outcome.
 3. For a bug, first add a test that fails for the reported behavior.
 4. Make the smallest complete change.
-5. Run the focused test, then npm run check.
+5. Run the focused test, then `npm run check`.
 6. Complete the pull-request template and explain residual risk.
+
+Use the repository's structured issue forms for bugs and feature requests. Do not
+post suspected vulnerabilities, tokens, private repository content, or third-party
+personal data in a public issue; follow `SECURITY.md` instead.
 
 Node.js 22 or newer is required for the CLI and development toolchain. The
 packaged Action runs on Node.js 24. Install the locked toolchain with:
@@ -35,7 +40,8 @@ npm run check
 ```
 
 The gate runs formatting, strict linting, type checking, tests with coverage
-thresholds, the CLI build, and the production Action bundle.
+thresholds, the CLI build, the production Action bundle, and package privacy
+verification.
 
 Do not weaken a threshold merely to make a change pass. Add meaningful coverage
 or explain why the project contract should change.
@@ -51,7 +57,7 @@ or explain why the project contract should change.
 - Public errors must not contain tokens, response bodies, stack traces, or local
   machine paths.
 
-Report vulnerabilities through the process in SECURITY.md.
+Report vulnerabilities through the process in `SECURITY.md`.
 
 ## AI-assisted contributions
 
@@ -65,3 +71,9 @@ activity.
 Open an issue before changing the policy schema, output format, trust boundary,
 exit codes, GitHub permissions, or public scope. Include migration impact and
 alternatives. v1 formats remain backward compatible within the major release.
+
+## Releases
+
+Maintainers must follow [docs/releasing.md](docs/releasing.md). npm packages,
+immutable version tags, GitHub Release objects, the mutable `v1` tag, and
+Marketplace metadata are separate resources and must be verified independently.

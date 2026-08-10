@@ -1,0 +1,77 @@
+name: Bug report
+description: Report reproducible incorrect behavior in the Action, CLI, policy engine, or package.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a problem. Do not include tokens, private repository content, personal data, or suspected vulnerability details here. Follow SECURITY.md for sensitive reports.
+  - type: input
+    id: version
+    attributes:
+      label: ReviewReady version
+      description: Provide the npm version, immutable Action tag, or commit SHA.
+      placeholder: "1.0.3 or v1.0.3"
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Affected surface
+      options:
+        - GitHub Action
+        - CLI
+        - Policy or schema
+        - npm package
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include Node.js version, operating system, event type, and relevant non-secret configuration.
+      placeholder: |
+        Node.js: 22.x
+        OS: Ubuntu 24.04
+        Surface: GitHub Action on pull_request
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Provide the smallest policy, normalized fixture, or public repository example that demonstrates the problem.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Sanitized diagnostics
+      description: Paste only logs or output that you have checked for secrets, private paths, and personal data.
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Reporter checklist
+      options:
+        - label: I searched existing issues for the same behavior.
+          required: true
+        - label: I removed tokens, private repository content, local user paths, and personal data.
+          required: true
+        - label: This is not a suspected security vulnerability requiring private disclosure.
+          required: true

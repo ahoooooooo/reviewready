@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/ahoooooooo/reviewready/blob/main/SECURITY.md
+    about: Read the private reporting instructions. Do not disclose vulnerabilities in a public issue.
+  - name: Usage questions and discussion
+    url: https://github.com/ahoooooooo/reviewready/discussions
+    about: Ask questions, share policies, and discuss use cases that are not confirmed bugs.

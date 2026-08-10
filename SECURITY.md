@@ -2,15 +2,25 @@
 
 ## Supported versions
 
-Security fixes are provided for the latest v1 release. Until v1 is publicly
-tagged, only the current main branch is supported.
+ReviewReady provides security fixes for the latest published v1.x release and for
+the current `main` branch. Fixes are not backported to every earlier patch release;
+users may be required to upgrade.
+
+| Version            | Supported               |
+| ------------------ | ----------------------- |
+| Latest v1.x        | Yes                     |
+| Earlier v1.x       | Upgrade may be required |
+| Earlier than 1.0.0 | No                      |
+
+The mutable `v1` Action tag is a convenience pointer, not an immutable security
+boundary. High-assurance users should pin a verified release commit and use update
+automation.
 
 ## Reporting a vulnerability
 
-Do not open a public issue for a suspected vulnerability. After the GitHub
-repository is published, use its private security-advisory reporting form. If
-private reporting is not enabled, contact the repository owner through the
-security contact listed in the GitHub profile.
+Do not open a public issue for a suspected vulnerability. Use the repository's
+private vulnerability reporting form. If private reporting is unavailable, contact
+the repository owner through the maintainer contact shown on the GitHub profile.
 
 Include the affected version, a minimal reproduction, impact, and any suggested
 mitigation. Do not include real tokens, private repository content, or third-party
@@ -41,9 +51,9 @@ Security invariants:
 - A mutable major Action tag is convenient but weaker than a full commit SHA.
   High-assurance adopters should pin the release commit and use update automation.
 - A successful named check proves only that GitHub recorded that conclusion; it
-  does not prove the check itself is trustworthy. Restrict app where identity
+  does not prove the check itself is trustworthy. Restrict app identity where it
   matters and protect workflow changes separately.
-- linked_issue currently uses GitHub closing issue references, not every possible
+- `linked_issue` currently uses GitHub closing issue references, not every possible
   textual or sidebar relationship.
 - Repository permissions are evaluated at Action run time. Organization role
   changes can therefore change later evaluations.
@@ -51,7 +61,7 @@ Security invariants:
   recent suites for a ref. ReviewReady rejects responses at or beyond its safe
   boundary, and rejects closing-issue pagination, rather than evaluating
   incomplete evidence.
-- `merge_group` is not supported by the v1 Action. Its synthetic commit does
-  not carry a complete per-PR body/review/issue context, so enabling it without
+- `merge_group` is not supported by the v1 Action. Its synthetic commit does not
+  carry a complete per-PR body, review, and issue context, so enabling it without
   an explicit aggregator would weaken the readiness guarantee.
 - Readiness is evidence presence, never correctness, safety, or approval.
