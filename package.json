@@ -50,6 +50,7 @@
     "lint": "eslint .",
     "format:check": "prettier --check .",
     "format": "prettier --write .",
+    "audit:dependencies": "npm audit --audit-level=high",
     "verify:package": "node scripts/verify-package.mjs",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm run test:coverage && npm run bundle && npm run verify:package",
     "prepublishOnly": "npm run check",
