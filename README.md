@@ -25,6 +25,10 @@ Use the Action in a GitHub workflow:
 - uses: ahooooooo/reviewready@v1
 ```
 
+The mutable `v1` tag is convenient. Repositories with a stronger supply-chain
+requirement should pin a verified release commit, as shown in the complete example
+below, and update that pin deliberately.
+
 Or install the CLI from npm (Node.js 22 or newer; the Action runs on Node.js 24):
 
 ```console
@@ -36,7 +40,7 @@ Version 1 has a stable policy contract, JSON result format, and CLI exit codes.
 
 ## How it works
 
-The target repository owns a .reviewready.yml policy on its base branch:
+The target repository owns a `.reviewready.yml` policy on its base branch:
 
 ```yaml
 # yaml-language-server: $schema=./reviewready.schema.json
@@ -74,32 +78,50 @@ On GitHub, the Action fetches the policy at the pull request's immutable base SH
 then reads changed paths, completed checks, closing issue references, and reviews
 through read-only APIs. It never trusts a policy modified by the pull request.
 
+### Editor schema
+
+The npm package includes `reviewready.schema.json`. A repository that installs the
+package as a development dependency can reference it directly:
+
+```yaml
+# yaml-language-server: $schema=./node_modules/@ahoooooo/reviewready/reviewready.schema.json
+```
+
+Action-only repositories can copy the schema into the repository or reference an
+immutable release URL, for example:
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ahoooooooo/reviewready/v1.0.3/reviewready.schema.json
+```
+
+Keep the schema version aligned with the Action or CLI version being used. A local
+relative schema is preferable when editor access to remote URLs is restricted.
+
 ## GitHub Action
 
-Pin the stable major tag in a workflow:
+Use job-level permissions so the job that executes pull-request tests does not
+receive the metadata permissions needed only by ReviewReady. The ReviewReady job
+does not check out or execute pull-request code.
 
 ```yaml
 name: review-ready
 
 on:
   pull_request:
-    types: [opened, synchronize, edited, reopened, labeled, unlabeled]
+    types: [opened, synchronize, edited, reopened, labeled, unlabeled, ready_for_review]
   pull_request_review:
     types: [submitted, edited, dismissed]
-
-permissions:
-  contents: read
-  pull-requests: read
-  checks: read
-  statuses: read
-  issues: read
 
 jobs:
   test:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - run: npm ci
       - run: npm test
 
@@ -107,19 +129,26 @@ jobs:
     if: always()
     needs: [test]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      checks: read
+      statuses: read
+      issues: read
     steps:
-      - uses: ahooooooo/reviewready@v1
+      - uses: ahooooooo/reviewready@14147f5d2084999065145f657ca36ac743e6151f # v1.0.3
 ```
 
+Replace the example `test` commands with the target repository's own verification.
 When a policy requires another check, schedule ReviewReady after that job with
-needs; otherwise the required check may still be pending and therefore cannot
-count as evidence. A review-event run uses the completed checks already attached
-to the current head SHA.
+`needs`; otherwise the required check may still be pending and cannot count as
+evidence. A review-event run uses completed checks already attached to the current
+head SHA.
 
 The Action writes a job summary and exports:
 
-- status: ready or not_ready;
-- report-json: the versioned deterministic result.
+- `status`: `ready` or `not_ready`;
+- `report-json`: the versioned deterministic result.
 
 It fails the job when evidence is missing. Configure the job as a required status
 check if it should block merging.
@@ -137,9 +166,9 @@ reviewready check --policy fixtures/basic/.reviewready.yml --input fixtures/basi
 
 Stable exit codes:
 
-- 0: policy valid or contribution ready;
-- 1: contribution not ready;
-- 2: invalid configuration, input, event, or runtime failure.
+- `0`: policy valid or contribution ready;
+- `1`: contribution not ready;
+- `2`: invalid configuration, input, event, or runtime failure.
 
 The local CLI consumes normalized JSON rather than contacting GitHub. This keeps
 the engine reproducible and makes policies easy to test with fixtures.
@@ -150,9 +179,9 @@ the engine reproducible and makes policies easy to test with fixtures.
 
 Each rule has paths, labels, or both. Each match set supports:
 
-- any: at least one pattern or value must match;
-- all: every pattern or value must match somewhere;
-- none: no pattern or value may match.
+- `any`: at least one pattern or value must match;
+- `all`: every pattern or value must match somewhere;
+- `none`: no pattern or value may match.
 
 Paths use repository-relative POSIX globs. Labels match case-insensitively.
 Absolute paths, traversal, backslashes, empty path segments, and leading glob
@@ -160,18 +189,17 @@ negation are rejected.
 
 ### Requirements
 
-- pr_body_section: a Markdown heading exists and has non-empty content.
-- linked_issue: GitHub reports at least one closing issue reference.
-- check: a completed check or commit status has the exact name, allowed
+- `pr_body_section`: a Markdown heading exists and has non-empty content.
+- `linked_issue`: GitHub reports at least one closing issue reference.
+- `check`: a completed check or commit status has the exact name, allowed
   conclusion, and optional GitHub App slug for check runs.
-- maintainer_review: the latest review state from enough unique users with write,
+- `maintainer_review`: the latest review state from enough unique users with write,
   maintain, or admin permission is approved. GitHub review timestamps are used
   when available; timestamp-free local fixtures use their array order.
-- human_attestation: the PR body contains the exact checked task-list text.
+- `human_attestation`: the PR body contains the exact checked task-list text.
 
-The full editor schema is [reviewready.schema.json](reviewready.schema.json).
-The executable behavior is specified in
-[docs/product-spec.md](docs/product-spec.md).
+The full editor schema is [reviewready.schema.json](reviewready.schema.json). The
+executable behavior is specified in [docs/product-spec.md](docs/product-spec.md).
 
 ReviewReady v1 intentionally does not run on `merge_group`: GitHub's merge-group
 payload identifies the synthetic merge commit but does not provide a trustworthy
@@ -186,10 +214,11 @@ aggregator before making this check required for a merge queue.
 - User-controlled text is escaped in Markdown summaries.
 - Public errors omit stack traces, tokens, API response bodies, and local paths.
 - Invalid or unavailable authoritative input fails closed.
-- The recommended workflow uses pull_request, not privileged pull_request_target.
+- The recommended workflow uses `pull_request`, not privileged
+  `pull_request_target`.
 
-See [SECURITY.md](SECURITY.md) and [docs/architecture.md](docs/architecture.md)
-for the trust boundary and known limitations.
+See [SECURITY.md](SECURITY.md) and [docs/architecture.md](docs/architecture.md) for
+the trust boundary, current known limitations, and high-assurance pinning advice.
 
 ## Development
 
@@ -198,9 +227,9 @@ npm ci
 npm run check
 ```
 
-npm run check enforces formatting, strict linting, TypeScript types, coverage
-thresholds, production build, and the bundled JavaScript Action. See
-[CONTRIBUTING.md](CONTRIBUTING.md) for the red/green/regression workflow.
+`npm run check` enforces formatting, strict linting, TypeScript types, coverage
+thresholds, production build, package privacy checks, and the bundled JavaScript
+Action. See [CONTRIBUTING.md](CONTRIBUTING.md) for the red/green/regression workflow.
 
 ## License
 
