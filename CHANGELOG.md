@@ -15,6 +15,8 @@ the project uses semantic versioning.
 - Document that base-SHA policy loading does not protect a caller workflow loaded
   from the pull-request merge ref. Trusted workflow enforcement is tracked in
   issue #35, and the ordinary `pull_request` example is now explicitly advisory.
+- Install CI dependencies without lifecycle scripts and make high-severity npm
+  advisories fail the primary quality job explicitly.
 
 ### Documentation
 
@@ -34,6 +36,7 @@ the project uses semantic versioning.
 - Group future Dependabot minor and patch updates while leaving major upgrades for
   separate review.
 - Update the development dependency lockfile within existing major versions.
+- Add a reusable `npm run audit:dependencies` command for release and CI checks.
 
 ## [1.0.3] - 2026-08-10
 
