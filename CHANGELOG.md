@@ -5,6 +5,12 @@ the project uses semantic versioning.
 
 ## [Unreleased]
 
+### Security
+
+- Move pull-request template instructions outside required `Testing` and `Risk`
+  sections so the current parser does not treat untouched HTML comments as visible
+  evidence while the full Markdown-boundary fix is tracked in issue #12.
+
 ### Documentation
 
 - Fix agent guidance after the completed v1 execution plan moved out of the active
