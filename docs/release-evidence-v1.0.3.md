@@ -1,8 +1,8 @@
 # ReviewReady v1.0.3 release evidence
 
-This file records the patch release containing the hardened evidence boundary
-that landed after the v1.0.2 recovery release. It distinguishes Git tags from
-GitHub Release objects because GitHub treats them as separate resources.
+This file records the patch release containing evidence-boundary hardening that
+landed after the v1.0.2 recovery release. It distinguishes Git tags from GitHub
+Release objects because GitHub treats them as separate resources.
 
 ## Scope
 
@@ -28,6 +28,23 @@ GitHub Release objects because GitHub treats them as separate resources.
 - [x] Recorded the final release commit, package integrity, and public URLs.
 - [ ] A GitHub Release object was not created at publication time and should be
       backfilled separately without changing the immutable tag.
+
+## Post-release audit notes
+
+A later source and platform-boundary audit found limitations that were not fully
+covered by the release-candidate tests:
+
+- GitHub's Check Runs endpoint can cap a ref at its 1,000 most recent suites, so
+  requesting an empty page after 1,000 results does not prove completeness. Issue
+  #4 was reopened.
+- The collision-safe internal requirement key introduced in v1.0.3 also changed
+  the public `report-json` key encoding without increasing `outputVersion`. This
+  compatibility repair is tracked in issue #25.
+- Additional visible-Markdown, rename-path, and legacy-status cases are tracked in
+  issues #12, #13, and #14.
+
+These findings do not change the historical package coordinates below. Existing
+immutable tags must not be rewritten; corrections belong in a new patch release.
 
 ## Final public coordinates
 

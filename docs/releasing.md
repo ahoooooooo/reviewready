@@ -4,6 +4,10 @@ This checklist keeps npm packages, immutable Git tags, GitHub Release objects,
 the stable Action tag, and Marketplace metadata aligned. These are separate
 resources and completing one does not update the others automatically.
 
+A release is verified only when the exact tarball submitted to npm is the same
+artifact that was audited, installed, and recorded. Verifying source files and
+then allowing a later lifecycle hook to rebuild them is not equivalent.
+
 ## 1. Prepare the release pull request
 
 - Choose the next unused semantic version. Never reuse an unpublished version.
@@ -12,6 +16,7 @@ resources and completing one does not update the others automatically.
 - Add or update `docs/release-evidence-vX.Y.Z.md` with unchecked public steps.
 - Confirm the release contains only intended source, dependency, and documentation
   changes.
+- Confirm every release blocker identified in the tracking issue is closed.
 
 ## 2. Verify the release candidate
 
@@ -21,25 +26,54 @@ From a clean checkout, run:
 npm ci
 npm run check
 npm audit --audit-level=high
-npm pack --dry-run --json --ignore-scripts
 ```
 
 The release pull request must pass Node.js 22 and Node.js 24 CI, package privacy
 verification, the committed Action bundle check, and CodeQL before merge.
 
-## 3. Publish and verify npm
+After merge, build once and create one local tarball from the verified commit. The
+release tooling must record the exact tarball path and checksum. Do not perform a
+second build between tarball verification and publication.
 
-- Publish the exact merged release commit to the official npm registry.
-- Verify registry metadata, package integrity, and tarball contents.
-- Install the exact version in a clean temporary directory.
-- Run policy validation and a ready fixture check from the installed package.
-- Record the package URL, tarball URL, integrity, and release commit in the release
-  evidence file.
+```console
+npm pack --json --ignore-scripts
+```
 
-Prefer npm Trusted Publishing with short-lived OIDC credentials. Do not store a
-long-lived npm token in repository secrets when trusted publishing is available.
+The package-audit tooling should inspect the files and contents extracted from that
+exact tarball. Until issue #16 supplies this exact-artifact path, do not describe a
+source-tree dry run as proof that the final published bytes were audited.
 
-## 4. Publish GitHub resources
+## 3. Verify the local artifact
+
+Before publication:
+
+- inspect the tarball file list and package manifest;
+- run the privacy and credential-pattern audit against extracted tarball bytes;
+- verify package name, version, registry, integrity, and expected entry points;
+- install the tarball into a clean temporary consumer directory;
+- run policy validation plus ready and not-ready CLI fixtures;
+- record the tarball checksum, source commit, and verification commands in the
+  release-evidence file.
+
+If an npm lifecycle script would rebuild package files during `npm publish`, change
+the workflow so the already-verified `.tgz` is published directly. Publication
+must not mutate the audited artifact.
+
+## 4. Publish and verify npm
+
+- Publish the exact verified tarball to the official npm registry.
+- Prefer npm Trusted Publishing with short-lived OIDC credentials. Do not store a
+  long-lived npm token in repository secrets when trusted publishing is available.
+- Verify registry metadata, provenance where enabled, and tarball contents.
+- Compare the registry integrity with the checksum/integrity recorded before
+  publication.
+- Install the exact registry version in another clean temporary directory.
+- Run policy validation plus ready and not-ready fixture checks from the installed
+  package.
+- Record the package URL, tarball URL, integrity, provenance, and release commit in
+  the release evidence.
+
+## 5. Publish GitHub resources
 
 Only after npm verification succeeds:
 
@@ -54,12 +88,14 @@ Only after npm verification succeeds:
 Never move or replace an immutable `vX.Y.Z` tag. Only the major convenience tag
 `v1` is expected to move.
 
-## 5. Final consistency check
+## 6. Final consistency check
 
 Verify that all of the following refer to the intended release:
 
+- source commit;
 - `package.json` and `package-lock.json`;
-- npm `latest`;
+- exact local tarball checksum;
+- npm `latest`, registry tarball, integrity, and provenance;
 - immutable Git tag `vX.Y.Z`;
 - GitHub Release object;
 - stable Action tag `v1`;

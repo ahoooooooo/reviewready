@@ -10,9 +10,14 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -32,11 +37,12 @@ jobs:
         run: npm run check
 
       - name: Verify committed Action bundle
-        run: git diff --exit-code -- dist/action/index.js
+        run: git diff --exit-code -- dist/action
 
   compatibility:
     name: Node.js 22 compatibility
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
