@@ -12,6 +12,9 @@ the project uses semantic versioning.
   evidence while the full Markdown-boundary fix is tracked in issue #12.
 - Document the remaining exact Check Runs completeness boundary in issue #4 and
   the unintended v1 `report-json` key-format change in issue #25.
+- Document that base-SHA policy loading does not protect a caller workflow loaded
+  from the pull-request merge ref. Trusted workflow enforcement is tracked in
+  issue #35, and the ordinary `pull_request` example is now explicitly advisory.
 
 ### Documentation
 
@@ -19,8 +22,9 @@ the project uses semantic versioning.
   plan directory.
 - Clarify npm artifact verification, historical mirror cleanup, review freshness,
   and current GitHub evidence-completeness limitations.
-- Harden the recommended Action workflow with job-level least-privilege permissions
-  and immutable pinning guidance.
+- Harden the Action workflow example with job-level least-privilege permissions,
+  immutable pinning guidance, provider identity, and a clear distinction between
+  advisory and authoritative deployment.
 - Document editor schema options for repositories consuming ReviewReady.
 
 ### Changed
@@ -29,6 +33,7 @@ the project uses semantic versioning.
   the complete committed Action bundle directory.
 - Group future Dependabot minor and patch updates while leaving major upgrades for
   separate review.
+- Update the development dependency lockfile within existing major versions.
 
 ## [1.0.3] - 2026-08-10
 
