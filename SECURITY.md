@@ -42,7 +42,7 @@ Security invariants:
 - only read-only GitHub permissions are requested;
 - path traversal and absolute paths are rejected;
 - policy and input sizes are bounded;
-- malformed or missing evidence fails closed;
+- malformed or missing authoritative evidence fails closed;
 - user-facing failures redact unexpected exception details;
 - Markdown output escapes policy-derived text.
 
@@ -57,10 +57,23 @@ Security invariants:
   textual or sidebar relationship.
 - Repository permissions are evaluated at Action run time. Organization role
   changes can therefore change later evaluations.
-- GitHub APIs cap pull-request files at 3,000 and check runs at the 1,000 most
-  recent suites for a ref. ReviewReady rejects responses at or beyond its safe
-  boundary, and rejects closing-issue pagination, rather than evaluating
-  incomplete evidence.
+- `maintainer_review` uses the latest review state returned by GitHub but does not
+  bind an approval to the current head commit. Repositories that require fresh
+  review after every push should enable GitHub's stale-approval dismissal or an
+  equivalent branch-protection rule.
+- GitHub caps pull-request file responses at 3,000 files and the Check Runs endpoint
+  at the 1,000 most recent check suites for a ref. Completeness at the exact Check
+  Runs boundary cannot currently be proven by requesting another page; this is
+  tracked in issue #4.
+- Legacy commit statuses are not yet explicitly paginated, so repositories with
+  many status contexts can receive incomplete evidence. This is tracked in issue
+  #14.
+- The current PR-body parser does not yet model every invisible Markdown region or
+  nested section boundary. HTML comments and related cases are tracked in issue
+  #12.
+- Renamed files currently contribute only their new path to matching. Policies that
+  must protect the old path of a rename should track issue #13 before relying on
+  this behavior as a security boundary.
 - `merge_group` is not supported by the v1 Action. Its synthetic commit does not
   carry a complete per-PR body, review, and issue context, so enabling it without
   an explicit aggregator would weaken the readiness guarantee.
