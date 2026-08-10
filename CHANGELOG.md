@@ -10,6 +10,8 @@ the project uses semantic versioning.
 - Move pull-request template instructions outside required `Testing` and `Risk`
   sections so the current parser does not treat untouched HTML comments as visible
   evidence while the full Markdown-boundary fix is tracked in issue #12.
+- Document the remaining exact Check Runs completeness boundary in issue #4 and
+  the unintended v1 `report-json` key-format change in issue #25.
 
 ### Documentation
 
@@ -23,7 +25,8 @@ the project uses semantic versioning.
 
 ### Changed
 
-- Cancel superseded CI runs for the same ref and bound job execution time.
+- Cancel superseded CI runs for the same ref, bound job execution time, and verify
+  the complete committed Action bundle directory.
 - Group future Dependabot minor and patch updates while leaving major upgrades for
   separate review.
 
@@ -31,14 +34,16 @@ the project uses semantic versioning.
 
 ### Security
 
-- Replaced delimiter-based requirement deduplication keys with structured keys to
-  prevent collisions.
+- Replaced delimiter-based internal requirement deduplication keys with structured
+  keys to prevent collisions. This also unintentionally changed the public v1 key
+  encoding and is tracked for compatibility repair in issue #25.
 - Ignore fenced Markdown examples when evaluating required PR body sections and
   human attestations.
 - Use GitHub review timestamps to select the latest review state and include
   terminal commit statuses as check evidence.
-- Fail closed when changed-file, check-run, or closing-issue evidence cannot be
-  proven complete at GitHub API pagination boundaries.
+- Added bounded fail-closed handling for changed files, check runs, and closing
+  issue references. Completeness at GitHub's exact 1,000-suite Check Runs cap was
+  not fully resolved and is tracked in issue #4.
 
 ### Changed
 
