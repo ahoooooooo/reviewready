@@ -39,8 +39,13 @@ jobs:
       - name: Run complete quality gate
         run: npm run check
 
-      - name: Verify committed Action bundle
-        run: git diff --exit-code -- dist/action
+      - name: Verify every committed Action bundle artifact
+        run: |
+          bundle_status="$(git status --porcelain=v1 --untracked-files=all --ignored=matching -- dist/action)"
+          if [ -n "$bundle_status" ]; then
+            printf '%s\n' "$bundle_status"
+            exit 1
+          fi
 
   compatibility:
     name: Node.js 22 compatibility
@@ -63,41 +68,3 @@ jobs:
 
       - name: Run complete quality gate on Node.js 22
         run: npm run check
-
-  bootstrap-notices:
-    if: >-
-      github.event_name == 'pull_request' &&
-      github.actor == 'ahoooooooo' &&
-      github.head_ref == 'agent/action-third-party-notices'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: write
-    steps:
-      - name: Check out the controlled bootstrap branch
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: agent/action-third-party-notices
-          persist-credentials: true
-
-      - name: Use Node.js 24
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24
-          package-manager-cache: false
-
-      - name: Generate the notices from locked dependencies
-        run: |
-          npm ci --ignore-scripts --no-audit
-          npm run bundle:action
-
-      - name: Commit only the generated notices when absent or changed
-        run: |
-          git add -f -- dist/action/licenses.txt
-          if git diff --cached --quiet; then
-            exit 0
-          fi
-          git config user.name "Ahooooooo · ReviewReady"
-          git config user.email "187596841+ahoooooooo@users.noreply.github.com"
-          git commit -m "Add generated Action dependency notices"
-          git push origin HEAD:agent/action-third-party-notices
