@@ -1,0 +1,49 @@
+name: Feature request
+description: Propose one observable improvement to ReviewReady's policy, evidence, workflow, or documentation.
+title: "[Feature]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Keep the request focused on one maintainer or contributor outcome. ReviewReady is intentionally deterministic and does not use an LLM to decide ready/not_ready.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: Describe the maintainer or contributor problem without prescribing an implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Observable outcome
+      description: Explain what a user should be able to do or verify after the change.
+    validations:
+      required: true
+  - type: textarea
+    id: example
+    attributes:
+      label: Example policy or workflow
+      description: Provide a small example when useful. Remove private repository details.
+      render: yaml
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Explain current workarounds or why existing requirements are insufficient.
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility and security impact
+      description: Note any schema, output, permission, trust-boundary, or migration implications.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Request checklist
+      options:
+        - label: This request has one observable outcome.
+          required: true
+        - label: I searched existing issues and discussions for similar proposals.
+          required: true
+        - label: The proposal keeps ready/not_ready deterministic and auditable.
+          required: true
