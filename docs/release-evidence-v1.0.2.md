@@ -11,8 +11,9 @@ verification, not the repository's current latest release.
 - At verification time, `@ahoooooo/reviewready@1.0.2` was public and npm
   `latest` pointed to `1.0.2`; npm `latest` has since advanced.
 - Removed npm versions were not reused.
-- A third-party npmmirror cache purge was tracked separately at
-  <https://github.com/cnpm/cnpmcore/issues/1115>.
+- The stale npmmirror metadata purge was tracked in
+  <https://github.com/cnpm/cnpmcore/issues/1115>. The cnpmcore maintainers marked
+  it completed in version 4.34.2 on 2026-08-05 and ran a follow-up package sync.
 
 ## Preventive release controls
 
@@ -45,6 +46,7 @@ verification, not the repository's current latest release.
       the verified release commit.
 - [ ] A GitHub Release object was not created at publication time and should be
       backfilled separately without changing the immutable tag.
+- [x] The separately tracked npmmirror stale-metadata cleanup was completed.
 
 ## Final public coordinates
 
@@ -55,3 +57,4 @@ verification, not the repository's current latest release.
 - SHA-1: `d8b6633551f930339585ada67808234cfc89e8a9`
 - Immutable Git tag: <https://github.com/ahoooooooo/reviewready/tree/v1.0.2>
 - GitHub Release object: not published as of 2026-08-11
+- Mirror cleanup: <https://github.com/cnpm/cnpmcore/issues/1115>
