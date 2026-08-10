@@ -21,14 +21,17 @@ of completion.
 
 ## Public verification
 
-- [ ] Publish `@ahoooooo/reviewready@1.0.3` to the official npm registry.
-- [ ] Verify npm metadata, tarball contents, and a clean exact-version install.
-- [ ] Create immutable `v1.0.3` and move the stable `v1` Action tag to the
+- [x] Publish `@ahoooooo/reviewready@1.0.3` to the official npm registry.
+- [x] Verify npm metadata, tarball contents, and a clean exact-version install.
+- [x] Create immutable `v1.0.3` and move the stable `v1` Action tag to the
       verified GitHub release commit.
-- [ ] Record the final release commit, package integrity, and public URLs below.
+- [x] Record the final release commit, package integrity, and public URLs below.
 
 ## Final public coordinates
 
-- Release commit: to be recorded after publication.
+- Release commit: `14147f5d2084999065145f657ca36ac743e6151f`
 - Package: <https://www.npmjs.com/package/@ahoooooo/reviewready>
-- Tarball: to be recorded after publication.
+- Tarball: <https://registry.npmjs.org/@ahoooooo/reviewready/-/reviewready-1.0.3.tgz>
+- Integrity: `sha512-DdNGVcObPX/BZDcvV7T1gUBMQDOCHx//iaWwS8fh2GIgscxZqU1oosL7+F1R1Bzj+OcHmd8vXiHk3I3u/mcHRQ==`
+- GitHub release tag: <https://github.com/ahoooooooo/reviewready/releases/tag/v1.0.3>
+- Stable Action tag: <https://github.com/ahoooooooo/reviewready/tree/v1>
