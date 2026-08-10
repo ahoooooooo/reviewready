@@ -4,6 +4,7 @@ dist/*
 dist/action/*
 !dist/action/index.js
 !dist/action/package.json
+!dist/action/licenses.txt
 coverage/
 *.log
 .DS_Store
