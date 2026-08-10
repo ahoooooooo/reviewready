@@ -3,6 +3,24 @@
 All notable changes are documented here. The format follows Keep a Changelog and
 the project uses semantic versioning.
 
+## [Unreleased]
+
+### Documentation
+
+- Fix agent guidance after the completed v1 execution plan moved out of the active
+  plan directory.
+- Clarify npm artifact verification, historical mirror cleanup, review freshness,
+  and current GitHub evidence-completeness limitations.
+- Harden the recommended Action workflow with job-level least-privilege permissions
+  and immutable pinning guidance.
+- Document editor schema options for repositories consuming ReviewReady.
+
+### Changed
+
+- Cancel superseded CI runs for the same ref and bound job execution time.
+- Group future Dependabot minor and patch updates while leaving major upgrades for
+  separate review.
+
 ## [1.0.3] - 2026-08-10
 
 ### Security
