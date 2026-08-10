@@ -39,8 +39,13 @@ jobs:
       - name: Run complete quality gate
         run: npm run check
 
-      - name: Print generated third-party notices for the bootstrap commit
-        run: cat dist/action/licenses.txt
+      - name: Upload generated third-party notices for the bootstrap commit
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: action-third-party-notices
+          path: dist/action/licenses.txt
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Verify committed Action bundle
         run: git diff --exit-code -- dist/action
