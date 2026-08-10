@@ -30,8 +30,11 @@ jobs:
           node-version: 24
           package-manager-cache: false
 
-      - name: Install locked dependencies
-        run: npm ci
+      - name: Install locked dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts --no-audit
+
+      - name: Fail on high-severity dependency advisories
+        run: npm run audit:dependencies
 
       - name: Run complete quality gate
         run: npm run check
@@ -55,8 +58,8 @@ jobs:
           node-version: 22
           package-manager-cache: false
 
-      - name: Install locked dependencies
-        run: npm ci
+      - name: Install locked dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts --no-audit
 
       - name: Run complete quality gate on Node.js 22
         run: npm run check
