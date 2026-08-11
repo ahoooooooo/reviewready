@@ -1,7 +1,8 @@
 # ReviewReady v1.0.4 local candidate evidence
 
-This is a local, unreleased candidate record. It does not claim an npm publish,
-GitHub release, tag movement, or remote repository update.
+This is an unreleased candidate record. Commit `65f363f` is pushed to the
+`agent/release-readiness-v1` branch; this does not claim an npm publish,
+GitHub release, tag movement, or `main` branch update.
 
 ## Scope
 
@@ -14,7 +15,8 @@ GitHub release, tag movement, or remote repository update.
 
 ## Release controls
 
-- [ ] Commit and push the candidate after explicit approval.
+- [x] Commit and push the candidate after explicit approval: commit
+      `65f363f` is verified on `agent/release-readiness-v1`.
 - [x] Run the exact local tarball audit and clean-room package install from the
       current working tree: 46 packaged files, SHA-512
       `4ece7af7c11007a1f6477da34764467ea4856f382f0cb7a83a181b52039910744a6527f88f62626a828967a290897a9901c02ba6117214b432ead1c988acf3b0`.
