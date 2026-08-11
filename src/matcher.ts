@@ -33,10 +33,8 @@ function matchesPatterns(values: readonly string[], matchSet: MatchSet, paths: b
 }
 
 export function matchesRule(rule: PolicyRule, input: PullRequestInput): boolean {
-  if (
-    rule.when.paths !== undefined &&
-    !matchesPatterns(input.changedFiles, rule.when.paths, true)
-  ) {
+  const paths = [...new Set([...input.changedFiles, ...(input.previousChangedFiles ?? [])])];
+  if (rule.when.paths !== undefined && !matchesPatterns(paths, rule.when.paths, true)) {
     return false;
   }
   if (rule.when.labels !== undefined && !matchesPatterns(input.labels, rule.when.labels, false)) {

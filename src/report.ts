@@ -6,6 +6,9 @@ import type {
   RequirementResult
 } from "./domain.js";
 
+const NO_MATCH_MESSAGE =
+  "No policy rules matched this change; no evidence requirements were evaluated.";
+
 function requirementLabel(requirement: Requirement): string {
   switch (requirement.type) {
     case "pr_body_section":
@@ -17,7 +20,7 @@ function requirementLabel(requirement: Requirement): string {
     case "maintainer_review":
       return `${String(requirement.minimum)} approving maintainer${requirement.minimum === 1 ? "" : "s"}`;
     case "human_attestation":
-      return `human attestation "${requirement.text}" is checked`;
+      return `PR body contains checked task-list text: "${requirement.text}"`;
   }
 }
 
@@ -57,6 +60,17 @@ function splitResults(result: EvaluationResult): {
   };
 }
 
+function reportSummary(item: RequirementResult): string {
+  if (item.type !== "human_attestation") {
+    return item.summary;
+  }
+
+  return item.summary.replace(
+    /^Checked human attestation:/u,
+    "PR body contains the specified checked task-list text:"
+  );
+}
+
 export function renderText(result: EvaluationResult): string {
   const { satisfied, missing } = splitResults(result);
   const lines = [
@@ -65,14 +79,22 @@ export function renderText(result: EvaluationResult): string {
     `Triggered rules: ${result.triggeredRules.length === 0 ? "(none)" : result.triggeredRules.join(", ")}`
   ];
 
-  if (satisfied.length > 0) {
-    lines.push("", "Verified:", ...satisfied.map((item) => `✓ ${item.summary}`));
-  }
-  if (missing.length > 0) {
-    lines.push("", "Missing:", ...missing.map((item) => `✗ ${item.summary}`));
+  if (result.triggeredRules.length === 0) {
+    lines.push("", "No policy rules matched:", NO_MATCH_MESSAGE);
+  } else {
+    if (satisfied.length > 0) {
+      lines.push("", "Verified:", ...satisfied.map((item) => `✓ ${reportSummary(item)}`));
+    }
+    if (missing.length > 0) {
+      lines.push("", "Missing:", ...missing.map((item) => `✗ ${reportSummary(item)}`));
+    }
   }
 
   return lines.join("\n");
+}
+
+export function renderJson(result: EvaluationResult, pretty = false): string {
+  return JSON.stringify(result, undefined, pretty ? 2 : undefined);
 }
 
 export function renderMarkdown(result: EvaluationResult): string {
@@ -84,15 +106,23 @@ export function renderMarkdown(result: EvaluationResult): string {
     `Triggered rules: ${result.triggeredRules.length === 0 ? "_none_" : result.triggeredRules.map(escapeMarkdown).join(", ")}`
   ];
 
-  if (satisfied.length > 0) {
-    lines.push(
-      "",
-      "### Verified",
-      ...satisfied.map((item) => `- ✅ ${escapeMarkdown(item.summary)}`)
-    );
-  }
-  if (missing.length > 0) {
-    lines.push("", "### Missing", ...missing.map((item) => `- ❌ ${escapeMarkdown(item.summary)}`));
+  if (result.triggeredRules.length === 0) {
+    lines.push("", "### No policy rules matched", NO_MATCH_MESSAGE);
+  } else {
+    if (satisfied.length > 0) {
+      lines.push(
+        "",
+        "### Verified",
+        ...satisfied.map((item) => `- ✅ ${escapeMarkdown(reportSummary(item))}`)
+      );
+    }
+    if (missing.length > 0) {
+      lines.push(
+        "",
+        "### Missing",
+        ...missing.map((item) => `- ❌ ${escapeMarkdown(reportSummary(item))}`)
+      );
+    }
   }
 
   lines.push(

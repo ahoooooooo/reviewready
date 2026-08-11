@@ -121,6 +121,14 @@ The Action writes a job summary and exports:
 - status: ready or not_ready;
 - report-json: the versioned deterministic result.
 
+The report-json output and CLI check --json use the same v1 shape:
+outputVersion, status, policyVersion, triggeredRules, and requirements.
+Requirement key values retain the v1 public format; internal deduplication uses
+a separate structured identity so delimiter characters cannot merge unrelated
+requirements. When no rule matches, v1 keeps status ready and an empty
+requirement list, while text and Markdown reports explicitly say that no policy
+rules were evaluated.
+
 It fails the job when evidence is missing. Configure the job as a required status
 check if it should block merging.
 
@@ -155,19 +163,23 @@ Each rule has paths, labels, or both. Each match set supports:
 - none: no pattern or value may match.
 
 Paths use repository-relative POSIX globs. Labels match case-insensitively.
-Absolute paths, traversal, backslashes, empty path segments, and leading glob
-negation are rejected.
+Absolute paths, traversal, literal backslashes, empty path segments, and leading
+glob negation are rejected. For renamed files, both the new path and the
+previous path are evaluated; the Git separator is never rewritten.
 
 ### Requirements
 
 - pr_body_section: a Markdown heading exists and has non-empty content.
 - linked_issue: GitHub reports at least one closing issue reference.
-- check: a completed check or commit status has the exact name, allowed
-  conclusion, and optional GitHub App slug for check runs.
+- check: the latest logical Check Run (name plus App slug), or latest legacy
+  commit status context, has the exact name and allowed conclusion. A newer
+  failure or pending result cannot fall back to an older success.
 - maintainer_review: the latest review state from enough unique users with write,
   maintain, or admin permission is approved. GitHub review timestamps are used
   when available; timestamp-free local fixtures use their array order.
-- human_attestation: the PR body contains the exact checked task-list text.
+- human_attestation: the PR body contains the exact checked task-list text. This
+  verifies visible text only; it does not verify identity, understanding,
+  authorship, or legal responsibility.
 
 The full editor schema is [reviewready.schema.json](reviewready.schema.json).
 The executable behavior is specified in
@@ -179,6 +191,11 @@ per-PR body, labels, reviews, or closing-issue set. Keep the Action on
 `pull_request` and `pull_request_review`; add a separate merge-group-aware
 aggregator before making this check required for a merge queue.
 
+The ordinary pull_request caller workflow is an advisory integration unless the
+repository separately protects the workflow root and required result. See
+[the trusted workflow design](docs/adr/0001-trusted-workflow-root.md) for the
+security boundary and the settings that must be verified in GitHub.
+
 ## Security model
 
 - The effective policy comes from the base SHA, never the proposed head.
@@ -186,7 +203,9 @@ aggregator before making this check required for a merge queue.
 - User-controlled text is escaped in Markdown summaries.
 - Public errors omit stack traces, tokens, API response bodies, and local paths.
 - Invalid or unavailable authoritative input fails closed.
-- The recommended workflow uses pull_request, not privileged pull_request_target.
+- The sample workflow is a normal pull_request integration and must not be
+  treated as the sole authoritative merge gate until the trusted workflow root
+  design is implemented and repository rules are verified.
 
 See [SECURITY.md](SECURITY.md) and [docs/architecture.md](docs/architecture.md)
 for the trust boundary and known limitations.

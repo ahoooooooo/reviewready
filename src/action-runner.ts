@@ -2,7 +2,7 @@ import { evaluate } from "./engine.js";
 import { PlatformError, ReviewReadyError } from "./errors.js";
 import type { GitHubGateway } from "./github.js";
 import { loadGitHubPullRequest } from "./github.js";
-import { renderMarkdown } from "./report.js";
+import { renderJson, renderMarkdown } from "./report.js";
 
 export interface ActionRuntime {
   eventName: string;
@@ -42,7 +42,7 @@ export async function runAction(runtime: ActionRuntime): Promise<void> {
     const result = evaluate(loaded.policy, loaded.input);
 
     runtime.setOutput("status", result.status);
-    runtime.setOutput("report-json", JSON.stringify(result));
+    runtime.setOutput("report-json", renderJson(result));
     await runtime.writeSummary(renderMarkdown(result));
 
     if (result.status === "not_ready") {

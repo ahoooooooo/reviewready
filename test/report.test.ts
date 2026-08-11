@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { evaluate } from "../src/engine.js";
 import { parsePolicy } from "../src/policy.js";
-import { explainPolicy, renderMarkdown, renderText } from "../src/report.js";
+import { explainPolicy, renderJson, renderMarkdown, renderText } from "../src/report.js";
 
 const policy = parsePolicy(`
 version: 1
@@ -30,10 +30,33 @@ const result = evaluate(policy, {
 });
 
 describe("reports", () => {
+  it("serializes the public evaluation result through one JSON renderer", () => {
+    const json = renderJson(result);
+    const prettyJson = renderJson(result, true);
+
+    expect(json).toBe(JSON.stringify(result));
+    expect(JSON.parse(json)).toEqual(result);
+    expect(prettyJson).toContain("\n");
+  });
+
   it("renders concise terminal text", () => {
     expect(renderText(result)).toContain("NOT READY FOR HUMAN REVIEW");
     expect(renderText(result)).toContain("Triggered rules: source");
     expect(renderText(result)).toContain("Missing:");
+  });
+
+  it("describes human attestation checks as checked task-list text", () => {
+    const text = renderText(result);
+    const markdown = renderMarkdown(result);
+
+    expect(text).toContain(
+      'PR body contains the specified checked task-list text: "I understand this change."'
+    );
+    expect(markdown).toContain(
+      'PR body contains the specified checked task\\-list text: "I understand this change\\."'
+    );
+    expect(text).not.toContain("Checked human attestation");
+    expect(markdown).not.toContain("Checked human attestation");
   });
 
   it("renders a Markdown job summary without raw HTML", () => {
@@ -106,7 +129,7 @@ rules:
 
     expect(explanation).toContain("Rule: source");
     expect(explanation.indexOf("PR body section")).toBeLessThan(
-      explanation.indexOf("human attestation")
+      explanation.indexOf("PR body contains checked task-list text")
     );
   });
 
@@ -120,11 +143,41 @@ rules:
       checks: [],
       reviews: []
     });
+    const fullyVerified = evaluate(policy, {
+      version: 1,
+      changedFiles: ["src/index.ts"],
+      body: "## Testing\nTests passed.\n\n- [x] I understand this change.",
+      labels: [],
+      linkedIssues: [],
+      checks: [],
+      reviews: []
+    });
+    const text = renderText(noMatch);
+    const markdown = renderMarkdown(noMatch);
 
+    expect(noMatch).toMatchObject({
+      outputVersion: 1,
+      status: "ready",
+      triggeredRules: [],
+      requirements: []
+    });
     expect(renderText(noMatch)).toContain("READY FOR HUMAN REVIEW");
-    expect(renderText(noMatch)).toContain("Triggered rules: (none)");
-    expect(renderText(noMatch)).not.toContain("Missing:");
-    expect(renderMarkdown(noMatch)).toContain("Triggered rules: _none_");
+    expect(text).toContain("Triggered rules: (none)");
+    expect(text).toContain("No policy rules matched:");
+    expect(text).toContain(
+      "No policy rules matched this change; no evidence requirements were evaluated."
+    );
+    expect(text).not.toContain("Verified:");
+    expect(text).not.toContain("Missing:");
+    expect(markdown).toContain("Triggered rules: _none_");
+    expect(markdown).toContain("### No policy rules matched");
+    expect(markdown).toContain(
+      "No policy rules matched this change; no evidence requirements were evaluated."
+    );
+    expect(markdown).not.toContain("### Verified");
+    expect(markdown).not.toContain("### Missing");
+    expect(renderText(fullyVerified)).toContain("Verified:");
+    expect(renderMarkdown(fullyVerified)).toContain("### Verified");
   });
 
   it("explains every v1 requirement variant", () => {

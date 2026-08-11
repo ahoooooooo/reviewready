@@ -63,6 +63,8 @@ reported under every triggering rule.
 The policy engine receives data, not an API client:
 
 - changed repository-relative paths;
+- optional previous paths for renamed files; both old and new paths participate
+  in path matching;
 - PR body and labels;
 - linked issue numbers;
 - completed checks or terminal commit statuses with name, conclusion, and
@@ -70,6 +72,11 @@ The policy engine receives data, not an API client:
 - reviews with reviewer login, maintainer status, and an optional submission
   timestamp;
 - attestations supplied through exact checked markdown task-list items.
+
+The human_attestation requirement verifies only that the specified checked text
+is visible in the pull-request body. It does not establish identity,
+understanding, authorship, or legal responsibility. Literal backslashes in Git
+paths are invalid input; they are not rewritten as separators.
 
 GitHub-specific fetching and normalization live outside the engine.
 
@@ -94,6 +101,11 @@ stderr.
   labels, approve, or merge.
 - GitHub evidence that cannot be collected completely at the adapter's bounded
   pagination limits fails closed rather than being treated as complete.
+- The GitHub adapter binds collection to one pull-request snapshot and retries
+  once or fails closed when the pull-request identity, base/head SHA, freshness
+  marker, body, or label set changes.
+- A normal pull_request caller workflow is advisory unless the repository
+  separately protects the trusted workflow root and required result.
 
 ## v1 quality bar
 

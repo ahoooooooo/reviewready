@@ -33,6 +33,9 @@ Security invariants:
 - path traversal and absolute paths are rejected;
 - policy and input sizes are bounded;
 - malformed or missing evidence fails closed;
+- a current pull-request snapshot must remain stable while evidence is
+  collected;
+- a newer failed or pending check/status cannot be masked by an older success;
 - user-facing failures redact unexpected exception details;
 - Markdown output escapes policy-derived text.
 
@@ -42,7 +45,9 @@ Security invariants:
   High-assurance adopters should pin the release commit and use update automation.
 - A successful named check proves only that GitHub recorded that conclusion; it
   does not prove the check itself is trustworthy. Restrict app where identity
-  matters and protect workflow changes separately.
+  matters and protect workflow changes separately. The ordinary pull_request
+  sample workflow is advisory until a trusted workflow root is protected and
+  required in repository settings.
 - linked_issue currently uses GitHub closing issue references, not every possible
   textual or sidebar relationship.
 - Repository permissions are evaluated at Action run time. Organization role

@@ -1,12 +1,17 @@
 #!/usr/bin/env node
 
-import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
 import { evaluate } from "./engine.js";
-import { InputError, ReviewReadyError } from "./errors.js";
+import { InputError, PolicyError, ReviewReadyError } from "./errors.js";
+import {
+  CliFileError,
+  classifyFileReadFailure,
+  readBoundedFile,
+  type FileReadFailure
+} from "./file-reader.js";
 import { parsePolicy } from "./policy.js";
-import { explainPolicy, renderText } from "./report.js";
+import { explainPolicy, renderJson, renderText } from "./report.js";
 
 export interface CliIo {
   readFile: (path: string, encoding: "utf8") => Promise<string>;
@@ -25,7 +30,7 @@ const usage =
   "Usage: reviewready <validate|check|explain> --policy <path> [--input <path>] [--json]";
 
 const defaultIo: CliIo = {
-  readFile: (path, encoding) => readFile(path, encoding),
+  readFile: (path) => readBoundedFile(path),
   stdout: (value) => process.stdout.write(`${value}\n`),
   stderr: (value) => process.stderr.write(`${value}\n`)
 };
@@ -69,7 +74,54 @@ function requiredPath(value: string | undefined, option: "--policy" | "--input")
 }
 
 async function readPolicy(path: string, io: CliIo): Promise<ReturnType<typeof parsePolicy>> {
-  return parsePolicy(await io.readFile(path, "utf8"));
+  return parsePolicy(await readCliFile(path, "policy", io));
+}
+
+function readError(kind: "policy" | "input", failure: FileReadFailure): ReviewReadyError {
+  const noun = kind === "policy" ? "Policy" : "Input";
+  const ErrorType = kind === "policy" ? PolicyError : InputError;
+  switch (failure) {
+    case "not_found":
+      return new ErrorType(
+        kind === "policy" ? "POLICY_FILE_NOT_FOUND" : "INPUT_FILE_NOT_FOUND",
+        noun + " file was not found."
+      );
+    case "access_denied":
+      return new ErrorType(
+        kind === "policy" ? "POLICY_FILE_ACCESS_DENIED" : "INPUT_FILE_ACCESS_DENIED",
+        noun + " file could not be read because access was denied."
+      );
+    case "not_regular":
+      return new ErrorType(
+        kind === "policy" ? "POLICY_FILE_NOT_REGULAR" : "INPUT_FILE_NOT_REGULAR",
+        noun + " file must be a regular file."
+      );
+    case "too_large":
+      return new ErrorType(
+        kind === "policy" ? "POLICY_FILE_TOO_LARGE" : "INPUT_FILE_TOO_LARGE",
+        noun + " file exceeds the CLI raw-byte limit."
+      );
+    case "read_failed":
+      return new ErrorType(
+        kind === "policy" ? "POLICY_FILE_READ_FAILED" : "INPUT_FILE_READ_FAILED",
+        noun + " file could not be read."
+      );
+  }
+}
+
+async function readCliFile(path: string, kind: "policy" | "input", io: CliIo): Promise<string> {
+  try {
+    return await io.readFile(path, "utf8");
+  } catch (error) {
+    const hasErrnoCode =
+      typeof error === "object" &&
+      error !== null &&
+      typeof (error as NodeJS.ErrnoException).code === "string";
+    if (error instanceof CliFileError || hasErrnoCode) {
+      throw readError(kind, classifyFileReadFailure(error));
+    }
+    throw error;
+  }
 }
 
 function parseJson(source: string): unknown {
@@ -95,12 +147,12 @@ export async function runCli(argv: readonly string[], io: CliIo = defaultIo): Pr
       case "check": {
         const inputPath = requiredPath(parsed.input, "--input");
         const [policySource, inputSource] = await Promise.all([
-          io.readFile(policyPath, "utf8"),
-          io.readFile(inputPath, "utf8")
+          readCliFile(policyPath, "policy", io),
+          readCliFile(inputPath, "input", io)
         ]);
         const input = parseJson(inputSource);
         const result = evaluate(parsePolicy(policySource), input);
-        io.stdout(parsed.json ? JSON.stringify(result, undefined, 2) : renderText(result));
+        io.stdout(parsed.json ? renderJson(result, true) : renderText(result));
         return result.status === "ready" ? 0 : 1;
       }
       case "explain": {

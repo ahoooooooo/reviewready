@@ -25,8 +25,20 @@ const event = {
   }
 };
 
-function gateway(files: readonly string[] = ["src/index.ts"]): GitHubGateway {
+function gateway(
+  files: readonly string[] = ["src/index.ts"],
+  body: string = event.pull_request.body
+): GitHubGateway {
   return {
+    getPullRequestSnapshot: () =>
+      Promise.resolve({
+        number: event.pull_request.number,
+        baseSha,
+        headSha,
+        updatedAt: "2026-08-11T00:00:00Z",
+        body,
+        labels: []
+      }),
     getFileAtRevision: () => Promise.resolve(policy),
     listPullRequestFiles: () => Promise.resolve(files),
     listCheckRuns: () =>
@@ -78,7 +90,7 @@ describe("runAction", () => {
   });
 
   it("fails the check with an actionable not-ready summary", async () => {
-    const action = runtime(gateway(["README.md", "src/index.ts"]));
+    const action = runtime(gateway(["README.md", "src/index.ts"], ""));
     action.event = {
       ...event,
       pull_request: { ...event.pull_request, body: "" }

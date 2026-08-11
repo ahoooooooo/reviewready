@@ -103,3 +103,32 @@ Public coordinates:
 - GitHub: https://github.com/ahoooooooo/reviewready
 - npm: https://www.npmjs.com/package/@ahoooooo/reviewready
 - Release: https://github.com/ahoooooooo/reviewready/releases/tag/v1.0.0
+
+## 2026-08-11 current v1 trust-core integration verification
+
+This section records the local integration candidate after the v1 trust-core
+changes. It is a pre-publish record; it does not claim that a new npm package,
+GitHub Release, or immutable Action tag was published.
+
+Complete local gate:
+
+- `npm test`: 10 test files and 145 tests passed;
+- `npm run check`: formatting, lint, typecheck, coverage, build, Action bundle,
+  and package audit passed;
+- coverage: 91.4 percent statements, 85.23 percent branches, 91.12 percent
+  functions, and 91.61 percent lines;
+- the minified Node 24 Action bundle regenerated at approximately 934 KB;
+- package audit passed for 30 planned package entries;
+- `git diff --check` passed.
+
+The new regression coverage includes bounded pagination when an upstream page
+returns more items than the requested page size, and rejects a Markdown heading
+that uses an adjacent hash as a false closing marker. The current
+implementation also covers coherent pull-request snapshots, latest Check Run
+and legacy status reduction, same-name provider ambiguity, pending conclusions,
+renamed paths, visible Markdown evidence, reviewer semantics, bounded CLI file
+reads, and public JSON compatibility.
+
+The public npm registry currently reports `@ahoooooo/reviewready@1.0.3` as its
+latest version. No npm publish was performed for this candidate. The GitHub
+repository remains public at the coordinate listed above.

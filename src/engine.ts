@@ -21,7 +21,7 @@ function structuredKey(parts: readonly unknown[]): string {
   return JSON.stringify(parts);
 }
 
-function requirementKey(requirement: Requirement): string {
+function requirementIdentity(requirement: Requirement): string {
   switch (requirement.type) {
     case "pr_body_section":
       return structuredKey([requirement.type, requirement.heading.toLocaleLowerCase("en-US")]);
@@ -38,6 +38,21 @@ function requirementKey(requirement: Requirement): string {
       return structuredKey([requirement.type, requirement.minimum]);
     case "human_attestation":
       return structuredKey([requirement.type, requirement.text]);
+  }
+}
+
+function publicRequirementKey(requirement: Requirement): string {
+  switch (requirement.type) {
+    case "pr_body_section":
+      return `pr_body_section:${requirement.heading.toLocaleLowerCase("en-US")}`;
+    case "linked_issue":
+      return "linked_issue";
+    case "check":
+      return `check:${requirement.name}:${[...new Set(requirement.conclusions)].sort().join(",")}:${requirement.app ?? ""}`;
+    case "maintainer_review":
+      return `maintainer_review:${String(requirement.minimum)}`;
+    case "human_attestation":
+      return `human_attestation:${requirement.text}`;
   }
 }
 
@@ -58,42 +73,102 @@ function fenceMarker(line: string): MarkdownFence | undefined {
   };
 }
 
-function visibleMarkdownLines(body: string): string[] {
+function closesFence(line: string, fence: MarkdownFence): boolean {
+  const match = /^\s{0,3}(`{3,}|~{3,})[ \t]*$/u.exec(line);
+  const marker = match?.[1];
+  return marker !== undefined && marker[0] === fence.marker && marker.length >= fence.length;
+}
+
+function visibleMarkdownLines(body: string): string[] | undefined {
   const visible: string[] = [];
   let fence: MarkdownFence | undefined;
+  let htmlComment = false;
 
-  for (const line of body.split(/\r?\n/u)) {
-    const marker = fenceMarker(line);
+  for (const rawLine of body.split(/\r?\n/u)) {
     if (fence !== undefined) {
-      if (marker?.marker === fence.marker && marker.length >= fence.length) {
+      if (closesFence(rawLine, fence)) {
         fence = undefined;
       }
       continue;
     }
+
+    let line = rawLine;
+    let visibleLine = "";
+    while (line.length > 0) {
+      if (htmlComment) {
+        const end = line.indexOf("-->");
+        if (end === -1) {
+          break;
+        }
+        htmlComment = false;
+        line = line.slice(end + 3);
+        continue;
+      }
+
+      const start = line.indexOf("<!--");
+      if (start === -1) {
+        visibleLine += line;
+        line = "";
+        continue;
+      }
+
+      visibleLine += line.slice(0, start);
+      htmlComment = true;
+      line = line.slice(start + 4);
+    }
+
+    const marker = fenceMarker(visibleLine);
     if (marker !== undefined) {
       fence = marker;
       continue;
     }
-    visible.push(line);
+    visible.push(visibleLine);
   }
 
-  return visible;
+  return htmlComment ? undefined : visible;
+}
+
+interface MarkdownHeading {
+  readonly level: number;
+  readonly text: string;
+}
+
+const headingPattern = /^\s{0,3}(#{1,6})[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$/u;
+
+function markdownHeading(line: string): MarkdownHeading | undefined {
+  const match = headingPattern.exec(line);
+  const marker = match?.[1];
+  const text = match?.[2]?.trim();
+  if (marker === undefined || text === undefined) {
+    return undefined;
+  }
+  return {
+    level: marker.length,
+    text
+  };
 }
 
 function hasNonEmptySection(body: string, wantedHeading: string): boolean {
   const lines = visibleMarkdownLines(body);
-  const headingPattern = /^\s{0,3}(#{1,6})[ \t]+(.+?)[ \t]*#*[ \t]*$/u;
+  if (lines === undefined) {
+    return false;
+  }
+
+  const wanted = wantedHeading.toLocaleLowerCase("en-US");
   for (let index = 0; index < lines.length; index += 1) {
-    const match = headingPattern.exec(lines[index] ?? "");
-    const heading = match?.[2]?.trim();
-    if (heading?.toLocaleLowerCase("en-US") !== wantedHeading.toLocaleLowerCase("en-US")) {
+    const heading = markdownHeading(lines[index] ?? "");
+    if (heading?.text.toLocaleLowerCase("en-US") !== wanted) {
       continue;
     }
 
     for (let contentIndex = index + 1; contentIndex < lines.length; contentIndex += 1) {
       const line = lines[contentIndex] ?? "";
-      if (headingPattern.test(line)) {
-        break;
+      const nestedHeading = markdownHeading(line);
+      if (nestedHeading !== undefined) {
+        if (nestedHeading.level <= heading.level) {
+          break;
+        }
+        continue;
       }
       if (line.trim().length > 0) {
         return true;
@@ -104,8 +179,13 @@ function hasNonEmptySection(body: string, wantedHeading: string): boolean {
 }
 
 function hasAttestation(body: string, wantedText: string): boolean {
-  return visibleMarkdownLines(body).some((line) => {
-    const match = /^\s*[-*+]\s+\[[xX]\]\s+(.+?)\s*$/u.exec(line);
+  const lines = visibleMarkdownLines(body);
+  if (lines === undefined) {
+    return false;
+  }
+
+  return lines.some((line) => {
+    const match = /^[ \t]{0,3}[-*+][ \t]+\[[xX]\][ \t]+(.+?)[ \t]*$/u.exec(line);
     return match?.[1]?.trim() === wantedText;
   });
 }
@@ -157,9 +237,15 @@ function evaluateRequirement(
       };
     }
     case "check": {
-      const check = input.checks.find(
+      const namedChecks = input.checks.filter((candidate) => candidate.name === requirement.name);
+      const unqualifiedChecks = namedChecks.filter((candidate) => candidate.app === undefined);
+      const candidates =
+        requirement.app === undefined && unqualifiedChecks.length > 0
+          ? unqualifiedChecks
+          : namedChecks;
+      const check = candidates.find(
         (candidate) =>
-          candidate.name === requirement.name &&
+          candidate.conclusion !== null &&
           requirement.conclusions.includes(candidate.conclusion) &&
           (requirement.app === undefined || candidate.app === requirement.app)
       );
@@ -170,13 +256,16 @@ function evaluateRequirement(
         ...(check === undefined
           ? {}
           : {
-              evidence: `${check.name}: ${check.conclusion}${check.app === undefined ? "" : ` (${check.app})`}`
+              evidence: `${check.name}: ${check.conclusion === null ? "pending" : check.conclusion}${check.app === undefined ? "" : ` (${check.app})`}`
             })
       };
     }
     case "maintainer_review": {
       const latestByLogin = new Map<string, PullRequestInput["reviews"][number]>();
       for (const review of input.reviews) {
+        if (review.state === "commented") {
+          continue;
+        }
         const current = latestByLogin.get(review.login);
         if (current === undefined || isLaterReview(current, review)) {
           latestByLogin.set(review.login, review);
@@ -197,7 +286,7 @@ function evaluateRequirement(
       return {
         type: requirement.type,
         status: satisfied ? "satisfied" : "missing",
-        summary: `Checked human attestation: "${requirement.text}"`,
+        summary: `PR body contains the specified checked task-list text: "${requirement.text}"`,
         ...(satisfied ? { evidence: "Exact checked task-list attestation found" } : {})
       };
     }
@@ -211,15 +300,15 @@ export function evaluate(policy: Policy, value: unknown): EvaluationResult {
 
   for (const rule of rules) {
     for (const requirement of rule.require) {
-      const key = requirementKey(requirement);
-      const existing = results.get(key);
+      const identity = requirementIdentity(requirement);
+      const existing = results.get(identity);
       if (existing !== undefined) {
         existing.ruleIds.push(rule.id);
         continue;
       }
 
-      results.set(key, {
-        key,
+      results.set(identity, {
+        key: publicRequirementKey(requirement),
         ruleIds: [rule.id],
         ...evaluateRequirement(requirement, input)
       });

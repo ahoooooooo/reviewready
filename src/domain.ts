@@ -78,7 +78,7 @@ export interface Policy {
 
 export interface PullRequestCheck {
   readonly name: string;
-  readonly conclusion: CheckConclusion;
+  readonly conclusion: CheckConclusion | null;
   readonly app?: string | undefined;
 }
 
@@ -98,6 +98,7 @@ export interface PullRequestReview {
 export interface PullRequestInput {
   readonly version: 1;
   readonly changedFiles: readonly string[];
+  readonly previousChangedFiles?: readonly string[] | undefined;
   readonly body: string;
   readonly labels: readonly string[];
   readonly linkedIssues: readonly number[];

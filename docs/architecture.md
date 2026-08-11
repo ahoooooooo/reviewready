@@ -38,11 +38,26 @@ timestamps when GitHub provides them. A workflow that requires other checks
 must schedule ReviewReady after those jobs; incomplete checks do not count as
 evidence.
 
-The GitHub adapter combines completed check runs with terminal commit statuses.
+The GitHub adapter combines completed check runs with terminal commit statuses,
+reducing each Check Run identity by name and App slug and each legacy status
+context independently, then adding a conservative aggregate for same-name
+cross-provider evidence. A newer failure or pending result cannot fall back to
+an older success.
 It fails closed when GitHub pagination reports evidence beyond the safe v1
 limits instead of evaluating a silently truncated list. `merge_group` is
 intentionally unsupported because its payload does not contain enough
 per-pull-request evidence to evaluate the v1 policy safely.
+
+The adapter first loads the base policy and changed paths, then requests only
+the evidence types required by the triggered rules. Reviewer permission lookups
+use a small concurrency bound. A current pull-request snapshot is read before
+and after collection; a changed pull-request identity, base/head SHA, freshness
+marker, body, or label set causes one bounded retry and then a stable
+fail-closed error.
+
+Changed Git paths use POSIX separators. A rename retains both the new filename
+and previous filename for policy matching; a literal backslash is rejected
+instead of being rewritten.
 
 ## Error model
 
