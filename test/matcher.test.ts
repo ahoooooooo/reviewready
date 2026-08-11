@@ -63,4 +63,17 @@ describe("matchesRule", () => {
       )
     ).toBe(false);
   });
+
+  it("matches both sides of a rename without collapsing path semantics", () => {
+    const renamedInput: PullRequestInput = {
+      ...input,
+      changedFiles: ["src/new.ts"],
+      previousChangedFiles: ["vendor/old.ts"]
+    };
+
+    expect(matchesRule(rule({ paths: { any: ["src/**"] } }), renamedInput)).toBe(true);
+    expect(matchesRule(rule({ paths: { any: ["vendor/**"] } }), renamedInput)).toBe(true);
+    expect(matchesRule(rule({ paths: { all: ["src/**", "vendor/**"] } }), renamedInput)).toBe(true);
+    expect(matchesRule(rule({ paths: { none: ["vendor/**"] } }), renamedInput)).toBe(false);
+  });
 });

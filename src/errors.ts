@@ -1,3 +1,12 @@
+export function escapeControlCharacters(value: string): string {
+  // Control ranges are rendered as literal data at every public error boundary.
+  // eslint-disable-next-line no-control-regex
+  return value.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029\p{Format}]/gu, (character) => {
+    const codePoint = character.codePointAt(0) ?? 0;
+    return "\\u" + codePoint.toString(16).padStart(4, "0");
+  });
+}
+
 export abstract class ReviewReadyError extends Error {
   public abstract readonly kind: "policy" | "input" | "platform";
   public readonly exitCode = 2;
@@ -7,7 +16,7 @@ export abstract class ReviewReadyError extends Error {
     message: string,
     options?: ErrorOptions
   ) {
-    super(message, options);
+    super(escapeControlCharacters(message), options);
     this.name = new.target.name;
   }
 }

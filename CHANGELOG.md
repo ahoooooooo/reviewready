@@ -10,8 +10,8 @@ the project uses semantic versioning.
 - Move pull-request template instructions outside required `Testing` and `Risk`
   sections so the current parser does not treat untouched HTML comments as visible
   evidence while the full Markdown-boundary fix is tracked in issue #12.
-- Document the remaining exact Check Runs completeness boundary in issue #4 and
-  the unintended v1 `report-json` key-format change in issue #25.
+- Document the historical Check Runs boundary and v1 `report-json` compatibility
+  issue; v1.0.4 records the corresponding fail-closed and schema fixes.
 - Document that base-SHA policy loading does not protect a caller workflow loaded
   from the pull-request merge ref. Trusted workflow enforcement is tracked in
   issue #35, and the ordinary `pull_request` example is now explicitly advisory.
@@ -39,6 +39,56 @@ the project uses semantic versioning.
   separate review.
 - Update the development dependency lockfile within existing major versions.
 - Add a reusable `npm run audit:dependencies` command for release and CI checks.
+
+## [1.0.5] - 2026-08-12
+
+### Added
+
+- Add a framework-neutral bounded HTTP webhook contract with raw-byte framing,
+  deterministic status mapping, and no implicit server or hosting provider.
+- Add a versioned redacted observability event and fail-closed audit sink
+  contract that never records request bodies, PR text, workflow source, prompts,
+  secrets, or tokens.
+- Add deterministic release metadata/provenance verification for exact npm
+  integrity, GitHub refs, and release targets.
+
+### Security
+
+- Bind webhook replay namespaces to an out-of-band configured hook ID, require a
+  verifier clock and finite tombstone-retention contract, and require repository
+  identity in durable evaluation bindings.
+- Enforce explicit GitHub App installation/repository allowlists and read-only
+  token permissions; collect branch, tag, and push ruleset targets.
+- Normalize push rulesets without a branch ref scope and never treat their
+  non-applicable force-push/deletion fields as branch protection evidence.
+- Restrict trust-event identities to UUIDs and actions to the bounded webhook
+  action vocabulary.
+
+### Changed
+
+- Release preflight now fails if bundle generation changes the committed
+  dist/action tree, including when the starting worktree already has staged
+  bundle changes.
+
+## [1.0.4] - 2026-08-12
+
+### Added
+
+- Add a deterministic offline repository audit with versioned JSON and SARIF
+  output, bounded normalized input, base-revision binding, and fail-closed
+  branch/ruleset/workflow posture findings.
+- Add pure bounded trusted-ingress primitives for raw-body HMAC verification,
+  replay claims, freshness, and evaluation binding.
+- Add bounded static AI-workflow source/prompt/sink analysis that never executes
+  workflow code or invokes a model.
+
+### Security
+
+- Reject malformed runtime ingress values, non-boolean replay-store results,
+  oversized secrets/signatures, YAML comment action-pin spoofing, and direct
+  untrusted-text shell evaluation.
+- Detect workflow block-scalar shell sinks, mutable actions, write permissions,
+  privileged events, prompt injection, and model-output shell handoffs.
 
 ## [1.0.3] - 2026-08-10
 

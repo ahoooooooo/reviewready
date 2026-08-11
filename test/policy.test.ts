@@ -92,6 +92,21 @@ rules:
     }
   );
 
+  it("keeps control characters out of policy error messages", () => {
+    const maliciousPattern = "../secret\u001b]0;owned/**";
+    const source = validPolicy.replace('"src/**"', JSON.stringify(maliciousPattern));
+
+    let error: unknown;
+    try {
+      parsePolicy(source);
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).not.toContain("\u001b");
+  });
+
   it("rejects malformed YAML with a stable public error", () => {
     expect(() => parsePolicy("version: 1\nrules: [")).toThrow(
       expect.objectContaining<Partial<PolicyError>>({ code: "POLICY_YAML_INVALID" })
@@ -123,7 +138,7 @@ rules:
         rules: { maxItems: number };
       };
       $defs: {
-        text: { maxLength: number };
+        text: { maxLength: number; pattern?: string };
         matchValues: { maxItems: number };
         conclusion: { enum: readonly string[] };
         requirement: {
@@ -139,6 +154,7 @@ rules:
 
     expect(schema.properties.rules.maxItems).toBe(policyLimits.maxRules);
     expect(schema.$defs.text.maxLength).toBe(policyLimits.maxTextLength);
+    expect(schema.$defs.text.pattern).toBe("\\S");
     expect(schema.$defs.matchValues.maxItems).toBe(policyLimits.maxMatchValues);
     expect(schema.$defs.rule.properties.require.maxItems).toBe(policyLimits.maxRequirementsPerRule);
     expect(schema.$defs.conclusion.enum).toEqual([...checkConclusions]);
