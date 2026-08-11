@@ -53,6 +53,22 @@ describe("auditPackageEntries", () => {
     );
   });
 
+  it("builds distributable runtime files before auditing the package", async () => {
+    const packageJson = JSON.parse(await readFile("package.json", "utf8")) as {
+      scripts?: { check?: string };
+    };
+    const checkScript = packageJson.scripts?.check;
+    if (typeof checkScript !== "string") {
+      throw new Error("package.json is missing the check script");
+    }
+
+    const buildStep = checkScript.indexOf("npm run bundle");
+    const packageAuditStep = checkScript.indexOf("npm run test:coverage");
+    expect(buildStep).toBeGreaterThanOrEqual(0);
+    expect(packageAuditStep).toBeGreaterThanOrEqual(0);
+    expect(buildStep).toBeLessThan(packageAuditStep);
+  });
+
   it("accepts the documented package surface without private metadata", () => {
     expect(auditPackageEntries(requiredEntries())).toEqual([]);
   });

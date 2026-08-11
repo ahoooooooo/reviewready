@@ -56,7 +56,7 @@
     "verify:package": "node scripts/verify-package.mjs",
     "release:preflight": "node scripts/release-preflight.mjs",
     "release:verify": "node scripts/release-preflight.mjs --provenance",
-    "check": "npm run format:check && npm run lint && npm run typecheck && npm run test:coverage && npm run bundle && npm run verify:package",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm run bundle && npm run test:coverage && npm run verify:package",
     "prepublishOnly": "npm run check",
     "prepack": "npm run build"
   },
