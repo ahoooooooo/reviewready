@@ -62,8 +62,12 @@ describe("auditPackageEntries", () => {
       throw new Error("package.json is missing the check script");
     }
 
-    const buildStep = checkScript.indexOf("npm run bundle");
-    const packageAuditStep = checkScript.indexOf("npm run test:coverage");
+    const checkSteps = checkScript.split(" && ").map((step) => step.trim());
+    const buildStep = checkSteps.indexOf("npm run bundle");
+    const packageAuditStep = checkSteps.indexOf("npm run test:coverage");
+    expect(checkSteps).toEqual(
+      expect.arrayContaining(["npm run bundle", "npm run test:coverage", "npm run verify:package"])
+    );
     expect(buildStep).toBeGreaterThanOrEqual(0);
     expect(packageAuditStep).toBeGreaterThanOrEqual(0);
     expect(buildStep).toBeLessThan(packageAuditStep);
