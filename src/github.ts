@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { z } from "zod";
 
 import {
@@ -102,7 +104,7 @@ function isConclusion(value: string | null): value is CheckConclusion {
   return value !== null && checkConclusions.some((conclusion) => conclusion === value);
 }
 
-function reviewState(value: string): ReviewState | undefined {
+function reviewState(value: string): ReviewState | "pending" | undefined {
   switch (value.toLocaleUpperCase("en-US")) {
     case "APPROVED":
       return "approved";
@@ -112,6 +114,8 @@ function reviewState(value: string): ReviewState | undefined {
       return "commented";
     case "DISMISSED":
       return "dismissed";
+    case "PENDING":
+      return "pending";
     default:
       return undefined;
   }
@@ -187,6 +191,37 @@ function sameSnapshot(
     firstLabels.length === secondLabels.length &&
     firstLabels.every((label, index) => label === secondLabels[index])
   );
+}
+
+interface GitHubEvidenceSnapshot {
+  readonly checkRuns: readonly GitHubCheckRun[];
+  readonly reviews: readonly GitHubReview[];
+  readonly linkedIssues: readonly number[];
+}
+
+export function fingerprintGitHubEvidence(
+  checkRuns: readonly GitHubCheckRun[],
+  reviews: readonly GitHubReview[],
+  linkedIssues: readonly number[]
+): string {
+  const checks = checkRuns
+    .map((check) => JSON.stringify([check.name, check.conclusion ?? null, check.app ?? null]))
+    .sort((first, second) => first.localeCompare(second, "en-US"));
+  const reviewValues = reviews
+    .map((review) => JSON.stringify([review.login, review.state, review.submittedAt ?? null]))
+    .sort((first, second) => first.localeCompare(second, "en-US"));
+  const issueValues = [...linkedIssues].sort((first, second) => first - second);
+  return createHash("sha256")
+    .update(JSON.stringify({ checks, reviews: reviewValues, linkedIssues: issueValues }), "utf8")
+    .digest("hex");
+}
+
+function evidenceFingerprint(snapshot: GitHubEvidenceSnapshot): string {
+  return fingerprintGitHubEvidence(snapshot.checkRuns, snapshot.reviews, snapshot.linkedIssues);
+}
+
+function sameEvidence(first: GitHubEvidenceSnapshot, second: GitHubEvidenceSnapshot): boolean {
+  return evidenceFingerprint(first) === evidenceFingerprint(second);
 }
 
 function requiredEvidenceTypes(policy: Policy, input: PullRequestInput): Set<Requirement["type"]> {
@@ -279,29 +314,88 @@ export async function loadGitHubPullRequest(
       const needsReviews = evidenceTypes.has("maintainer_review");
       const needsLinkedIssues = evidenceTypes.has("linked_issue");
 
-      const [checkRuns, rawReviews, linkedIssues] = await Promise.all([
-        needsChecks
-          ? gateway.listCheckRuns({ owner, repo, ref: initialSnapshot.headSha })
-          : Promise.resolve<readonly GitHubCheckRun[]>([]),
-        needsReviews
-          ? gateway.listPullRequestReviews(common)
-          : Promise.resolve<readonly GitHubReview[]>([]),
-        needsLinkedIssues
-          ? gateway.listClosingIssueNumbers(common)
-          : Promise.resolve<readonly number[]>([])
-      ]);
+      const collectEvidence = async (): Promise<GitHubEvidenceSnapshot> => {
+        const [checkRuns, rawReviews, linkedIssues] = await Promise.all([
+          needsChecks
+            ? gateway.listCheckRuns({ owner, repo, ref: initialSnapshot.headSha })
+            : Promise.resolve<readonly GitHubCheckRun[]>([]),
+          needsReviews
+            ? gateway.listPullRequestReviews(common)
+            : Promise.resolve<readonly GitHubReview[]>([]),
+          needsLinkedIssues
+            ? gateway.listClosingIssueNumbers(common)
+            : Promise.resolve<readonly number[]>([])
+        ]);
+        return { checkRuns, reviews: rawReviews, linkedIssues };
+      };
+
+      const firstEvidence = await collectEvidence();
+      const finalSnapshot = parseSnapshot(
+        await gateway.getPullRequestSnapshot(common),
+        pullRequest.number
+      );
+      if (!sameSnapshot(initialSnapshot, finalSnapshot)) {
+        if (attempt + 1 < MAX_SNAPSHOT_ATTEMPTS) {
+          continue;
+        }
+        throw new PlatformError(
+          "GITHUB_SNAPSHOT_CHANGED",
+          "The pull request changed while evidence was collected; retry the evaluation."
+        );
+      }
+
+      const secondEvidence = await collectEvidence();
+      const endingSnapshot = parseSnapshot(
+        await gateway.getPullRequestSnapshot(common),
+        pullRequest.number
+      );
+      if (!sameSnapshot(finalSnapshot, endingSnapshot)) {
+        if (attempt + 1 < MAX_SNAPSHOT_ATTEMPTS) {
+          continue;
+        }
+        throw new PlatformError(
+          "GITHUB_SNAPSHOT_CHANGED",
+          "The pull request changed while evidence was collected; retry the evaluation."
+        );
+      }
+      if (!sameEvidence(firstEvidence, secondEvidence)) {
+        if (attempt + 1 < MAX_SNAPSHOT_ATTEMPTS) {
+          continue;
+        }
+        throw new PlatformError(
+          "GITHUB_SNAPSHOT_CHANGED",
+          "GitHub evidence changed while the pull request snapshot remained stable; retry the evaluation."
+        );
+      }
+      const { checkRuns, reviews: rawReviews, linkedIssues } = secondEvidence;
 
       const reviewsWithState = rawReviews.flatMap((review) => {
         const state = reviewState(review.state);
-        return review.login === null || state === undefined
-          ? []
-          : [
-              {
-                login: review.login,
-                state,
-                ...(review.submittedAt === undefined ? {} : { submittedAt: review.submittedAt })
-              }
-            ];
+        if (state === "pending") {
+          return [];
+        }
+        if (state === undefined) {
+          throw new PlatformError(
+            "GITHUB_EVIDENCE_INCOMPLETE",
+            "GitHub returned an unsupported pull request review state."
+          );
+        }
+        if (review.login === null) {
+          return [];
+        }
+        if (state !== "commented" && review.submittedAt === undefined) {
+          throw new PlatformError(
+            "GITHUB_EVIDENCE_INCOMPLETE",
+            "GitHub returned a review state without a submission timestamp."
+          );
+        }
+        return [
+          {
+            login: review.login,
+            state,
+            ...(review.submittedAt === undefined ? {} : { submittedAt: review.submittedAt })
+          }
+        ];
       });
       const logins = [...new Set(reviewsWithState.map((review) => review.login))];
       const permissionEntries = await mapWithConcurrency(
@@ -325,21 +419,6 @@ export async function loadGitHubPullRequest(
           maintainer: isMaintainerPermission(permissions.get(review.login) ?? "none")
         }))
       });
-      const finalSnapshot = parseSnapshot(
-        await gateway.getPullRequestSnapshot(common),
-        pullRequest.number
-      );
-
-      if (!sameSnapshot(initialSnapshot, finalSnapshot)) {
-        if (attempt + 1 < MAX_SNAPSHOT_ATTEMPTS) {
-          continue;
-        }
-        throw new PlatformError(
-          "GITHUB_SNAPSHOT_CHANGED",
-          "The pull request changed while evidence was collected; retry the evaluation."
-        );
-      }
-
       return {
         policy,
         input,

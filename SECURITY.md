@@ -60,3 +60,26 @@ Security invariants:
   not carry a complete per-PR body/review/issue context, so enabling it without
   an explicit aggregator would weaken the readiness guarantee.
 - Readiness is evidence presence, never correctness, safety, or approval.
+
+The repository audit is read-only and separate from readiness. Its normalized
+snapshot, finding count, workflow source, paths, and provider identities are
+bounded; rulesets are evaluated only when their target/ref scope covers the
+evaluated default branch and repository; malformed, missing, contradictory,
+stale, redacted, or over-limit settings are reported as incomplete or failed.
+The live collector reads policy and workflow source at one immutable base SHA,
+rechecks the branch revision, and requires explicit protected/trusted workflow
+roots supplied out of band. Audit output is not an approval and does not claim
+that repository code is safe.
+
+The static AI-workflow analyzer treats workflow source as data. It never runs a
+workflow, evaluates expressions, invokes an LLM, resolves secrets, or executes
+a shell command. Prompt injection, code execution, capability exposure, and
+provenance findings remain distinct. SARIF is an additional report format, not
+a replacement for the stable readiness JSON contract.
+
+Webhook HMAC verification is only a pure ingress primitive: callers must pass
+the exact raw request bytes, use an external durable store that atomically
+claims both delivery and body-replay namespaces, enforce freshness, and bind
+delivery, pull number, base/head SHA, policy revision, and trusted workflow
+identity. The App JWT/token helpers validate bounded credentials and responses,
+but no HTTP service, secret manager, durable store, or deployment is included.

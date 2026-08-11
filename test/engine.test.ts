@@ -108,6 +108,32 @@ rules:
     );
   });
 
+  it("does not let a duplicate non-success check be bypassed by a success", () => {
+    const checkPolicy = parsePolicy(`
+version: 1
+rules:
+  - id: check
+    when:
+      paths:
+        any: [src/**]
+    require:
+      - type: check
+        name: build
+        conclusions: [success]
+`);
+    const result = evaluate(
+      checkPolicy,
+      input({
+        checks: [
+          { name: "build", conclusion: "failure" },
+          { name: "build", conclusion: "success" }
+        ]
+      })
+    );
+
+    expect(result.requirements[0]?.status).toBe("missing");
+  });
+
   it("reports every missing obligation for every matching rule", () => {
     const result = evaluate(policy, input({ changedFiles: ["src/auth/token.ts"] }));
 
@@ -153,6 +179,14 @@ rules:
     ).toBe("missing");
   });
 
+  it("does not count default-ignorable characters as visible section content", () => {
+    const result = evaluate(policy, input({ body: "## Testing\n\u200B" }));
+
+    expect(
+      result.requirements.find((requirement) => requirement.type === "pr_body_section")?.status
+    ).toBe("missing");
+  });
+
   it("ignores headings and attestations inside fenced code blocks", () => {
     const result = evaluate(
       policy,
@@ -187,6 +221,72 @@ rules:
       body: ["<!--", "## Testing", "Tests passed.", "- [x] I understand this change.", "-->"].join(
         "\n"
       ),
+      expectedSection: "missing",
+      expectedAttestation: "missing"
+    },
+    {
+      name: "zero-width HTML entity",
+      body: "## Testing\n&#8203;",
+      expectedSection: "missing",
+      expectedAttestation: "missing"
+    },
+    {
+      name: "named invisible HTML entity",
+      body: "## Testing\n&NoBreak;",
+      expectedSection: "missing",
+      expectedAttestation: "missing"
+    },
+    {
+      name: "invisible HTML entity cannot create a heading marker",
+      body: "#&#8203;# Testing\nTests passed.",
+      expectedSection: "missing",
+      expectedAttestation: "missing"
+    },
+    {
+      name: "invisible HTML entity cannot create a task marker",
+      body: "## Testing\nTests passed.\n-&#8203; [x] I understand this change.",
+      expectedSection: "satisfied",
+      expectedAttestation: "missing"
+    },
+    {
+      name: "raw HTML block around evidence",
+      body: [
+        "<div>",
+        "## Testing",
+        "Tests passed.",
+        "- [x] I understand this change.",
+        "</div>"
+      ].join("\n"),
+      expectedSection: "missing",
+      expectedAttestation: "missing"
+    },
+    {
+      name: "raw HTML attributes may contain closing-angle characters",
+      body: ['<style data-x="<">', "## Testing", "Tests passed.", "</style>"].join("\n"),
+      expectedSection: "missing",
+      expectedAttestation: "missing"
+    },
+    {
+      name: "raw HTML block around a task item",
+      body: [
+        "## Testing",
+        "Tests passed.",
+        "<div>",
+        "- [x] I understand this change.",
+        "</div>"
+      ].join("\n"),
+      expectedSection: "satisfied",
+      expectedAttestation: "missing"
+    },
+    {
+      name: "link reference definition",
+      body: "## Testing\n[tests]: https://example.test/report",
+      expectedSection: "missing",
+      expectedAttestation: "missing"
+    },
+    {
+      name: "link reference definition title continuation",
+      body: ["## Testing", "[tests]: https://example.test/report", '  "hidden title"'].join("\n"),
       expectedSection: "missing",
       expectedAttestation: "missing"
     },
@@ -333,6 +433,35 @@ rules:
     expect(review?.evidence).toBe("1 approving maintainer");
   });
 
+  it("does not count case variants of one reviewer login as separate maintainers", () => {
+    const reviewPolicy = parsePolicy(`
+version: 1
+rules:
+  - id: review
+    when:
+      paths:
+        any: [src/**]
+    require:
+      - type: maintainer_review
+        minimum: 2
+`);
+    const result = evaluate(
+      reviewPolicy,
+      input({
+        reviews: [
+          { login: "same-person", state: "approved", maintainer: true },
+          { login: "SAME-PERSON", state: "approved", maintainer: true }
+        ]
+      })
+    );
+
+    const review = result.requirements.find(
+      (requirement) => requirement.type === "maintainer_review"
+    );
+    expect(review?.status).toBe("missing");
+    expect(review?.evidence).toBe("1 approving maintainer");
+  });
+
   it("uses the latest timestamped review state instead of array position", () => {
     const result = evaluate(
       policy,
@@ -350,6 +479,35 @@ rules:
             state: "approved",
             maintainer: true,
             submittedAt: "2026-08-10T09:00:00Z"
+          }
+        ]
+      })
+    );
+
+    const review = result.requirements.find(
+      (requirement) => requirement.type === "maintainer_review"
+    );
+    expect(review?.status).toBe("missing");
+    expect(review?.evidence).toBe("0 approving maintainers");
+  });
+
+  it("fails closed when conflicting reviews share the same timestamp", () => {
+    const result = evaluate(
+      policy,
+      input({
+        changedFiles: ["src/auth/token.ts"],
+        reviews: [
+          {
+            login: "same-person",
+            state: "changes_requested",
+            maintainer: true,
+            submittedAt: "2026-08-10T10:00:00Z"
+          },
+          {
+            login: "same-person",
+            state: "approved",
+            maintainer: true,
+            submittedAt: "2026-08-10T10:00:00Z"
           }
         ]
       })

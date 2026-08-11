@@ -1,5 +1,5 @@
 import { evaluate } from "./engine.js";
-import { PlatformError, ReviewReadyError } from "./errors.js";
+import { escapeControlCharacters, PlatformError, ReviewReadyError } from "./errors.js";
 import type { GitHubGateway } from "./github.js";
 import { loadGitHubPullRequest } from "./github.js";
 import { renderJson, renderMarkdown } from "./report.js";
@@ -41,16 +41,18 @@ export async function runAction(runtime: ActionRuntime): Promise<void> {
     );
     const result = evaluate(loaded.policy, loaded.input);
 
+    await runtime.writeSummary(renderMarkdown(result));
     runtime.setOutput("status", result.status);
     runtime.setOutput("report-json", renderJson(result));
-    await runtime.writeSummary(renderMarkdown(result));
 
     if (result.status === "not_ready") {
       runtime.setFailed("ReviewReady: required review evidence is missing.");
     }
   } catch (error) {
     if (error instanceof ReviewReadyError) {
-      runtime.setFailed(`[${error.code}] ${error.message}`);
+      runtime.setFailed(
+        `[${escapeControlCharacters(error.code)}] ${escapeControlCharacters(error.message)}`
+      );
       return;
     }
     runtime.setFailed("[INTERNAL_ERROR] ReviewReady could not complete the action.");

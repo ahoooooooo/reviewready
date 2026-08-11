@@ -100,10 +100,17 @@ stderr.
 - The Action requests read-only permissions. It does not post comments, change
   labels, approve, or merge.
 - GitHub evidence that cannot be collected completely at the adapter's bounded
-  pagination limits fails closed rather than being treated as complete.
+  pagination limits, or whose next-page Link is malformed or non-contiguous,
+  fails closed rather than being treated as complete.
+- GitHub `APPROVED`, `CHANGES_REQUESTED`, and `DISMISSED` reviews require a
+  valid submission timestamp; `COMMENTED` reviews may omit it. Missing or
+  malformed timestamps on actionable review states fail closed.
 - The GitHub adapter binds collection to one pull-request snapshot and retries
   once or fails closed when the pull-request identity, base/head SHA, freshness
-  marker, body, or label set changes.
+  marker, body, or label set changes before, between, or after evidence reads.
+- Required checks, reviews, and linked issues are read twice with a bounded
+  canonical comparison; a changed evidence set while the PR snapshot is stable
+  causes a retry or a fail-closed error.
 - A normal pull_request caller workflow is advisory unless the repository
   separately protects the trusted workflow root and required result.
 

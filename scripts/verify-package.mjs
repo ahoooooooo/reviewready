@@ -14,6 +14,8 @@ const REQUIRED_FILES = [
   "README.md",
   "package.json",
   "reviewready.schema.json",
+  "reviewready.audit.schema.json",
+  "reviewready.result.schema.json",
   "dist/cli.js",
   "dist/cli.d.ts"
 ];
@@ -22,7 +24,9 @@ const EXACT_ALLOWED_FILES = new Set([
   "LICENSE",
   "README.md",
   "package.json",
-  "reviewready.schema.json"
+  "reviewready.schema.json",
+  "reviewready.audit.schema.json",
+  "reviewready.result.schema.json"
 ]);
 
 /** @type {Array<readonly [string, RegExp]>} */

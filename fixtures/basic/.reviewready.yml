@@ -1,7 +1,8 @@
+# yaml-language-server: $schema=../../reviewready.schema.json
 version: 1
 rules:
   - id: source-change
-    description: Source changes need an explanation and successful tests.
+    description: Source changes need test evidence and human accountability.
     when:
       paths:
         any: ["src/**"]

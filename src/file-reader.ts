@@ -46,8 +46,10 @@ export function classifyFileReadFailure(error: unknown): FileReadFailure {
 }
 
 function ensureValidLimit(maxBytes: number): void {
-  if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) {
-    throw new RangeError("maxBytes must be a non-negative safe integer.");
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 0 || maxBytes > MAX_CLI_FILE_BYTES) {
+    throw new RangeError(
+      `maxBytes must be a safe integer between 0 and ${String(MAX_CLI_FILE_BYTES)}.`
+    );
   }
 }
 

@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ahoooooooo/reviewready/blob/main/reviewready.audit.schema.json",
+  "title": "ReviewReady repository audit report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["auditVersion", "status", "repository", "findings", "checked"],
+  "properties": {
+    "auditVersion": { "const": 1 },
+    "status": { "enum": ["pass", "fail", "incomplete"] },
+    "repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["owner", "name", "baseSha"],
+      "properties": {
+        "owner": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "baseSha": { "type": "string", "pattern": "^[0-9a-fA-F]{40}$" }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "maxItems": 500,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "category", "severity", "message"],
+        "properties": {
+          "code": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "category": {
+            "enum": ["completeness", "integrity", "configuration", "provenance", "workflow"]
+          },
+          "severity": { "enum": ["error", "warning"] },
+          "path": { "type": "string", "minLength": 1, "maxLength": 1024 },
+          "line": { "type": "integer", "minimum": 1, "maximum": 1000000 },
+          "message": { "type": "string", "minLength": 1, "maxLength": 1024 }
+        }
+      }
+    },
+    "checked": {
+      "type": "array",
+      "maxItems": 20,
+      "items": { "type": "string", "minLength": 1, "maxLength": 128 }
+    }
+  }
+}

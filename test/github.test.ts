@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { evaluate } from "../src/engine.js";
-import { loadGitHubPullRequest, type GitHubGateway, type GitHubPermission } from "../src/github.js";
+import {
+  fingerprintGitHubEvidence,
+  loadGitHubPullRequest,
+  type GitHubGateway,
+  type GitHubPermission
+} from "../src/github.js";
 
 const baseSha = "a".repeat(40);
 const headSha = "b".repeat(40);
@@ -19,6 +24,25 @@ const event = {
     head: { sha: headSha }
   }
 };
+
+describe("GitHub evidence fingerprint", () => {
+  it("returns a cryptographic digest for the canonical evidence set", () => {
+    const digest = fingerprintGitHubEvidence(
+      [{ name: "test", conclusion: "success", app: "github-actions" }],
+      [{ login: "maintainer", state: "APPROVED", submittedAt: "2026-08-11T00:00:00Z" }],
+      [7]
+    );
+
+    expect(digest).toMatch(/^[0-9a-f]{64}$/u);
+    expect(
+      fingerprintGitHubEvidence(
+        [{ name: "test", conclusion: "failure", app: "github-actions" }],
+        [{ login: "maintainer", state: "APPROVED", submittedAt: "2026-08-11T00:00:00Z" }],
+        [7]
+      )
+    ).not.toBe(digest);
+  });
+});
 
 function gateway(overrides: Partial<GitHubGateway> = {}): GitHubGateway {
   return {
@@ -46,11 +70,19 @@ function gateway(overrides: Partial<GitHubGateway> = {}): GitHubGateway {
     ),
     listPullRequestReviews: vi.fn(() =>
       Promise.resolve([
-        { login: "maintainer", state: "APPROVED" },
+        {
+          login: "maintainer",
+          state: "APPROVED",
+          submittedAt: "2026-08-11T00:00:00Z"
+        },
         { login: "reader", state: "COMMENTED" },
         { login: "ghost", state: "PENDING" },
         { login: null, state: "APPROVED" },
-        { login: "maintainer", state: "CHANGES_REQUESTED" }
+        {
+          login: "maintainer",
+          state: "CHANGES_REQUESTED",
+          submittedAt: "2026-08-11T01:00:00Z"
+        }
       ])
     ),
     getRepositoryPermission: vi.fn(({ login }) =>
@@ -93,9 +125,19 @@ describe("loadGitHubPullRequest", () => {
       linkedIssues: [7],
       checks: [{ name: "test", conclusion: "success", app: "github-actions" }],
       reviews: [
-        { login: "maintainer", state: "approved", maintainer: true },
+        {
+          login: "maintainer",
+          state: "approved",
+          maintainer: true,
+          submittedAt: "2026-08-11T00:00:00Z"
+        },
         { login: "reader", state: "commented", maintainer: false },
-        { login: "maintainer", state: "changes_requested", maintainer: true }
+        {
+          login: "maintainer",
+          state: "changes_requested",
+          maintainer: true,
+          submittedAt: "2026-08-11T01:00:00Z"
+        }
       ]
     });
   });
@@ -134,7 +176,7 @@ describe("loadGitHubPullRequest", () => {
 
     expect(listCheckRuns).not.toHaveBeenCalled();
     expect(listPullRequestReviews).not.toHaveBeenCalled();
-    expect(listClosingIssueNumbers).toHaveBeenCalledTimes(1);
+    expect(listClosingIssueNumbers).toHaveBeenCalledTimes(2);
     expect(getRepositoryPermission).not.toHaveBeenCalled();
   });
 
@@ -171,7 +213,61 @@ describe("loadGitHubPullRequest", () => {
 
     expect(loaded.context.baseSha).toBe(baseSha);
     expect(loaded.context.headSha).toBe(headSha);
-    expect(getPullRequestSnapshot).toHaveBeenCalledTimes(4);
+    expect(getPullRequestSnapshot).toHaveBeenCalledTimes(5);
+  });
+
+  it("rechecks the PR snapshot after the second evidence collection", async () => {
+    const stableSnapshot = {
+      number: 42,
+      baseSha,
+      headSha,
+      updatedAt: "2026-08-11T00:00:00Z",
+      body: event.pull_request.body,
+      labels: ["bug"]
+    };
+    const changedSnapshot = {
+      ...stableSnapshot,
+      updatedAt: "2026-08-11T00:01:00Z",
+      body: "Updated body",
+      labels: ["urgent"]
+    };
+    const getPullRequestSnapshot = vi
+      .fn()
+      .mockResolvedValueOnce(stableSnapshot)
+      .mockResolvedValueOnce(stableSnapshot)
+      .mockResolvedValueOnce(changedSnapshot)
+      .mockResolvedValue(changedSnapshot);
+    const api = gateway({ getPullRequestSnapshot });
+
+    const loaded = await loadGitHubPullRequest(event, ".reviewready.yml", api);
+
+    expect(loaded.input.body).toBe("Updated body");
+    expect(loaded.input.labels).toEqual(["urgent"]);
+    expect(getPullRequestSnapshot).toHaveBeenCalledTimes(6);
+  });
+
+  it("does not keep stale success when required evidence changes during collection", async () => {
+    const listCheckRuns = vi
+      .fn()
+      .mockResolvedValueOnce([{ name: "test", conclusion: "success", app: "github-actions" }])
+      .mockResolvedValueOnce([{ name: "test", conclusion: "failure", app: "github-actions" }])
+      .mockResolvedValue([{ name: "test", conclusion: "failure", app: "github-actions" }]);
+    const api = gateway({
+      getFileAtRevision: vi.fn(() =>
+        Promise.resolve(
+          "version: 1\nrules:\n  - id: check\n    when:\n      paths:\n        any: [src/**]\n    require:\n      - type: check\n        name: test\n        conclusions: [success]\n"
+        )
+      ),
+      listCheckRuns
+    });
+
+    const loaded = await loadGitHubPullRequest(event, ".reviewready.yml", api);
+
+    expect(loaded.input.checks).toEqual([
+      { name: "test", conclusion: "failure", app: "github-actions" }
+    ]);
+    expect(evaluate(loaded.policy, loaded.input).status).toBe("not_ready");
+    expect(listCheckRuns).toHaveBeenCalledTimes(4);
   });
 
   it("retries when the evaluated PR body or labels change", async () => {
@@ -207,7 +303,7 @@ describe("loadGitHubPullRequest", () => {
 
     expect(loaded.input.body).toBe("Updated body");
     expect(loaded.input.labels).toEqual(["urgent"]);
-    expect(getPullRequestSnapshot).toHaveBeenCalledTimes(4);
+    expect(getPullRequestSnapshot).toHaveBeenCalledTimes(5);
   });
 
   it("rejects a snapshot for a different pull request", async () => {
@@ -287,6 +383,36 @@ describe("loadGitHubPullRequest", () => {
 
     expect(loaded.input.checks).toContainEqual({ name: "test", conclusion: null });
     expect(evaluate(loaded.policy, loaded.input).status).toBe("not_ready");
+  });
+
+  it("fails closed on an unsupported review state instead of dropping it", async () => {
+    const api = gateway({
+      listPullRequestReviews: vi.fn(() =>
+        Promise.resolve([
+          { login: "maintainer", state: "APPROVED" },
+          { login: "maintainer", state: "UNRECOGNIZED_STATE" }
+        ])
+      )
+    });
+
+    await expect(loadGitHubPullRequest(event, ".reviewready.yml", api)).rejects.toMatchObject({
+      code: "GITHUB_EVIDENCE_INCOMPLETE"
+    });
+  });
+
+  it("fails closed when GitHub review ordering lacks timestamps", async () => {
+    const api = gateway({
+      listPullRequestReviews: vi.fn(() =>
+        Promise.resolve([
+          { login: "maintainer", state: "CHANGES_REQUESTED" },
+          { login: "maintainer", state: "APPROVED" }
+        ])
+      )
+    });
+
+    await expect(loadGitHubPullRequest(event, ".reviewready.yml", api)).rejects.toMatchObject({
+      code: "GITHUB_EVIDENCE_INCOMPLETE"
+    });
   });
 
   it("rejects non-pull-request payloads with a stable error", async () => {

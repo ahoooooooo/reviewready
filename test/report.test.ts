@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { evaluate } from "../src/engine.js";
 import { parsePolicy } from "../src/policy.js";
 import { explainPolicy, renderJson, renderMarkdown, renderText } from "../src/report.js";
+import type { Policy } from "../src/domain.js";
 
 const policy = parsePolicy(`
 version: 1
@@ -39,6 +40,12 @@ describe("reports", () => {
     expect(prettyJson).toContain("\n");
   });
 
+  it("preserves the v1 human-attestation summary in public JSON", () => {
+    const requirement = result.requirements.find((item) => item.type === "human_attestation");
+
+    expect(requirement?.summary).toBe('Checked human attestation: "I understand this change."');
+  });
+
   it("renders concise terminal text", () => {
     expect(renderText(result)).toContain("NOT READY FOR HUMAN REVIEW");
     expect(renderText(result)).toContain("Triggered rules: source");
@@ -65,6 +72,69 @@ describe("reports", () => {
     expect(markdown).toContain("## ReviewReady: not ready");
     expect(markdown).toContain("- ❌");
     expect(markdown).not.toContain("<script");
+  });
+
+  it("renders control characters from policy text as data", () => {
+    const maliciousPolicy: Policy = {
+      version: 1,
+      rules: [
+        {
+          id: "escaped",
+          description: "description\u001b]0;owned",
+          when: { paths: { any: ["src/**"] } },
+          require: [{ type: "pr_body_section", heading: "Testing\u001b[31m\u202e" }]
+        }
+      ]
+    };
+    const maliciousResult = evaluate(maliciousPolicy, {
+      version: 1,
+      changedFiles: ["src/index.ts"],
+      body: "",
+      labels: [],
+      linkedIssues: [],
+      checks: [],
+      reviews: []
+    });
+
+    expect(renderText(maliciousResult)).not.toContain("\u001b");
+    expect(renderText(maliciousResult)).not.toContain("\u202e");
+    expect(renderMarkdown(maliciousResult)).not.toContain("\u001b");
+    expect(renderMarkdown(maliciousResult)).not.toContain("\u202e");
+    expect(explainPolicy(maliciousPolicy)).not.toContain("\u001b");
+    expect(explainPolicy(maliciousPolicy)).not.toContain("\u202e");
+  });
+
+  it("escapes line separators and dynamic report identifiers", () => {
+    const maliciousPolicy: Policy = {
+      version: 1,
+      rules: [
+        {
+          id: "rule\u2028INJECT",
+          description: "description\u2029INJECT",
+          when: { paths: { any: ["src/**"] } },
+          require: [{ type: "pr_body_section", heading: "Testing\u2028INJECT" }]
+        }
+      ]
+    };
+    const maliciousResult = {
+      ...evaluate(maliciousPolicy, {
+        version: 1,
+        changedFiles: ["src/index.ts"],
+        body: "",
+        labels: [],
+        linkedIssues: [],
+        checks: [],
+        reviews: []
+      }),
+      triggeredRules: ["rule\u2028INJECT", "second\u2029INJECT"]
+    };
+
+    expect(renderText(maliciousResult)).not.toContain("\u2028");
+    expect(renderText(maliciousResult)).not.toContain("\u2029");
+    expect(renderMarkdown(maliciousResult)).not.toContain("\u2028");
+    expect(renderMarkdown(maliciousResult)).not.toContain("\u2029");
+    expect(explainPolicy(maliciousPolicy)).not.toContain("\u2028");
+    expect(explainPolicy(maliciousPolicy)).not.toContain("\u2029");
   });
 
   it("escapes policy-derived HTML in Markdown output", () => {

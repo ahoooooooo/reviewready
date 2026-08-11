@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ahoooooooo/reviewready/blob/main/reviewready.result.schema.json",
+  "title": "ReviewReady readiness result v1",
+  "description": "The stable deterministic JSON result emitted by the readiness engine.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["outputVersion", "status", "policyVersion", "triggeredRules", "requirements"],
+  "properties": {
+    "outputVersion": { "const": 1 },
+    "status": { "enum": ["ready", "not_ready"] },
+    "policyVersion": { "const": 1 },
+    "triggeredRules": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64,
+        "pattern": "^[a-z][a-z0-9-]{0,63}$"
+      }
+    },
+    "requirements": {
+      "type": "array",
+      "maxItems": 5000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["key", "type", "status", "summary", "ruleIds"],
+        "properties": {
+          "key": { "type": "string", "minLength": 1, "maxLength": 4096 },
+          "type": {
+            "enum": [
+              "pr_body_section",
+              "linked_issue",
+              "check",
+              "maintainer_review",
+              "human_attestation"
+            ]
+          },
+          "status": { "enum": ["satisfied", "missing"] },
+          "summary": { "type": "string", "minLength": 1, "maxLength": 4096 },
+          "ruleIds": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9-]{0,63}$"
+            }
+          },
+          "evidence": { "type": "string", "minLength": 1, "maxLength": 4096 }
+        }
+      }
+    }
+  }
+}

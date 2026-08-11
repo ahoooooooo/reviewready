@@ -103,6 +103,18 @@ describe("runAction", () => {
     expect(action.failures).toEqual(["ReviewReady: required review evidence is missing."]);
   });
 
+  it("does not publish readiness outputs when writing the summary fails", async () => {
+    const action = runtime(gateway());
+    action.writeSummary = () => Promise.reject(new Error("summary failed"));
+
+    await runAction(action);
+
+    expect(action.outputs).toEqual(new Map());
+    expect(action.failures).toEqual([
+      "[INTERNAL_ERROR] ReviewReady could not complete the action."
+    ]);
+  });
+
   it("rejects other event types before creating an API client", async () => {
     const action = runtime(gateway());
     const createGateway = vi.fn(() => gateway());
@@ -160,5 +172,19 @@ describe("runAction", () => {
     expect(action.failures).toEqual([
       "[INTERNAL_ERROR] ReviewReady could not complete the action."
     ]);
+  });
+
+  it("escapes terminal control characters in Action failure messages", async () => {
+    const action = runtime(gateway());
+    action.createGateway = () => ({
+      ...gateway(),
+      getFileAtRevision: () =>
+        Promise.resolve(policy.replace("src/**", "../secret\u001b]0;owned/**"))
+    });
+
+    await runAction(action);
+
+    expect(action.failures[0]).not.toContain("\u001b");
+    expect(action.failures[0]).toContain("\\u001b");
   });
 });

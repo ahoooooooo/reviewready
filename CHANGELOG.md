@@ -3,6 +3,26 @@
 All notable changes are documented here. The format follows Keep a Changelog and
 the project uses semantic versioning.
 
+## [1.0.4] - Unreleased
+
+### Added
+
+- Add a deterministic offline repository audit with versioned JSON and SARIF
+  output, bounded normalized input, base-revision binding, and fail-closed
+  branch/ruleset/workflow posture findings.
+- Add pure bounded trusted-ingress primitives for raw-body HMAC verification,
+  replay claims, freshness, and evaluation binding.
+- Add bounded static AI-workflow source/prompt/sink analysis that never executes
+  workflow code or invokes a model.
+
+### Security
+
+- Reject malformed runtime ingress values, non-boolean replay-store results,
+  oversized secrets/signatures, YAML comment action-pin spoofing, and direct
+  untrusted-text shell evaluation.
+- Detect workflow block-scalar shell sinks, mutable actions, write permissions,
+  privileged events, prompt injection, and model-output shell handoffs.
+
 ## [1.0.2] - 2026-08-10
 
 ### Security

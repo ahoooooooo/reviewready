@@ -79,16 +79,124 @@ function closesFence(line: string, fence: MarkdownFence): boolean {
   return marker !== undefined && marker[0] === fence.marker && marker.length >= fence.length;
 }
 
+const htmlTagPattern =
+  /<\/?([A-Za-z][A-Za-z0-9-]*)(?:\s+[^\s"'=<>]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'=<>]+))?)*\s*\/?\s*>/gu;
+const rawHtmlBlockStartPattern =
+  /^\s{0,3}<\/?[A-Za-z][A-Za-z0-9-]*(?:\s+[^\s"'=<>]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'=<>]+))?)*\s*\/?\s*>/u;
+const voidHtmlTags = new Set([
+  "area",
+  "base",
+  "br",
+  "col",
+  "embed",
+  "hr",
+  "img",
+  "input",
+  "link",
+  "meta",
+  "param",
+  "source",
+  "track",
+  "wbr"
+]);
+
+function updateRawHtmlTags(line: string, stack: string[]): void {
+  for (const match of line.matchAll(htmlTagPattern)) {
+    const tag = match[1]?.toLocaleLowerCase("en-US");
+    const rawTag = match[0];
+    if (tag === undefined) {
+      continue;
+    }
+    if (rawTag.startsWith("</")) {
+      const index = stack.lastIndexOf(tag);
+      if (index >= 0) {
+        stack.splice(index, 1);
+      }
+      continue;
+    }
+    if (!rawTag.endsWith("/>") && !voidHtmlTags.has(tag)) {
+      stack.push(tag);
+    }
+  }
+}
+
+function isInvisibleCodePoint(codePoint: number): boolean {
+  if (!Number.isInteger(codePoint) || codePoint < 0 || codePoint > 0x10ffff) {
+    return false;
+  }
+  return /[\p{White_Space}\p{Control}\p{Format}\p{Mark}]/u.test(String.fromCodePoint(codePoint));
+}
+
+const invisibleHtmlEntityNames = new Set([
+  "applyfunction",
+  "bom",
+  "emsp",
+  "emsp13",
+  "emsp14",
+  "feff",
+  "functionapplication",
+  "hairsp",
+  "invisiblecomma",
+  "invisibleseparator",
+  "invisibletimes",
+  "mediumspace",
+  "nobreak",
+  "nbsp",
+  "negativemediumspace",
+  "negativethickspace",
+  "negativethinspace",
+  "negativeverythinspace",
+  "newline",
+  "numsp",
+  "puncsp",
+  "shy",
+  "tab",
+  "thickspace",
+  "thinsp",
+  "thinspace",
+  "verythinspace",
+  "wordjoiner",
+  "zerowidthnonjoiner",
+  "zerowidthjoiner",
+  "zerowidthspace",
+  "zwnj",
+  "zwj"
+]);
+const htmlEntityPattern = /&(?:#x([0-9a-f]+)|#([0-9]+)|([A-Za-z][A-Za-z0-9]+));/giu;
+const linkReferenceDefinitionPattern = /^\s{0,3}\[[^\]\r\n]+\]:[ \t]+/u;
+
+function stripInvisibleHtmlEntities(line: string): string {
+  return line.replace(htmlEntityPattern, (entity, hexadecimal, decimal, name) => {
+    const codePoint =
+      typeof hexadecimal === "string"
+        ? Number.parseInt(hexadecimal, 16)
+        : typeof decimal === "string"
+          ? Number.parseInt(decimal, 10)
+          : undefined;
+    const invisible =
+      (codePoint !== undefined && isInvisibleCodePoint(codePoint)) ||
+      (typeof name === "string" && invisibleHtmlEntityNames.has(name.toLocaleLowerCase("en-US")));
+    return invisible ? "" : entity;
+  });
+}
+
 function visibleMarkdownLines(body: string): string[] | undefined {
   const visible: string[] = [];
   let fence: MarkdownFence | undefined;
   let htmlComment = false;
+  const rawHtmlTags: string[] = [];
+  let linkReferenceContinuation = false;
 
   for (const rawLine of body.split(/\r?\n/u)) {
     if (fence !== undefined) {
       if (closesFence(rawLine, fence)) {
         fence = undefined;
       }
+      continue;
+    }
+
+    if (rawHtmlTags.length > 0 || rawHtmlBlockStartPattern.test(rawLine)) {
+      updateRawHtmlTags(rawLine, rawHtmlTags);
       continue;
     }
 
@@ -122,10 +230,24 @@ function visibleMarkdownLines(body: string): string[] | undefined {
       fence = marker;
       continue;
     }
-    visible.push(visibleLine);
+    const renderedLine = stripInvisibleHtmlEntities(visibleLine);
+    if (renderedLine.trim().length === 0) {
+      linkReferenceContinuation = false;
+      visible.push(visibleLine);
+      continue;
+    }
+    if (linkReferenceContinuation && /^[ \t]+/u.test(visibleLine)) {
+      continue;
+    }
+    if (!linkReferenceDefinitionPattern.test(visibleLine)) {
+      linkReferenceContinuation = false;
+      visible.push(visibleLine);
+    } else {
+      linkReferenceContinuation = true;
+    }
   }
 
-  return htmlComment ? undefined : visible;
+  return htmlComment || rawHtmlTags.length > 0 ? undefined : visible;
 }
 
 interface MarkdownHeading {
@@ -134,6 +256,7 @@ interface MarkdownHeading {
 }
 
 const headingPattern = /^\s{0,3}(#{1,6})[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$/u;
+const visibleMarkdownTextPattern = /[^\p{White_Space}\p{Control}\p{Format}\p{Mark}]/u;
 
 function markdownHeading(line: string): MarkdownHeading | undefined {
   const match = headingPattern.exec(line);
@@ -146,6 +269,10 @@ function markdownHeading(line: string): MarkdownHeading | undefined {
     level: marker.length,
     text
   };
+}
+
+function hasVisibleMarkdownText(line: string): boolean {
+  return visibleMarkdownTextPattern.test(stripInvisibleHtmlEntities(line));
 }
 
 function hasNonEmptySection(body: string, wantedHeading: string): boolean {
@@ -170,7 +297,7 @@ function hasNonEmptySection(body: string, wantedHeading: string): boolean {
         }
         continue;
       }
-      if (line.trim().length > 0) {
+      if (hasVisibleMarkdownText(line)) {
         return true;
       }
     }
@@ -211,6 +338,20 @@ function isLaterReview(
   return candidateTimestamp >= currentTimestamp;
 }
 
+function hasConflictingTimestampedState(
+  current: PullRequestInput["reviews"][number],
+  candidate: PullRequestInput["reviews"][number]
+): boolean {
+  const currentTimestamp = reviewTimestamp(current);
+  const candidateTimestamp = reviewTimestamp(candidate);
+  return (
+    currentTimestamp !== undefined &&
+    candidateTimestamp !== undefined &&
+    currentTimestamp === candidateTimestamp &&
+    current.state !== candidate.state
+  );
+}
+
 function evaluateRequirement(
   requirement: Requirement,
   input: PullRequestInput
@@ -242,13 +383,15 @@ function evaluateRequirement(
       const candidates =
         requirement.app === undefined && unqualifiedChecks.length > 0
           ? unqualifiedChecks
-          : namedChecks;
-      const check = candidates.find(
-        (candidate) =>
-          candidate.conclusion !== null &&
-          requirement.conclusions.includes(candidate.conclusion) &&
-          (requirement.app === undefined || candidate.app === requirement.app)
-      );
+          : requirement.app === undefined
+            ? namedChecks
+            : namedChecks.filter((candidate) => candidate.app === requirement.app);
+      const satisfies = (candidate: PullRequestInput["checks"][number]): boolean =>
+        candidate.conclusion !== null && requirement.conclusions.includes(candidate.conclusion);
+      const check =
+        candidates.length > 0 && candidates.every(satisfies)
+          ? candidates.find((candidate) => satisfies(candidate))
+          : undefined;
       return {
         type: requirement.type,
         status: check === undefined ? "missing" : "satisfied",
@@ -266,9 +409,14 @@ function evaluateRequirement(
         if (review.state === "commented") {
           continue;
         }
-        const current = latestByLogin.get(review.login);
+        const loginKey = review.login.toLocaleLowerCase("en-US");
+        const current = latestByLogin.get(loginKey);
+        if (current !== undefined && hasConflictingTimestampedState(current, review)) {
+          latestByLogin.set(loginKey, { ...review, state: "dismissed" });
+          continue;
+        }
         if (current === undefined || isLaterReview(current, review)) {
-          latestByLogin.set(review.login, review);
+          latestByLogin.set(loginKey, review);
         }
       }
       const count = [...latestByLogin.values()].filter(
@@ -286,7 +434,7 @@ function evaluateRequirement(
       return {
         type: requirement.type,
         status: satisfied ? "satisfied" : "missing",
-        summary: `PR body contains the specified checked task-list text: "${requirement.text}"`,
+        summary: `Checked human attestation: "${requirement.text}"`,
         ...(satisfied ? { evidence: "Exact checked task-list attestation found" } : {})
       };
     }

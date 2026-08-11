@@ -72,7 +72,9 @@ to every rule that requested them.
 
 On GitHub, the Action fetches the policy at the pull request's immutable base SHA,
 then reads changed paths, completed checks, closing issue references, and reviews
-through read-only APIs. It never trusts a policy modified by the pull request.
+through read-only APIs. Check Runs collected for an immutable head SHA must echo
+that SHA; nullable queued or in-progress timestamps remain pending. It never
+trusts a policy modified by the pull request.
 
 ## GitHub Action
 
@@ -152,6 +154,44 @@ Stable exit codes:
 The local CLI consumes normalized JSON rather than contacting GitHub. This keeps
 the engine reproducible and makes policies easy to test with fixtures.
 
+### Repository audit
+
+The separate audit command checks a bounded normalized repository snapshot. It
+is read-only, deterministic, and fail-closed; it does not check out or execute
+workflow source and it does not change the readiness JSON contract:
+
+```console
+reviewready audit --input fixtures/audit/reviewready.json
+reviewready audit --input fixtures/audit/reviewready.json --json
+reviewready audit --input fixtures/audit/reviewready.json --sarif
+```
+
+Audit exit codes are 0 for `pass`, 1 for findings, and 2 for incomplete or
+invalid input. The audit report has its own contract, described by
+[reviewready.audit.schema.json](reviewready.audit.schema.json); it is not the
+readiness result. The readiness JSON contract is separately documented by
+[reviewready.result.schema.json](reviewready.result.schema.json).
+
+The CLI can also collect a live, read-only snapshot from GitHub:
+
+```console
+reviewready audit --github owner/repository --token-env GITHUB_TOKEN \
+  --protected-workflow .github/workflows/reviewready.yml \
+  --trusted-workflow .github/workflows/reviewready.yml --json
+```
+
+The token is read only from the named environment variable. Live collection
+loads policy and workflow bytes at one immutable base SHA, uses bounded REST
+pagination/retries/response size/deadline, and returns `incomplete` when
+settings or the base revision are not authoritative. Protected and trusted
+workflow roots are explicit out-of-band inputs; a check name or ordinary API
+success never establishes a trust root. The collector never checks out or
+executes repository code.
+
+The GitHub App JWT/token and webhook HMAC/replay modules are library contracts
+for an external service. ReviewReady does not include an HTTP server, secret
+manager, durable database, or in-memory replay fallback.
+
 ## Policy reference
 
 ### Conditions
@@ -175,8 +215,9 @@ previous path are evaluated; the Git separator is never rewritten.
   commit status context, has the exact name and allowed conclusion. A newer
   failure or pending result cannot fall back to an older success.
 - maintainer_review: the latest review state from enough unique users with write,
-  maintain, or admin permission is approved. GitHub review timestamps are used
-  when available; timestamp-free local fixtures use their array order.
+  maintain, or admin permission is approved. GitHub APPROVED,
+  CHANGES_REQUESTED, and DISMISSED reviews require valid timestamps;
+  COMMENTED may omit one. Timestamp-free local fixtures use their array order.
 - human_attestation: the PR body contains the exact checked task-list text. This
   verifies visible text only; it does not verify identity, understanding,
   authorship, or legal responsibility.
@@ -201,8 +242,14 @@ security boundary and the settings that must be verified in GitHub.
 - The effective policy comes from the base SHA, never the proposed head.
 - The Action uses GitHub APIs and does not check out or execute PR code.
 - User-controlled text is escaped in Markdown summaries.
+- Public error control characters are escaped before CLI or Action output.
 - Public errors omit stack traces, tokens, API response bodies, and local paths.
 - Invalid or unavailable authoritative input fails closed.
+- Bounded GitHub pagination rejects malformed or non-contiguous next links
+  instead of treating a truncated response as complete.
+- Required GitHub evidence is read twice with a bounded fingerprint so a stable
+  PR metadata snapshot cannot silently pair with changing checks or reviews;
+  the snapshot is also verified after the second evidence read.
 - The sample workflow is a normal pull_request integration and must not be
   treated as the sole authoritative merge gate until the trusted workflow root
   design is implemented and repository rules are verified.

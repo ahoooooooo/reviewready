@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "repository": {
+    "owner": "ahoooooooo",
+    "name": "reviewready",
+    "defaultBranch": "main"
+  },
+  "baseRevision": {
+    "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "policyPath": ".reviewready.yml",
+    "policyRevisionSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "policySha256": "39060abf22c9484774c2f045d35b5fcdbe699f4cd96a7d1dce437c68187732cf",
+    "policyLoadedFromBase": true
+  },
+  "policy": {
+    "requiredChecks": [{ "name": "check", "appSlug": "github-actions" }],
+    "workflowPaths": [".github/workflows/ci.yml"]
+  },
+  "completeness": {
+    "complete": true,
+    "missing": []
+  },
+  "branchProtection": {
+    "branch": "main",
+    "exists": true,
+    "enforceAdmins": true,
+    "allowForcePushes": false,
+    "allowDeletions": false,
+    "requiredStatusChecks": {
+      "strict": true,
+      "checks": [{ "name": "check", "appSlug": "github-actions" }]
+    },
+    "requiredPullRequestReviews": {
+      "requiredApprovingReviewCount": 1,
+      "bypassActors": []
+    }
+  },
+  "rulesets": [
+    {
+      "id": 1,
+      "name": "main",
+      "target": "branch",
+      "refPatterns": ["~DEFAULT_BRANCH"],
+      "enforcement": "active",
+      "bypassActors": [],
+      "allowForcePushes": false,
+      "allowDeletions": false,
+      "requiredChecks": [{ "name": "check", "appSlug": "github-actions" }]
+    }
+  ],
+  "tagProtection": {
+    "known": true,
+    "allowsDeletion": false,
+    "allowsUpdate": false
+  },
+  "workflows": [
+    {
+      "path": ".github/workflows/ci.yml",
+      "revisionSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "protectedFromPullRequest": false,
+      "trustedRoot": false,
+      "source": "name: check\n\non:\n  pull_request:\n  merge_group:\n    types: [checks_requested]\n  push:\n    branches: [main]\n\npermissions:\n  contents: read\n\njobs:\n  check:\n    runs-on: ubuntu-latest\n    steps:\n      - name: Check out source\n        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n        with:\n          persist-credentials: false\n\n      - name: Use Node.js 24\n        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0\n        with:\n          node-version: 24\n          package-manager-cache: false\n\n      - name: Install locked dependencies\n        run: npm ci\n\n      - name: Run complete quality gate\n        run: npm run check\n\n      - name: Verify committed Action bundle\n        run: git diff --exit-code -- dist/action/index.js\n\n  compatibility:\n    name: Node.js 22 compatibility\n    runs-on: ubuntu-latest\n    steps:\n      - name: Check out source\n        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n        with:\n          persist-credentials: false\n\n      - name: Use Node.js 22\n        run: npm ci\n\n      - name: Run complete quality gate on Node.js 22\n        run: npm run check\n"
+    }
+  ]
+}
