@@ -1,13 +1,13 @@
-# ReviewReady v1.0.4 local candidate evidence
+# ReviewReady v1.0.4 release evidence
 
-This is an unreleased candidate record. Commit `65f363f` is pushed to the
-`agent/release-readiness-v1` branch; this does not claim an npm publish,
-GitHub release, tag movement, or `main` branch update.
+This record covers the published npm package from commit `662604d`, which is
+pushed to the `agent/release-readiness-v1` branch. npm publication and the
+GitHub v1.0.4 release/tag state are verified; `main` remains unchanged.
 
 ## Scope
 
-- Candidate package version: `1.0.4`.
-- Public v1.0.3 remains the latest released version.
+- Released package version: `1.0.4`.
+- Public `@ahoooooo/reviewready@1.0.4` is now the latest npm release.
 - The candidate adds the offline repository audit, trusted-ingress primitives,
   bounded live GitHub collector/App helpers, webhook replay/binding primitives,
   bounded AI-workflow analysis, separate readiness-result schema, dogfood
@@ -16,12 +16,18 @@ GitHub release, tag movement, or `main` branch update.
 ## Release controls
 
 - [x] Commit and push the candidate after explicit approval: commit
-      `65f363f` is verified on `agent/release-readiness-v1`.
+      `662604d6123378d7b1aea242065f74afc9aea5b8` is verified on
+      `agent/release-readiness-v1`.
 - [x] Run the exact local tarball audit and clean-room package install from the
       current working tree: 46 packaged files, SHA-512
       `4ece7af7c11007a1f6477da34764467ea4856f382f0cb7a83a181b52039910744a6527f88f62626a828967a290897a9901c02ba6117214b432ead1c988acf3b0`.
-- [ ] Publish npm only after the package audit and authentication checks pass.
-- [ ] Move GitHub release and Action tags only after npm integrity verification.
+- [x] Publish npm only after the package audit and authentication checks pass:
+      `@ahoooooo/reviewready@1.0.4` is public, and registry SHA-512
+      `4ece7af7c11007a1f6477da34764467ea4856f382f0cb7a83a181b52039910744a6527f88f62626a828967a290897a9901c02ba6117214b432ead1c988acf3b0`
+      matches the clean-room artifact; registry shasum is
+      `7737facc197c48f127eb6087af1ff7e2bfec7098`.
+- [x] Create the GitHub `v1.0.4` release and move the Action `v1` tag to
+      `662604d6123378d7b1aea242065f74afc9aea5b8`; `main` remains unchanged.
 
 ## Local verification
 
@@ -39,6 +45,6 @@ GitHub release, tag movement, or `main` branch update.
       plus a ready `check --json` smoke test.
 - [x] `git diff --check` passed.
 
-No external release claim belongs in this file until a separate release
-decision, clean exact-commit install, npm integrity verification, and GitHub
-tag review are complete.
+The GitHub release is available at
+`https://github.com/ahoooooooo/reviewready/releases/tag/v1.0.4`. Both
+`v1.0.4` and `v1` resolve to the verified exact commit above.
