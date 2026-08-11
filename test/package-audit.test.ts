@@ -1,6 +1,12 @@
+import { readFile } from "node:fs/promises";
+
 import { describe, expect, it } from "vitest";
 
-import { auditPackageEntries, extractPackResult } from "../scripts/verify-package.mjs";
+import {
+  auditPackageEntries,
+  extractPackResult,
+  loadPlannedPackageEntries
+} from "../scripts/verify-package.mjs";
 
 interface PackageAuditEntry {
   path: string;
@@ -22,11 +28,51 @@ const requiredEntries = (): PackageAuditEntry[] => [
     })
   },
   { path: "reviewready.schema.json", content: "{}" },
+  { path: "reviewready.audit.schema.json", content: "{}" },
+  { path: "reviewready.result.schema.json", content: "{}" },
   { path: "dist/cli.js", content: "console.log('safe');" },
   { path: "dist/cli.d.ts", content: "export {};" }
 ];
 
 describe("auditPackageEntries", () => {
+  it("ships a separate versioned readiness result schema", async () => {
+    const schema = JSON.parse(await readFile("reviewready.result.schema.json", "utf8")) as {
+      properties?: { outputVersion?: { const?: unknown } };
+      required?: readonly string[];
+    };
+
+    expect(schema.properties?.outputVersion?.const).toBe(1);
+    expect(schema.required).toEqual(
+      expect.arrayContaining([
+        "outputVersion",
+        "status",
+        "policyVersion",
+        "triggeredRules",
+        "requirements"
+      ])
+    );
+  });
+
+  it("builds distributable runtime files before auditing the package", async () => {
+    const packageJson = JSON.parse(await readFile("package.json", "utf8")) as {
+      scripts?: { check?: string };
+    };
+    const checkScript = packageJson.scripts?.check;
+    if (typeof checkScript !== "string") {
+      throw new Error("package.json is missing the check script");
+    }
+
+    const checkSteps = checkScript.split(" && ").map((step) => step.trim());
+    const buildStep = checkSteps.indexOf("npm run bundle");
+    const packageAuditStep = checkSteps.indexOf("npm run test:coverage");
+    expect(checkSteps).toEqual(
+      expect.arrayContaining(["npm run bundle", "npm run test:coverage", "npm run verify:package"])
+    );
+    expect(buildStep).toBeGreaterThanOrEqual(0);
+    expect(packageAuditStep).toBeGreaterThanOrEqual(0);
+    expect(buildStep).toBeLessThan(packageAuditStep);
+  });
+
   it("accepts the documented package surface without private metadata", () => {
     expect(auditPackageEntries(requiredEntries())).toEqual([]);
   });
@@ -154,6 +200,13 @@ describe("auditPackageEntries", () => {
     expect(auditPackageEntries(entries)).toContain(
       "Packaged package must declare public npm publishConfig"
     );
+  });
+
+  it("audits the exact npm dry-run package manifest from the repository", () => {
+    const entries = loadPlannedPackageEntries(process.cwd());
+
+    expect(entries.length).toBeGreaterThan(0);
+    expect(auditPackageEntries(entries)).toEqual([]);
   });
 });
 

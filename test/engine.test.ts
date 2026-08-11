@@ -47,6 +47,13 @@ function input(overrides: Partial<PullRequestInput> = {}): PullRequestInput {
   };
 }
 
+interface ReviewReductionCase {
+  readonly name: string;
+  readonly reviews: PullRequestInput["reviews"];
+  readonly expectedStatus: "satisfied" | "missing";
+  readonly expectedEvidence: string;
+}
+
 describe("evaluate", () => {
   it("keeps check requirements distinct when names or apps contain delimiters", () => {
     const collisionPolicy = parsePolicy(`
@@ -79,6 +86,52 @@ rules:
 
     expect(result.status).toBe("ready");
     expect(result.requirements).toHaveLength(2);
+    expect(result.requirements.map((requirement) => requirement.key)).toEqual([
+      "check:a:success:success:b",
+      "check:a:success:success:b"
+    ]);
+  });
+
+  it("prefers an unqualified aggregate over an app-specific check for generic requirements", () => {
+    const result = evaluate(
+      policy,
+      input({
+        checks: [
+          { name: "test", conclusion: "success", app: "github-actions" },
+          { name: "test", conclusion: "failure" }
+        ]
+      })
+    );
+
+    expect(result.requirements.find((requirement) => requirement.type === "check")?.status).toBe(
+      "missing"
+    );
+  });
+
+  it("does not let a duplicate non-success check be bypassed by a success", () => {
+    const checkPolicy = parsePolicy(`
+version: 1
+rules:
+  - id: check
+    when:
+      paths:
+        any: [src/**]
+    require:
+      - type: check
+        name: build
+        conclusions: [success]
+`);
+    const result = evaluate(
+      checkPolicy,
+      input({
+        checks: [
+          { name: "build", conclusion: "failure" },
+          { name: "build", conclusion: "success" }
+        ]
+      })
+    );
+
+    expect(result.requirements[0]?.status).toBe("missing");
   });
 
   it("reports every missing obligation for every matching rule", () => {
@@ -100,12 +153,9 @@ rules:
       policy,
       input({
         changedFiles: ["src/auth/token.ts"],
-        body: `## Testing
-
-        npm test passed.
-
-        - [x] I understand this change.
-        `,
+        body: ["## Testing", "", "npm test passed.", "", "- [x] I understand this change."].join(
+          "\n"
+        ),
         linkedIssues: [42],
         checks: [{ name: "test", conclusion: "success", app: "github-actions" }],
         reviews: [
@@ -123,6 +173,14 @@ rules:
 
   it("requires non-empty content below a required PR body heading", () => {
     const result = evaluate(policy, input({ body: "## Testing\n\n## Notes\nNot testing." }));
+
+    expect(
+      result.requirements.find((requirement) => requirement.type === "pr_body_section")?.status
+    ).toBe("missing");
+  });
+
+  it("does not count default-ignorable characters as visible section content", () => {
+    const result = evaluate(policy, input({ body: "## Testing\n\u200B" }));
 
     expect(
       result.requirements.find((requirement) => requirement.type === "pr_body_section")?.status
@@ -151,6 +209,170 @@ rules:
     ).toBe("missing");
   });
 
+  it.each([
+    {
+      name: "single-line HTML comments",
+      body: ["<!-- ## Testing -->", "<!-- - [x] I understand this change. -->"].join("\n"),
+      expectedSection: "missing",
+      expectedAttestation: "missing"
+    },
+    {
+      name: "multi-line HTML comments",
+      body: ["<!--", "## Testing", "Tests passed.", "- [x] I understand this change.", "-->"].join(
+        "\n"
+      ),
+      expectedSection: "missing",
+      expectedAttestation: "missing"
+    },
+    {
+      name: "zero-width HTML entity",
+      body: "## Testing\n&#8203;",
+      expectedSection: "missing",
+      expectedAttestation: "missing"
+    },
+    {
+      name: "named invisible HTML entity",
+      body: "## Testing\n&NoBreak;",
+      expectedSection: "missing",
+      expectedAttestation: "missing"
+    },
+    {
+      name: "invisible HTML entity cannot create a heading marker",
+      body: "#&#8203;# Testing\nTests passed.",
+      expectedSection: "missing",
+      expectedAttestation: "missing"
+    },
+    {
+      name: "invisible HTML entity cannot create a task marker",
+      body: "## Testing\nTests passed.\n-&#8203; [x] I understand this change.",
+      expectedSection: "satisfied",
+      expectedAttestation: "missing"
+    },
+    {
+      name: "raw HTML block around evidence",
+      body: [
+        "<div>",
+        "## Testing",
+        "Tests passed.",
+        "- [x] I understand this change.",
+        "</div>"
+      ].join("\n"),
+      expectedSection: "missing",
+      expectedAttestation: "missing"
+    },
+    {
+      name: "raw HTML attributes may contain closing-angle characters",
+      body: ['<style data-x="<">', "## Testing", "Tests passed.", "</style>"].join("\n"),
+      expectedSection: "missing",
+      expectedAttestation: "missing"
+    },
+    {
+      name: "raw HTML block around a task item",
+      body: [
+        "## Testing",
+        "Tests passed.",
+        "<div>",
+        "- [x] I understand this change.",
+        "</div>"
+      ].join("\n"),
+      expectedSection: "satisfied",
+      expectedAttestation: "missing"
+    },
+    {
+      name: "link reference definition",
+      body: "## Testing\n[tests]: https://example.test/report",
+      expectedSection: "missing",
+      expectedAttestation: "missing"
+    },
+    {
+      name: "link reference definition title continuation",
+      body: ["## Testing", "[tests]: https://example.test/report", '  "hidden title"'].join("\n"),
+      expectedSection: "missing",
+      expectedAttestation: "missing"
+    },
+    {
+      name: "visible Markdown around an inline comment",
+      body: [
+        "## Testing <!-- ignored heading suffix -->",
+        "Tests passed.",
+        "<!-- hidden -->",
+        "- [x] I understand this change."
+      ].join("\n"),
+      expectedSection: "satisfied",
+      expectedAttestation: "satisfied"
+    },
+    {
+      name: "an unclosed HTML comment",
+      body: [
+        "## Testing",
+        "Tests passed.",
+        "- [x] I understand this change.",
+        "<!-- never closes"
+      ].join("\n"),
+      expectedSection: "missing",
+      expectedAttestation: "missing"
+    },
+    {
+      name: "a task item inside an indented code block",
+      body: ["## Testing", "Tests passed.", "    - [x] I understand this change."].join("\n"),
+      expectedSection: "satisfied",
+      expectedAttestation: "missing"
+    },
+    {
+      name: "a fence-like line with trailing text",
+      body: [
+        "## Testing",
+        "Tests passed.",
+        "```markdown",
+        "``` this is not a closing fence",
+        "- [x] I understand this change."
+      ].join("\n"),
+      expectedSection: "satisfied",
+      expectedAttestation: "missing"
+    }
+  ])(
+    "evaluates only visible Markdown for $name",
+    ({ body, expectedSection, expectedAttestation }) => {
+      const result = evaluate(policy, input({ body }));
+
+      expect(
+        result.requirements.find((requirement) => requirement.type === "pr_body_section")?.status
+      ).toBe(expectedSection);
+      expect(
+        result.requirements.find((requirement) => requirement.type === "human_attestation")?.status
+      ).toBe(expectedAttestation);
+    }
+  );
+
+  it.each([
+    {
+      name: "nested lower-level content",
+      body: "## Testing\n### Unit tests\nnpm test passed.",
+      expected: "satisfied"
+    },
+    {
+      name: "empty nested heading does not count as content",
+      body: "## Testing\n### Unit tests\n## Notes\nNot testing.",
+      expected: "missing"
+    },
+    {
+      name: "same-level heading boundary",
+      body: "## Testing\n## Notes\nNot testing.",
+      expected: "missing"
+    },
+    {
+      name: "higher-level heading boundary",
+      body: "## Testing\n# Notes\nNot testing.",
+      expected: "missing"
+    }
+  ])("uses heading levels for the Testing section: $name", ({ body, expected }) => {
+    const result = evaluate(policy, input({ body }));
+
+    expect(
+      result.requirements.find((requirement) => requirement.type === "pr_body_section")?.status
+    ).toBe(expected);
+  });
+
   it("accepts a later repeated body heading when the first occurrence is empty", () => {
     const result = evaluate(
       policy,
@@ -162,6 +384,14 @@ rules:
     ).toBe("satisfied");
   });
 
+  it("does not treat an adjacent trailing hash as a heading closing marker", () => {
+    const result = evaluate(policy, input({ body: "## Testing#\nTests passed." }));
+
+    expect(
+      result.requirements.find((requirement) => requirement.type === "pr_body_section")?.status
+    ).toBe("missing");
+  });
+
   it("does not trigger a rule when its negative label condition fails", () => {
     const result = evaluate(policy, input({ labels: ["skip-readiness"] }));
 
@@ -169,10 +399,10 @@ rules:
     expect(result.triggeredRules).toEqual([]);
   });
 
-  it("matches repository paths with POSIX semantics after safe slash normalization", () => {
-    const result = evaluate(policy, input({ changedFiles: ["src\\index.ts"] }));
-
-    expect(result.triggeredRules).toEqual(["source"]);
+  it("rejects a literal backslash instead of normalizing Git data", () => {
+    expect(() => evaluate(policy, input({ changedFiles: ["src\\index.ts"] }))).toThrow(
+      expect.objectContaining({ code: "INPUT_GIT_PATH_INVALID" })
+    );
   });
 
   it.each(["../secret", "/etc/passwd", "C:/secret", "src/../../secret", ""])(
@@ -200,6 +430,35 @@ rules:
       (requirement) => requirement.type === "maintainer_review"
     );
     expect(review?.status).toBe("satisfied");
+    expect(review?.evidence).toBe("1 approving maintainer");
+  });
+
+  it("does not count case variants of one reviewer login as separate maintainers", () => {
+    const reviewPolicy = parsePolicy(`
+version: 1
+rules:
+  - id: review
+    when:
+      paths:
+        any: [src/**]
+    require:
+      - type: maintainer_review
+        minimum: 2
+`);
+    const result = evaluate(
+      reviewPolicy,
+      input({
+        reviews: [
+          { login: "same-person", state: "approved", maintainer: true },
+          { login: "SAME-PERSON", state: "approved", maintainer: true }
+        ]
+      })
+    );
+
+    const review = result.requirements.find(
+      (requirement) => requirement.type === "maintainer_review"
+    );
+    expect(review?.status).toBe("missing");
     expect(review?.evidence).toBe("1 approving maintainer");
   });
 
@@ -231,4 +490,132 @@ rules:
     expect(review?.status).toBe("missing");
     expect(review?.evidence).toBe("0 approving maintainers");
   });
+
+  it("fails closed when conflicting reviews share the same timestamp", () => {
+    const result = evaluate(
+      policy,
+      input({
+        changedFiles: ["src/auth/token.ts"],
+        reviews: [
+          {
+            login: "same-person",
+            state: "changes_requested",
+            maintainer: true,
+            submittedAt: "2026-08-10T10:00:00Z"
+          },
+          {
+            login: "same-person",
+            state: "approved",
+            maintainer: true,
+            submittedAt: "2026-08-10T10:00:00Z"
+          }
+        ]
+      })
+    );
+
+    const review = result.requirements.find(
+      (requirement) => requirement.type === "maintainer_review"
+    );
+    expect(review?.status).toBe("missing");
+    expect(review?.evidence).toBe("0 approving maintainers");
+  });
+
+  const reviewReductionCases: readonly ReviewReductionCase[] = [
+    {
+      name: "a later COMMENTED review does not override approval",
+      reviews: [
+        { login: "same-person", state: "approved", maintainer: true },
+        { login: "same-person", state: "commented", maintainer: true }
+      ],
+      expectedStatus: "satisfied",
+      expectedEvidence: "1 approving maintainer"
+    },
+    {
+      name: "a later COMMENTED review does not override the latest timestamped opinion",
+      reviews: [
+        {
+          login: "same-person",
+          state: "approved",
+          maintainer: true,
+          submittedAt: "2026-08-10T10:00:00Z"
+        },
+        {
+          login: "same-person",
+          state: "changes_requested",
+          maintainer: true,
+          submittedAt: "2026-08-10T09:00:00Z"
+        },
+        {
+          login: "same-person",
+          state: "commented",
+          maintainer: true,
+          submittedAt: "2026-08-10T11:00:00Z"
+        }
+      ],
+      expectedStatus: "satisfied",
+      expectedEvidence: "1 approving maintainer"
+    },
+    {
+      name: "dismissed remains non-approving despite a later comment",
+      reviews: [
+        {
+          login: "same-person",
+          state: "approved",
+          maintainer: true,
+          submittedAt: "2026-08-10T10:00:00Z"
+        },
+        {
+          login: "same-person",
+          state: "dismissed",
+          maintainer: true,
+          submittedAt: "2026-08-10T11:00:00Z"
+        },
+        {
+          login: "same-person",
+          state: "commented",
+          maintainer: true,
+          submittedAt: "2026-08-10T12:00:00Z"
+        }
+      ],
+      expectedStatus: "missing",
+      expectedEvidence: "0 approving maintainers"
+    },
+    {
+      name: "timestamp-free fixtures keep their array-order behavior",
+      reviews: [
+        { login: "same-person", state: "changes_requested", maintainer: true },
+        { login: "same-person", state: "approved", maintainer: true }
+      ],
+      expectedStatus: "satisfied",
+      expectedEvidence: "1 approving maintainer"
+    },
+    {
+      name: "timestamp-free fixtures keep the last opinionated state",
+      reviews: [
+        { login: "same-person", state: "approved", maintainer: true },
+        { login: "same-person", state: "changes_requested", maintainer: true }
+      ],
+      expectedStatus: "missing",
+      expectedEvidence: "0 approving maintainers"
+    }
+  ];
+
+  it.each(reviewReductionCases)(
+    "reduces reviewer opinions deterministically: $name",
+    ({ reviews, expectedStatus, expectedEvidence }) => {
+      const result = evaluate(
+        policy,
+        input({
+          changedFiles: ["src/auth/token.ts"],
+          reviews
+        })
+      );
+
+      const review = result.requirements.find(
+        (requirement) => requirement.type === "maintainer_review"
+      );
+      expect(review?.status).toBe(expectedStatus);
+      expect(review?.evidence).toBe(expectedEvidence);
+    }
+  );
 });

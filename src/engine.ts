@@ -21,7 +21,7 @@ function structuredKey(parts: readonly unknown[]): string {
   return JSON.stringify(parts);
 }
 
-function requirementKey(requirement: Requirement): string {
+function requirementIdentity(requirement: Requirement): string {
   switch (requirement.type) {
     case "pr_body_section":
       return structuredKey([requirement.type, requirement.heading.toLocaleLowerCase("en-US")]);
@@ -38,6 +38,21 @@ function requirementKey(requirement: Requirement): string {
       return structuredKey([requirement.type, requirement.minimum]);
     case "human_attestation":
       return structuredKey([requirement.type, requirement.text]);
+  }
+}
+
+function publicRequirementKey(requirement: Requirement): string {
+  switch (requirement.type) {
+    case "pr_body_section":
+      return `pr_body_section:${requirement.heading.toLocaleLowerCase("en-US")}`;
+    case "linked_issue":
+      return "linked_issue";
+    case "check":
+      return `check:${requirement.name}:${[...new Set(requirement.conclusions)].sort().join(",")}:${requirement.app ?? ""}`;
+    case "maintainer_review":
+      return `maintainer_review:${String(requirement.minimum)}`;
+    case "human_attestation":
+      return `human_attestation:${requirement.text}`;
   }
 }
 
@@ -58,44 +73,231 @@ function fenceMarker(line: string): MarkdownFence | undefined {
   };
 }
 
-function visibleMarkdownLines(body: string): string[] {
+function closesFence(line: string, fence: MarkdownFence): boolean {
+  const match = /^\s{0,3}(`{3,}|~{3,})[ \t]*$/u.exec(line);
+  const marker = match?.[1];
+  return marker !== undefined && marker[0] === fence.marker && marker.length >= fence.length;
+}
+
+const htmlTagPattern =
+  /<\/?([A-Za-z][A-Za-z0-9-]*)(?:\s+[^\s"'=<>]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'=<>]+))?)*\s*\/?\s*>/gu;
+const rawHtmlBlockStartPattern =
+  /^\s{0,3}<\/?[A-Za-z][A-Za-z0-9-]*(?:\s+[^\s"'=<>]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'=<>]+))?)*\s*\/?\s*>/u;
+const voidHtmlTags = new Set([
+  "area",
+  "base",
+  "br",
+  "col",
+  "embed",
+  "hr",
+  "img",
+  "input",
+  "link",
+  "meta",
+  "param",
+  "source",
+  "track",
+  "wbr"
+]);
+
+function updateRawHtmlTags(line: string, stack: string[]): void {
+  for (const match of line.matchAll(htmlTagPattern)) {
+    const tag = match[1]?.toLocaleLowerCase("en-US");
+    const rawTag = match[0];
+    if (tag === undefined) {
+      continue;
+    }
+    if (rawTag.startsWith("</")) {
+      const index = stack.lastIndexOf(tag);
+      if (index >= 0) {
+        stack.splice(index, 1);
+      }
+      continue;
+    }
+    if (!rawTag.endsWith("/>") && !voidHtmlTags.has(tag)) {
+      stack.push(tag);
+    }
+  }
+}
+
+function isInvisibleCodePoint(codePoint: number): boolean {
+  if (!Number.isInteger(codePoint) || codePoint < 0 || codePoint > 0x10ffff) {
+    return false;
+  }
+  return /[\p{White_Space}\p{Control}\p{Format}\p{Mark}]/u.test(String.fromCodePoint(codePoint));
+}
+
+const invisibleHtmlEntityNames = new Set([
+  "applyfunction",
+  "bom",
+  "emsp",
+  "emsp13",
+  "emsp14",
+  "feff",
+  "functionapplication",
+  "hairsp",
+  "invisiblecomma",
+  "invisibleseparator",
+  "invisibletimes",
+  "mediumspace",
+  "nobreak",
+  "nbsp",
+  "negativemediumspace",
+  "negativethickspace",
+  "negativethinspace",
+  "negativeverythinspace",
+  "newline",
+  "numsp",
+  "puncsp",
+  "shy",
+  "tab",
+  "thickspace",
+  "thinsp",
+  "thinspace",
+  "verythinspace",
+  "wordjoiner",
+  "zerowidthnonjoiner",
+  "zerowidthjoiner",
+  "zerowidthspace",
+  "zwnj",
+  "zwj"
+]);
+const htmlEntityPattern = /&(?:#x([0-9a-f]+)|#([0-9]+)|([A-Za-z][A-Za-z0-9]+));/giu;
+const linkReferenceDefinitionPattern = /^\s{0,3}\[[^\]\r\n]+\]:[ \t]+/u;
+
+function stripInvisibleHtmlEntities(line: string): string {
+  return line.replace(htmlEntityPattern, (entity, hexadecimal, decimal, name) => {
+    const codePoint =
+      typeof hexadecimal === "string"
+        ? Number.parseInt(hexadecimal, 16)
+        : typeof decimal === "string"
+          ? Number.parseInt(decimal, 10)
+          : undefined;
+    const invisible =
+      (codePoint !== undefined && isInvisibleCodePoint(codePoint)) ||
+      (typeof name === "string" && invisibleHtmlEntityNames.has(name.toLocaleLowerCase("en-US")));
+    return invisible ? "" : entity;
+  });
+}
+
+function visibleMarkdownLines(body: string): string[] | undefined {
   const visible: string[] = [];
   let fence: MarkdownFence | undefined;
+  let htmlComment = false;
+  const rawHtmlTags: string[] = [];
+  let linkReferenceContinuation = false;
 
-  for (const line of body.split(/\r?\n/u)) {
-    const marker = fenceMarker(line);
+  for (const rawLine of body.split(/\r?\n/u)) {
     if (fence !== undefined) {
-      if (marker?.marker === fence.marker && marker.length >= fence.length) {
+      if (closesFence(rawLine, fence)) {
         fence = undefined;
       }
       continue;
     }
+
+    if (rawHtmlTags.length > 0 || rawHtmlBlockStartPattern.test(rawLine)) {
+      updateRawHtmlTags(rawLine, rawHtmlTags);
+      continue;
+    }
+
+    let line = rawLine;
+    let visibleLine = "";
+    while (line.length > 0) {
+      if (htmlComment) {
+        const end = line.indexOf("-->");
+        if (end === -1) {
+          break;
+        }
+        htmlComment = false;
+        line = line.slice(end + 3);
+        continue;
+      }
+
+      const start = line.indexOf("<!--");
+      if (start === -1) {
+        visibleLine += line;
+        line = "";
+        continue;
+      }
+
+      visibleLine += line.slice(0, start);
+      htmlComment = true;
+      line = line.slice(start + 4);
+    }
+
+    const marker = fenceMarker(visibleLine);
     if (marker !== undefined) {
       fence = marker;
       continue;
     }
-    visible.push(line);
+    const renderedLine = stripInvisibleHtmlEntities(visibleLine);
+    if (renderedLine.trim().length === 0) {
+      linkReferenceContinuation = false;
+      visible.push(visibleLine);
+      continue;
+    }
+    if (linkReferenceContinuation && /^[ \t]+/u.test(visibleLine)) {
+      continue;
+    }
+    if (!linkReferenceDefinitionPattern.test(visibleLine)) {
+      linkReferenceContinuation = false;
+      visible.push(visibleLine);
+    } else {
+      linkReferenceContinuation = true;
+    }
   }
 
-  return visible;
+  return htmlComment || rawHtmlTags.length > 0 ? undefined : visible;
+}
+
+interface MarkdownHeading {
+  readonly level: number;
+  readonly text: string;
+}
+
+const headingPattern = /^\s{0,3}(#{1,6})[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$/u;
+const visibleMarkdownTextPattern = /[^\p{White_Space}\p{Control}\p{Format}\p{Mark}]/u;
+
+function markdownHeading(line: string): MarkdownHeading | undefined {
+  const match = headingPattern.exec(line);
+  const marker = match?.[1];
+  const text = match?.[2]?.trim();
+  if (marker === undefined || text === undefined) {
+    return undefined;
+  }
+  return {
+    level: marker.length,
+    text
+  };
+}
+
+function hasVisibleMarkdownText(line: string): boolean {
+  return visibleMarkdownTextPattern.test(stripInvisibleHtmlEntities(line));
 }
 
 function hasNonEmptySection(body: string, wantedHeading: string): boolean {
   const lines = visibleMarkdownLines(body);
-  const headingPattern = /^\s{0,3}(#{1,6})[ \t]+(.+?)[ \t]*#*[ \t]*$/u;
+  if (lines === undefined) {
+    return false;
+  }
+
+  const wanted = wantedHeading.toLocaleLowerCase("en-US");
   for (let index = 0; index < lines.length; index += 1) {
-    const match = headingPattern.exec(lines[index] ?? "");
-    const heading = match?.[2]?.trim();
-    if (heading?.toLocaleLowerCase("en-US") !== wantedHeading.toLocaleLowerCase("en-US")) {
+    const heading = markdownHeading(lines[index] ?? "");
+    if (heading?.text.toLocaleLowerCase("en-US") !== wanted) {
       continue;
     }
 
     for (let contentIndex = index + 1; contentIndex < lines.length; contentIndex += 1) {
       const line = lines[contentIndex] ?? "";
-      if (headingPattern.test(line)) {
-        break;
+      const nestedHeading = markdownHeading(line);
+      if (nestedHeading !== undefined) {
+        if (nestedHeading.level <= heading.level) {
+          break;
+        }
+        continue;
       }
-      if (line.trim().length > 0) {
+      if (hasVisibleMarkdownText(line)) {
         return true;
       }
     }
@@ -104,8 +306,13 @@ function hasNonEmptySection(body: string, wantedHeading: string): boolean {
 }
 
 function hasAttestation(body: string, wantedText: string): boolean {
-  return visibleMarkdownLines(body).some((line) => {
-    const match = /^\s*[-*+]\s+\[[xX]\]\s+(.+?)\s*$/u.exec(line);
+  const lines = visibleMarkdownLines(body);
+  if (lines === undefined) {
+    return false;
+  }
+
+  return lines.some((line) => {
+    const match = /^[ \t]{0,3}[-*+][ \t]+\[[xX]\][ \t]+(.+?)[ \t]*$/u.exec(line);
     return match?.[1]?.trim() === wantedText;
   });
 }
@@ -129,6 +336,20 @@ function isLaterReview(
     return candidateTimestamp !== undefined || currentTimestamp === undefined;
   }
   return candidateTimestamp >= currentTimestamp;
+}
+
+function hasConflictingTimestampedState(
+  current: PullRequestInput["reviews"][number],
+  candidate: PullRequestInput["reviews"][number]
+): boolean {
+  const currentTimestamp = reviewTimestamp(current);
+  const candidateTimestamp = reviewTimestamp(candidate);
+  return (
+    currentTimestamp !== undefined &&
+    candidateTimestamp !== undefined &&
+    currentTimestamp === candidateTimestamp &&
+    current.state !== candidate.state
+  );
 }
 
 function evaluateRequirement(
@@ -157,12 +378,20 @@ function evaluateRequirement(
       };
     }
     case "check": {
-      const check = input.checks.find(
-        (candidate) =>
-          candidate.name === requirement.name &&
-          requirement.conclusions.includes(candidate.conclusion) &&
-          (requirement.app === undefined || candidate.app === requirement.app)
-      );
+      const namedChecks = input.checks.filter((candidate) => candidate.name === requirement.name);
+      const unqualifiedChecks = namedChecks.filter((candidate) => candidate.app === undefined);
+      const candidates =
+        requirement.app === undefined && unqualifiedChecks.length > 0
+          ? unqualifiedChecks
+          : requirement.app === undefined
+            ? namedChecks
+            : namedChecks.filter((candidate) => candidate.app === requirement.app);
+      const satisfies = (candidate: PullRequestInput["checks"][number]): boolean =>
+        candidate.conclusion !== null && requirement.conclusions.includes(candidate.conclusion);
+      const check =
+        candidates.length > 0 && candidates.every(satisfies)
+          ? candidates.find((candidate) => satisfies(candidate))
+          : undefined;
       return {
         type: requirement.type,
         status: check === undefined ? "missing" : "satisfied",
@@ -170,16 +399,24 @@ function evaluateRequirement(
         ...(check === undefined
           ? {}
           : {
-              evidence: `${check.name}: ${check.conclusion}${check.app === undefined ? "" : ` (${check.app})`}`
+              evidence: `${check.name}: ${check.conclusion === null ? "pending" : check.conclusion}${check.app === undefined ? "" : ` (${check.app})`}`
             })
       };
     }
     case "maintainer_review": {
       const latestByLogin = new Map<string, PullRequestInput["reviews"][number]>();
       for (const review of input.reviews) {
-        const current = latestByLogin.get(review.login);
+        if (review.state === "commented") {
+          continue;
+        }
+        const loginKey = review.login.toLocaleLowerCase("en-US");
+        const current = latestByLogin.get(loginKey);
+        if (current !== undefined && hasConflictingTimestampedState(current, review)) {
+          latestByLogin.set(loginKey, { ...review, state: "dismissed" });
+          continue;
+        }
         if (current === undefined || isLaterReview(current, review)) {
-          latestByLogin.set(review.login, review);
+          latestByLogin.set(loginKey, review);
         }
       }
       const count = [...latestByLogin.values()].filter(
@@ -211,15 +448,15 @@ export function evaluate(policy: Policy, value: unknown): EvaluationResult {
 
   for (const rule of rules) {
     for (const requirement of rule.require) {
-      const key = requirementKey(requirement);
-      const existing = results.get(key);
+      const identity = requirementIdentity(requirement);
+      const existing = results.get(identity);
       if (existing !== undefined) {
         existing.ruleIds.push(rule.id);
         continue;
       }
 
-      results.set(key, {
-        key,
+      results.set(identity, {
+        key: publicRequirementKey(requirement),
         ruleIds: [rule.id],
         ...evaluateRequirement(requirement, input)
       });

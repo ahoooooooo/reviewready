@@ -103,3 +103,37 @@ Public coordinates:
 - GitHub: https://github.com/ahoooooooo/reviewready
 - npm: https://www.npmjs.com/package/@ahoooooo/reviewready
 - Release: https://github.com/ahoooooooo/reviewready/releases/tag/v1.0.0
+
+## 2026-08-11 v1 trust-core integration baseline (historical)
+
+This section records the local integration candidate after the v1 trust-core
+changes. It is a pre-publish record; it does not claim that a new npm package,
+GitHub Release, or immutable Action tag was published.
+
+Complete local gate:
+
+- `npm test`: 10 test files and 208 tests passed;
+- `npm run check`: formatting, lint, typecheck, coverage, build, Action bundle,
+  and package audit passed;
+- coverage: 92.73 percent statements, 90.01 percent branches, 94.11 percent
+  functions, and 92.91 percent lines;
+- the minified Node 24 Action bundle regenerated at approximately 942 KB;
+- package audit passed for 30 planned package entries;
+- `git diff --check` passed.
+
+The new regression coverage includes bounded pagination when an upstream page
+returns more items than the requested page size, rejects a Markdown heading
+that uses an adjacent hash as a false closing marker, and prevents callers from
+raising the hard CLI file-size limit. The current implementation also covers
+coherent pull-request snapshots, latest Check Run and legacy status reduction,
+same-name provider ambiguity, pending conclusions, renamed paths, visible
+Markdown evidence, invisible Markdown entities, quoted HTML attributes,
+reviewer timestamp semantics, immutable Check Run head-SHA binding, bounded and
+contiguous pagination, post-evidence snapshot verification, conservative
+cross-provider ordering, bounded CLI file reads, control-safe public errors,
+duplicate CLI option rejection, and public JSON compatibility.
+
+That baseline predates the repository-audit and AI-workflow follow-up work. It
+is retained as historical evidence, not as the current working-tree gate. The
+public npm registry reports `@ahoooooo/reviewready@1.0.3` as the released
+version; no npm publish was performed for this later candidate.

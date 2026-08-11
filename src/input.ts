@@ -9,6 +9,7 @@ const inputSchema = z
   .object({
     version: z.literal(1),
     changedFiles: z.array(z.string().max(4096)).max(3000),
+    previousChangedFiles: z.array(z.string().max(4096)).max(3000).optional(),
     body: z.string().max(1_000_000),
     labels: z.array(shortText).max(100),
     linkedIssues: z.array(z.number().int().positive()).max(100),
@@ -17,7 +18,7 @@ const inputSchema = z
         z
           .object({
             name: shortText,
-            conclusion: z.enum(checkConclusions),
+            conclusion: z.enum(checkConclusions).nullable(),
             app: shortText.optional()
           })
           .strict()
@@ -39,7 +40,14 @@ const inputSchema = z
   .strict();
 
 export function normalizeRepositoryPath(value: string): string {
-  const normalized = value.replaceAll("\\", "/");
+  if (value.includes("\\")) {
+    throw new InputError(
+      "INPUT_GIT_PATH_INVALID",
+      "Repository paths must use '/' separators; literal backslashes are not valid Git paths."
+    );
+  }
+
+  const normalized = value;
   const unsafe =
     normalized.length === 0 ||
     normalized.startsWith("/") ||
@@ -50,7 +58,7 @@ export function normalizeRepositoryPath(value: string): string {
   if (unsafe) {
     throw new InputError(
       "INPUT_UNSAFE_PATH",
-      `Changed file path "${value}" must be a repository-relative path without traversal.`
+      "Changed file paths must be repository-relative paths without traversal."
     );
   }
   return normalized;
@@ -71,6 +79,13 @@ export function normalizeInput(value: unknown): PullRequestInput {
   return {
     ...parsed.data,
     changedFiles: [...new Set(parsed.data.changedFiles.map(normalizeRepositoryPath))],
+    ...(parsed.data.previousChangedFiles === undefined
+      ? {}
+      : {
+          previousChangedFiles: [
+            ...new Set(parsed.data.previousChangedFiles.map(normalizeRepositoryPath))
+          ]
+        }),
     labels: [...new Set(parsed.data.labels)],
     linkedIssues: [...new Set(parsed.data.linkedIssues)]
   };

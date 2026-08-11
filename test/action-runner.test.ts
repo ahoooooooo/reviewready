@@ -25,8 +25,20 @@ const event = {
   }
 };
 
-function gateway(files: readonly string[] = ["src/index.ts"]): GitHubGateway {
+function gateway(
+  files: readonly string[] = ["src/index.ts"],
+  body: string = event.pull_request.body
+): GitHubGateway {
   return {
+    getPullRequestSnapshot: () =>
+      Promise.resolve({
+        number: event.pull_request.number,
+        baseSha,
+        headSha,
+        updatedAt: "2026-08-11T00:00:00Z",
+        body,
+        labels: []
+      }),
     getFileAtRevision: () => Promise.resolve(policy),
     listPullRequestFiles: () => Promise.resolve(files),
     listCheckRuns: () =>
@@ -78,7 +90,7 @@ describe("runAction", () => {
   });
 
   it("fails the check with an actionable not-ready summary", async () => {
-    const action = runtime(gateway(["README.md", "src/index.ts"]));
+    const action = runtime(gateway(["README.md", "src/index.ts"], ""));
     action.event = {
       ...event,
       pull_request: { ...event.pull_request, body: "" }
@@ -89,6 +101,18 @@ describe("runAction", () => {
     expect(action.outputs.get("status")).toBe("not_ready");
     expect(action.summaries.join("\n")).toContain("### Missing");
     expect(action.failures).toEqual(["ReviewReady: required review evidence is missing."]);
+  });
+
+  it("does not publish readiness outputs when writing the summary fails", async () => {
+    const action = runtime(gateway());
+    action.writeSummary = () => Promise.reject(new Error("summary failed"));
+
+    await runAction(action);
+
+    expect(action.outputs).toEqual(new Map());
+    expect(action.failures).toEqual([
+      "[INTERNAL_ERROR] ReviewReady could not complete the action."
+    ]);
   });
 
   it("rejects other event types before creating an API client", async () => {
@@ -148,5 +172,19 @@ describe("runAction", () => {
     expect(action.failures).toEqual([
       "[INTERNAL_ERROR] ReviewReady could not complete the action."
     ]);
+  });
+
+  it("escapes terminal control characters in Action failure messages", async () => {
+    const action = runtime(gateway());
+    action.createGateway = () => ({
+      ...gateway(),
+      getFileAtRevision: () =>
+        Promise.resolve(policy.replace("src/**", "../secret\u001b]0;owned/**"))
+    });
+
+    await runAction(action);
+
+    expect(action.failures[0]).not.toContain("\u001b");
+    expect(action.failures[0]).toContain("\\u001b");
   });
 });

@@ -43,6 +43,10 @@ The package-audit tooling should inspect the files and contents extracted from t
 exact tarball. Until issue #16 supplies this exact-artifact path, do not describe a
 source-tree dry run as proof that the final published bytes were audited.
 
+npm run release:preflight also records the committed Action bundle state before
+the build and fails if the build changes it. This prevents a stale checked-in
+dist/action tree from being silently replaced during release verification.
+
 ## 3. Verify the local artifact
 
 Before publication:
@@ -72,6 +76,11 @@ must not mutate the audited artifact.
   package.
 - Record the package URL, tarball URL, integrity, provenance, and release commit in
   the release evidence.
+- Store the machine-readable release coordinates in the evidence JSON and run
+  npm run release:verify -- docs/release-evidence-vX.Y.Z.json. The verifier
+  requires package/lock/npm versions, local and registry SHA-512, the previous
+  release, the final main commit, immutable tag, stable v1 tag, and GitHub
+  release target to agree.
 
 ## 5. Publish GitHub resources
 

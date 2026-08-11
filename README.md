@@ -19,12 +19,14 @@ pull-request code.
 
 ## Current status
 
-The published CLI and Action are available for evaluation and advisory workflows.
-Do not treat v1.0.3 as the sole authoritative merge gate until the open P0
-correctness and workflow-root issues are resolved. In particular, a normal
-`pull_request` workflow is loaded from the pull-request merge ref and can be
-modified by the contribution it evaluates. Loading policy contents from the base
-SHA does not by itself protect the caller workflow, Action pin, or `policy-path`.
+The published CLI and Action are available as v1.0.4 for evaluation and
+advisory workflows. The integration branch prepares v1.0.5 with additional
+live-ingress contracts; it must be published only from the verified final main
+commit. The v1.0.4 trust-core correctness fixes are released, but a normal
+`pull_request` workflow is still not a trusted enforcement root: it is loaded
+from the pull-request merge ref and can be modified by the contribution it
+evaluates. Loading policy contents from the base SHA does not by itself protect
+the caller workflow, Action pin, or `policy-path`.
 
 Issue [#35](https://github.com/ahoooooooo/reviewready/issues/35) tracks the trusted
 enforcement topology. [SECURITY.md](SECURITY.md) lists the other current evidence
@@ -43,7 +45,7 @@ reviewready validate --policy .reviewready.yml
 The Action can also be used in an advisory workflow:
 
 ```yaml
-- uses: ahooooooo/reviewready@14147f5d2084999065145f657ca36ac743e6151f # v1.0.3
+- uses: ahooooooo/reviewready@695841517ce78050adb992165355024cd03918e5 # v1.0.4
 ```
 
 The mutable `v1` tag is convenient, but an immutable verified commit is safer.
@@ -51,10 +53,9 @@ The advisory workflow below must not be configured as the repository's only
 trusted merge authority unless its workflow and policy selection are protected by
 an independent repository or organization rule.
 
-Version 1 intends to keep the policy, result, and exit-code contracts stable.
-A v1.0.3 public JSON key-format regression is documented in issue
-[#25](https://github.com/ahoooooooo/reviewready/issues/25) and will be repaired
-without rewriting the existing release.
+Version 1 keeps the policy, result, and exit-code contracts stable. v1.0.4
+restores the original v1 public requirement-key encoding after the historical
+v1.0.3 regression; older release output is not rewritten.
 
 ## How it works
 
@@ -92,10 +93,12 @@ All matching rules apply. Equivalent requirements are checked once and attribute
 to every rule that requested them.
 
 On GitHub, the Action fetches policy bytes from the pull request's immutable base
-SHA, then reads changed paths, checks, closing issue references, and reviews
-through read-only APIs. The policy content proposed by the pull request is not
-used. The workflow that invokes the Action is a separate trust boundary and must
-also be protected for authoritative enforcement.
+SHA, then reads changed paths, completed checks, closing issue references, and
+reviews through read-only APIs. Check Runs collected for an immutable head SHA
+must echo that SHA; nullable queued or in-progress timestamps remain pending.
+The policy content proposed by the pull request is not used. The workflow that
+invokes the Action is a separate trust boundary and must also be protected for
+authoritative enforcement.
 
 ### Editor schema
 
@@ -110,7 +113,7 @@ Action-only repositories can copy the schema into the repository or reference an
 immutable release URL:
 
 ```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/ahoooooooo/reviewready/v1.0.3/reviewready.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ahoooooooo/reviewready/v1.0.4/reviewready.schema.json
 ```
 
 Keep the schema version aligned with the Action or CLI version being used. A local
@@ -156,7 +159,7 @@ jobs:
       statuses: read
       issues: read
     steps:
-      - uses: ahooooooo/reviewready@14147f5d2084999065145f657ca36ac743e6151f # v1.0.3
+      - uses: ahooooooo/reviewready@695841517ce78050adb992165355024cd03918e5 # v1.0.4
 ```
 
 Replace the example test commands with the target repository's own verification.
@@ -191,7 +194,16 @@ The Action writes a job summary and exports:
 - `status`: `ready` or `not_ready`;
 - `report-json`: the versioned deterministic result.
 
-It fails the job when evidence is missing or cannot be loaded safely.
+The report-json output and CLI check --json use the same v1 shape:
+outputVersion, status, policyVersion, triggeredRules, and requirements.
+Requirement key values retain the v1 public format; internal deduplication uses
+a separate structured identity so delimiter characters cannot merge unrelated
+requirements. When no rule matches, v1 keeps status ready and an empty
+requirement list, while text and Markdown reports explicitly say that no policy
+rules were evaluated.
+
+It fails the job when evidence is missing or cannot be loaded safely. Configure
+the job as a required status check if it should block merging.
 
 ## CLI
 
@@ -213,6 +225,44 @@ Stable exit codes:
 The local CLI consumes normalized JSON rather than contacting GitHub. This keeps
 the engine reproducible and makes policies easy to test with fixtures.
 
+### Repository audit
+
+The separate audit command checks a bounded normalized repository snapshot. It
+is read-only, deterministic, and fail-closed; it does not check out or execute
+workflow source and it does not change the readiness JSON contract:
+
+```console
+reviewready audit --input fixtures/audit/reviewready.json
+reviewready audit --input fixtures/audit/reviewready.json --json
+reviewready audit --input fixtures/audit/reviewready.json --sarif
+```
+
+Audit exit codes are 0 for `pass`, 1 for findings, and 2 for incomplete or
+invalid input. The audit report has its own contract, described by
+[reviewready.audit.schema.json](reviewready.audit.schema.json); it is not the
+readiness result. The readiness JSON contract is separately documented by
+[reviewready.result.schema.json](reviewready.result.schema.json).
+
+The CLI can also collect a live, read-only snapshot from GitHub:
+
+```console
+reviewready audit --github owner/repository --token-env GITHUB_TOKEN \
+  --protected-workflow .github/workflows/reviewready.yml \
+  --trusted-workflow .github/workflows/reviewready.yml --json
+```
+
+The token is read only from the named environment variable. Live collection
+loads policy and workflow bytes at one immutable base SHA, uses bounded REST
+pagination/retries/response size/deadline, and returns `incomplete` when
+settings or the base revision are not authoritative. Protected and trusted
+workflow roots are explicit out-of-band inputs; a check name or ordinary API
+success never establishes a trust root. The collector never checks out or
+executes repository code.
+
+The GitHub App JWT/token and webhook HMAC/replay modules are library contracts
+for an external service. ReviewReady does not include an HTTP server, secret
+manager, durable database, or in-memory replay fallback.
+
 ## Policy reference
 
 ### Conditions
@@ -224,18 +274,24 @@ Each rule has paths, labels, or both. Each match set supports:
 - `none`: no pattern or value may match.
 
 Paths use repository-relative POSIX globs. Labels match case-insensitively.
-Absolute paths, traversal, backslashes, empty path segments, and leading glob
-negation are rejected.
+Absolute paths, traversal, literal backslashes, empty path segments, and leading
+glob negation are rejected. For renamed files, both the new path and the
+previous path are evaluated; the Git separator is never rewritten.
 
 ### Requirements
 
 - `pr_body_section`: a Markdown heading exists and has non-empty content.
 - `linked_issue`: GitHub reports at least one closing issue reference.
-- `check`: a completed check or commit status has the exact name, allowed
-  conclusion, and optional GitHub App slug for Check Runs.
-- `maintainer_review`: the latest qualifying maintainer opinion satisfies the
-  configured minimum. Current review-state limitations are tracked in issue #32.
-- `human_attestation`: the PR body contains the exact checked task-list text.
+- `check`: the latest logical Check Run (name plus App slug), or latest legacy
+  commit status context, has the exact name and allowed conclusion. A newer
+  failure or pending result cannot fall back to an older success.
+- `maintainer_review`: the latest review state from enough unique users with write,
+  maintain, or admin permission is approved. GitHub APPROVED,
+  CHANGES_REQUESTED, and DISMISSED reviews require valid timestamps;
+  COMMENTED may omit one. Timestamp-free local fixtures use their array order.
+- `human_attestation`: the PR body contains the exact checked task-list text. This
+  verifies visible text only; it does not verify identity, understanding,
+  authorship, or legal responsibility.
 
 The full editor schema is [reviewready.schema.json](reviewready.schema.json). The
 executable behavior is specified in [docs/product-spec.md](docs/product-spec.md).
@@ -245,6 +301,11 @@ merge commit does not carry a complete per-PR body, review, and closing-issue
 context. Do not make the current check a merge-queue requirement without a
 separate trustworthy aggregation design.
 
+The ordinary pull_request caller workflow is an advisory integration unless the
+repository separately protects the workflow root and required result. See
+[the trusted workflow design](docs/adr/0001-trusted-workflow-root.md) for the
+security boundary and the settings that must be verified in GitHub.
+
 ## Security model
 
 - Policy bytes are fetched from the base SHA, never from the proposed head.
@@ -252,12 +313,22 @@ separate trustworthy aggregation design.
 - A caller workflow is authoritative only when its definition, Action pin, inputs,
   and policy path are protected independently from the pull request.
 - User-controlled text is escaped in Markdown summaries.
+- Public error control characters are escaped before CLI or Action output.
 - Public errors omit stack traces, tokens, API response bodies, and local paths.
 - Invalid or unavailable authoritative input fails closed.
-- `pull_request` is fork-safe for running untrusted CI with a read-only token, but
-  its workflow definition is not a trusted enforcement root.
-- `pull_request_target` uses a trusted base workflow, but becomes dangerous if it
-  checks out, downloads, imports, caches, or executes untrusted pull-request code.
+- Bounded GitHub pagination rejects malformed or non-contiguous next links
+  instead of treating a truncated response as complete.
+- Required GitHub evidence is read twice with a bounded fingerprint so a stable
+  PR metadata snapshot cannot silently pair with changing checks or reviews;
+  the snapshot is also verified after the second evidence read.
+- The sample workflow is a normal pull_request integration and must not be
+  treated as the sole authoritative merge gate until the trusted workflow root
+  design is implemented and repository rules are verified.
+- `pull_request` is fork-safe for running untrusted CI with a read-only token,
+  but its workflow definition is not a trusted enforcement root.
+- `pull_request_target` uses a trusted base workflow, but becomes dangerous if
+  it checks out, downloads, imports, caches, or executes untrusted pull-request
+  code.
 
 See [SECURITY.md](SECURITY.md) and [docs/architecture.md](docs/architecture.md) for
 the trust model and current known limitations.
