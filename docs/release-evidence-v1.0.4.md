@@ -1,8 +1,10 @@
 # ReviewReady v1.0.4 release evidence
 
-This record covers the published npm package from commit `662604d`, which is
-pushed to the `agent/release-readiness-v1` branch. npm publication and the
-GitHub v1.0.4 release/tag state are verified; `main` remains unchanged.
+This record covers the published npm package built from source commit
+`662604d`. It is synchronized in the final release-evidence commit on the
+`agent/release-readiness-v1` branch. npm publication and the GitHub v1.0.4
+release/tag state are verified against that final evidence commit; `main`
+remains unchanged.
 
 ## Scope
 
@@ -26,8 +28,10 @@ GitHub v1.0.4 release/tag state are verified; `main` remains unchanged.
       `4ece7af7c11007a1f6477da34764467ea4856f382f0cb7a83a181b52039910744a6527f88f62626a828967a290897a9901c02ba6117214b432ead1c988acf3b0`
       matches the clean-room artifact; registry shasum is
       `7737facc197c48f127eb6087af1ff7e2bfec7098`.
-- [x] Create the GitHub `v1.0.4` release and move the Action `v1` tag to
-      `662604d6123378d7b1aea242065f74afc9aea5b8`; `main` remains unchanged.
+- [x] Create the GitHub `v1.0.4` release and move the Action `v1` tag to the
+      final evidence-synchronized release commit; the published package
+      content remains the verified `662604d` source state and `main` remains
+      unchanged.
 
 ## Local verification
 
@@ -47,4 +51,6 @@ GitHub v1.0.4 release/tag state are verified; `main` remains unchanged.
 
 The GitHub release is available at
 `https://github.com/ahoooooooo/reviewready/releases/tag/v1.0.4`. Both
-`v1.0.4` and `v1` resolve to the verified exact commit above.
+`v1.0.4` and `v1` resolve to the final commit containing this synchronized
+evidence. The release commit is documentation-only relative to the verified
+`662604d` package source, so the npm artifact SHA-512 remains identical.
