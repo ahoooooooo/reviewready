@@ -46,7 +46,7 @@ reviewready validate --policy .reviewready.yml
 The Action can also be used in an advisory workflow:
 
 ```yaml
-- uses: ahooooooo/reviewready@1b6856635d122e48075f709a757d25deb865c4f0 # v1.0.5
+- uses: ahoooooooo/reviewready@1b6856635d122e48075f709a757d25deb865c4f0 # v1.0.5
 ```
 
 The mutable `v1` tag is convenient, but an immutable verified commit is safer.
@@ -161,7 +161,7 @@ jobs:
       statuses: read
       issues: read
     steps:
-      - uses: ahooooooo/reviewready@1b6856635d122e48075f709a757d25deb865c4f0 # v1.0.5
+      - uses: ahoooooooo/reviewready@1b6856635d122e48075f709a757d25deb865c4f0 # v1.0.5
 ```
 
 Replace the example test commands with the target repository's own verification.

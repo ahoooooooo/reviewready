@@ -93,6 +93,16 @@ describe("release readiness metadata", () => {
     );
   });
 
+  it("keeps the bound release commit available within the binding step", async () => {
+    const workflow = await readFile(".github/workflows/release-publish.yml", "utf8");
+    const start = workflow.indexOf("- name: Bind the immutable release candidate");
+    const end = workflow.indexOf("- name: Install locked dependencies without lifecycle scripts");
+    const validationStep = workflow.slice(start, end);
+
+    expect(validationStep).toContain('RELEASE_COMMIT="$GITHUB_SHA"');
+    expect(validationStep).toContain('echo "RELEASE_COMMIT=$RELEASE_COMMIT" >> "$GITHUB_ENV"');
+  });
+
   it("binds every resumable release stage to one immutable candidate commit", async () => {
     const workflow = await readFile(".github/workflows/release-publish.yml", "utf8");
     const tagStep = workflow.indexOf("- name: Bind the immutable release candidate");

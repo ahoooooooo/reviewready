@@ -84,7 +84,7 @@ function gateway(overrides: Partial<GitHubGateway> = {}): GitHubGateway {
         },
         { login: "reader", state: "COMMENTED" },
         { login: "ghost", state: "PENDING" },
-        { login: null, state: "APPROVED" },
+        { login: null, state: "APPROVED", submittedAt: "2026-08-11T00:00:00Z" },
         {
           login: "maintainer",
           state: "CHANGES_REQUESTED",
@@ -498,6 +498,16 @@ describe("loadGitHubPullRequest", () => {
           { login: "maintainer", state: "APPROVED" }
         ])
       )
+    });
+
+    await expect(loadGitHubPullRequest(event, ".reviewready.yml", api)).rejects.toMatchObject({
+      code: "GITHUB_EVIDENCE_INCOMPLETE"
+    });
+  });
+
+  it("fails closed when an anonymous actionable review lacks a timestamp", async () => {
+    const api = gateway({
+      listPullRequestReviews: vi.fn(() => Promise.resolve([{ login: null, state: "APPROVED" }]))
     });
 
     await expect(loadGitHubPullRequest(event, ".reviewready.yml", api)).rejects.toMatchObject({

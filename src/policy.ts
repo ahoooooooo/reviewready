@@ -88,7 +88,7 @@ const policySchema = z
         z
           .object({
             id: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/),
-            description: z.string().trim().min(1).max(500).optional(),
+            description: text.optional(),
             when: conditionSchema,
             require: z.array(requirementSchema).min(1).max(policyLimits.maxRequirementsPerRule)
           })

@@ -258,6 +258,8 @@ interface MarkdownHeading {
 const headingPattern = /^\s{0,3}(#{1,6})[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$/u;
 const visibleMarkdownTextPattern = /[^\p{White_Space}\p{Control}\p{Format}\p{Mark}]/u;
 const indentedCodePattern = /^(?: {4}|\t)/u;
+const emptyInlineMarkdownLinkPattern = /!?\[\s*\]\((?:\\.|[^()\\r\\n]|\([^()\\r\\n]*\))*\)/gu;
+const emptyReferenceMarkdownLinkPattern = /!?\[\s*\]\[[^\]\r\n]*\]/gu;
 
 function markdownHeading(line: string): MarkdownHeading | undefined {
   const match = headingPattern.exec(line);
@@ -276,7 +278,10 @@ function hasVisibleMarkdownText(line: string): boolean {
   if (indentedCodePattern.test(line)) {
     return false;
   }
-  return visibleMarkdownTextPattern.test(stripInvisibleHtmlEntities(line));
+  const withoutEmptyMarkdownMarkers = stripInvisibleHtmlEntities(line)
+    .replace(emptyInlineMarkdownLinkPattern, "")
+    .replace(emptyReferenceMarkdownLinkPattern, "");
+  return visibleMarkdownTextPattern.test(withoutEmptyMarkdownMarkers);
 }
 
 function hasNonEmptySection(body: string, wantedHeading: string): boolean {

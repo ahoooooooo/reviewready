@@ -465,14 +465,14 @@ export async function loadGitHubPullRequest(
             "GitHub returned an unsupported pull request review state."
           );
         }
-        if (review.login === null) {
-          return [];
-        }
         if (state !== "commented" && review.submittedAt === undefined) {
           throw new PlatformError(
             "GITHUB_EVIDENCE_INCOMPLETE",
             "GitHub returned a review state without a submission timestamp."
           );
+        }
+        if (review.login === null) {
+          return [];
         }
         return [
           {

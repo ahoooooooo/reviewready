@@ -39,6 +39,9 @@ function fakeRequest() {
       );
     }
     if (route === "GET /repos/{owner}/{repo}/rulesets") {
+      if (params.page === 2) {
+        return Promise.resolve(response([]));
+      }
       expect(params).toMatchObject({
         includes_parents: true,
         targets: "branch,tag,push",
@@ -152,8 +155,11 @@ describe("GitHub repository audit API adapter", () => {
   });
 
   it("maps push rulesets that have no ref-name condition", async () => {
-    const request = vi.fn((route: string) => {
+    const request = vi.fn((route: string, params: Record<string, unknown>) => {
       if (route === "GET /repos/{owner}/{repo}/rulesets") {
+        if (params.page === 2) {
+          return Promise.resolve(response([]));
+        }
         return Promise.resolve(response([{ id: 8 }]));
       }
       if (route === "GET /repos/{owner}/{repo}/rulesets/{ruleset_id}") {
@@ -299,8 +305,11 @@ describe("GitHub repository audit API adapter", () => {
   });
 
   it("preserves an organization ruleset repository scope", async () => {
-    const request = vi.fn((route: string) => {
+    const request = vi.fn((route: string, params: Record<string, unknown>) => {
       if (route === "GET /repos/{owner}/{repo}/rulesets") {
+        if (params.page === 2) {
+          return Promise.resolve(response([]));
+        }
         return Promise.resolve(response([{ id: 9 }]));
       }
       if (route === "GET /repos/{owner}/{repo}/rulesets/{ruleset_id}") {
@@ -602,8 +611,11 @@ describe("GitHub repository audit API adapter", () => {
       ).rejects.toThrow();
     }
 
-    const invalidRuleset = vi.fn((route: string) => {
+    const invalidRuleset = vi.fn((route: string, params: Record<string, unknown>) => {
       if (route === "GET /repos/{owner}/{repo}/rulesets") {
+        if (params.page === 2) {
+          return Promise.resolve(response([]));
+        }
         return Promise.resolve(response([{ id: 1 }]));
       }
       return Promise.resolve(
@@ -695,6 +707,23 @@ describe("GitHub repository audit API adapter", () => {
         repo: "demo"
       })
     ).rejects.toThrow("rulesets-pagination-invalid");
+  });
+
+  it("rejects an unlinked hidden page after a partial audit response", async () => {
+    const request = vi.fn((route: string, params: Record<string, unknown>) => {
+      if (route === "GET /repos/{owner}/{repo}/rulesets") {
+        return Promise.resolve(response(params.page === 1 ? [{ id: 1 }] : [{ id: 2 }], {}));
+      }
+      return Promise.reject(new Error("unexpected"));
+    });
+    vi.mocked(getOctokit).mockReturnValue({ request } as never);
+
+    await expect(
+      createGitHubAuditClient("secret", { sleep: () => Promise.resolve() }).listRulesets({
+        owner: "octocat",
+        repo: "demo"
+      })
+    ).rejects.toThrow("rulesets-pagination-ambiguous");
   });
 
   it("normalizes workflow extensions and tag protection patterns", async () => {

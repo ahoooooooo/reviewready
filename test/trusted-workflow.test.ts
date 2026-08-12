@@ -3,11 +3,17 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 const workflow = await readFile(".github/workflows/reviewready-trusted.yml", "utf8");
+const readme = await readFile("README.md", "utf8");
 const canonicalRepository = `ah${"o".repeat(8)}/reviewready`;
 
 describe("trusted ReviewReady workflow", () => {
   it("uses the canonical GitHub repository as its immutable trust root", () => {
     expect(workflow).toContain(`uses: ${canonicalRepository}@`);
+  });
+
+  it("keeps the documented Action examples on the canonical trust root", () => {
+    expect(readme).toContain(`uses: ${canonicalRepository}@`);
+    expect(readme).not.toContain("uses: ahooooooo/reviewready@");
   });
 
   it("runs from pull_request_target with a fully immutable Action pin", () => {

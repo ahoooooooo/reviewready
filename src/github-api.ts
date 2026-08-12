@@ -512,16 +512,24 @@ function nextPageLink(headers: unknown): NextPageLink {
   if (typeof link !== "string") {
     return { hasNext: false };
   }
-  const match = /(?:^\s*|,\s*)<([^<>]+)>\s*;\s*rel=(["'])next\2(?=\s*(?:,|$))/iu.exec(link);
+  const matches = [
+    ...link.matchAll(/(?:^\s*|,\s*)<([^<>]+)>\s*;\s*rel=(["'])next\2(?=\s*(?:,|$))/giu)
+  ];
   const hasNextRelation = /(?:^|[;,]\s*)rel\s*=\s*(?:["']next["']|next(?:\b|$))/iu.test(link);
-  if (match?.[1] === undefined) {
+  const nextUrl = matches[0]?.[1];
+  if (nextUrl === undefined) {
+    return hasNextRelation ? { hasNext: true } : { hasNext: false };
+  }
+  if (matches.length !== 1) {
     return hasNextRelation ? { hasNext: true } : { hasNext: false };
   }
 
   let nextPage: number | undefined;
   try {
-    const rawPage = new URL(match[1]).searchParams.get("page");
-    if (rawPage !== null && /^[1-9]\d*$/u.test(rawPage)) {
+    const searchParams = new URL(nextUrl).searchParams;
+    const pageValues = searchParams.getAll("page");
+    const rawPage = pageValues.length === 1 ? pageValues[0] : null;
+    if (rawPage !== null && rawPage !== undefined && /^[1-9]\d*$/u.test(rawPage)) {
       const parsed = Number(rawPage);
       if (Number.isSafeInteger(parsed)) {
         nextPage = parsed;

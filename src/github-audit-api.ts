@@ -478,9 +478,6 @@ async function collectPages(
       }
       continue;
     }
-    if (pageResult.items.length < PAGE_SIZE) {
-      return result;
-    }
     const extra = await requestPage(page + 1);
     if (extra.items.length > 0 || nextPage(extra.headers) !== undefined) {
       throw new AuditApiFailure(`${kind}-pagination-ambiguous`);

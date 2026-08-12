@@ -87,6 +87,21 @@ rules:
     );
   });
 
+  it.each([
+    ["description control character", "Description\u0007"],
+    ["description zero-width character", "Description\u200B"],
+    ["description multiline text", "Description\ncontinued"]
+  ])("rejects unsafe rule descriptions (%s)", (_name, value) => {
+    const source = validPolicy.replace(
+      "description: Source changes need test evidence.",
+      `description: ${JSON.stringify(value)}`
+    );
+
+    expect(() => parsePolicy(source)).toThrow(
+      expect.objectContaining<Partial<PolicyError>>({ code: "POLICY_TEXT_INVALID" })
+    );
+  });
+
   it("rejects duplicate rule identifiers", () => {
     const duplicate = validPolicy.replace("id: workflow-change", "id: source-change");
 
