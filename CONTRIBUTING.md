@@ -63,8 +63,11 @@ Report vulnerabilities through the process in `SECURITY.md`.
 
 AI use is welcome when the submitting human understands and takes responsibility
 for the result. Include the tests you ran and inspect generated code and bundled
-artifacts. Do not use agents to manufacture issues, reviews, or contributor
-activity.
+artifacts. Do not use agents or bots to manufacture a human_attestation claim:
+the requirement checks visible text only and does not authenticate its editor or
+prove comprehension. Automated contributions should use an explicit policy
+without that requirement or obtain an independent authenticated review.
+Do not use agents to manufacture issues, reviews, or contributor activity.
 
 ## Design changes
 

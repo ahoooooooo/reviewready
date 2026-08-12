@@ -1,6 +1,6 @@
 {
   "name": "@ahoooooo/reviewready",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Deterministic evidence checks before a pull request consumes human review time.",
   "homepage": "https://github.com/ahoooooooo/reviewready#readme",
   "bugs": {
@@ -54,9 +54,10 @@
     "format": "prettier --write .",
     "audit:dependencies": "npm audit --audit-level=high",
     "verify:package": "node scripts/verify-package.mjs",
+    "package:smoke": "node scripts/package-smoke.mjs",
     "release:preflight": "node scripts/release-preflight.mjs",
     "release:verify": "node scripts/release-preflight.mjs --provenance",
-    "check": "npm run format:check && npm run lint && npm run typecheck && npm run bundle && npm run test:coverage && npm run verify:package",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm run bundle && npm run test:coverage && npm run verify:package && npm run package:smoke",
     "prepublishOnly": "npm run check",
     "prepack": "npm run build"
   },

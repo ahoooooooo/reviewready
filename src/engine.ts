@@ -6,7 +6,7 @@ import type {
   RequirementResult
 } from "./domain.js";
 import { normalizeInput } from "./input.js";
-import { matchesRule } from "./matcher.js";
+import { MatchOperationBudget, matchesRule } from "./matcher.js";
 
 interface MutableRequirementResult {
   key: string;
@@ -443,7 +443,8 @@ function evaluateRequirement(
 
 export function evaluate(policy: Policy, value: unknown): EvaluationResult {
   const input = normalizeInput(value);
-  const rules = policy.rules.filter((rule) => matchesRule(rule, input));
+  const matchingBudget = new MatchOperationBudget();
+  const rules = policy.rules.filter((rule) => matchesRule(rule, input, matchingBudget));
   const results = new Map<string, MutableRequirementResult>();
 
   for (const rule of rules) {

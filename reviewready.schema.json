@@ -112,7 +112,10 @@
           "additionalProperties": false,
           "required": ["type", "text"],
           "properties": {
-            "type": { "const": "human_attestation" },
+            "type": {
+              "const": "human_attestation",
+              "description": "In v1, verifies only exact checked task-list text in the selected PR-body snapshot; it does not authenticate identity, comprehension, authorship, or legal responsibility."
+            },
             "text": { "$ref": "#/$defs/text" }
           }
         }

@@ -2,9 +2,13 @@
 
 ## Status
 
-Accepted as a design constraint for the next integration milestone. This
-document does not claim that the repository's GitHub settings have been
-configured or verified.
+Accepted. The repository carries a staged metadata-only reference workflow at
+.github/workflows/reviewready-trusted.yml. Until v1.0.6 is published, the file
+uses the v1.0.5 bootstrap pin; the v1.0.6 candidate adds the required
+pull_request_target support. The workflow is not authoritative until the pin
+is updated to the exact verified v1.0.6 commit and GitHub branch protection,
+rulesets, and workflow-file protection are independently configured and
+verified.
 
 ## Context
 

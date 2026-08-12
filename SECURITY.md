@@ -63,7 +63,7 @@ change can therefore attempt to replace the Action, change `policy-path`, or emi
 same-name successful job unless an independent rule protects the enforcement
 workflow.
 
-Do not use the v1.0.4 advisory `pull_request` example as the sole authoritative
+Do not use the v1.0.5 advisory `pull_request` example as the sole authoritative
 merge gate. Issue #35 tracks supported trusted topologies, including organization
 ruleset workflows, independently protected enforcement files, and carefully
 limited metadata-only `pull_request_target` evaluation. A
@@ -74,9 +74,10 @@ or execute pull-request code.
 
 - A mutable major Action tag is convenient but weaker than a full commit SHA.
   High-assurance adopters should pin the release commit and use update automation.
-- The current published guidance does not yet provide a complete trusted caller
-  workflow for all personal and organization repository configurations. This
-  deployment limitation is tracked in issue #35.
+- The checked-in trusted workflow is a staged v1.0.6 reference and is not an
+  authority until its Action pin is updated to the verified v1.0.6 commit and the
+  repository settings protect both the workflow root and its required check. The
+  remaining deployment limitation is tracked in issue #35.
 - A successful named check proves only that GitHub recorded that conclusion; it
   does not prove the check itself is trustworthy. Restrict app identity where it
   matters and protect workflow changes separately. The ordinary `pull_request`
@@ -106,6 +107,10 @@ or execute pull-request code.
   carry a complete per-PR body, review, and issue context, so enabling it without
   an explicit aggregator would weaken the readiness guarantee.
 - Readiness is evidence presence, never correctness, safety, or approval.
+- The v1 human_attestation requirement verifies only visible checked text in the
+  selected body snapshot. It does not verify who edited or checked the body,
+  human comprehension, authorship, legal responsibility, or freshness after a
+  later edit; use a separately authenticated future mechanism for those claims.
 
 The repository audit is read-only and separate from readiness. Its normalized
 snapshot, finding count, workflow source, paths, and provider identities are

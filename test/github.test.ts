@@ -7,6 +7,7 @@ import {
   type GitHubGateway,
   type GitHubPermission
 } from "../src/github.js";
+import { MATCHING_OPERATION_BUDGET } from "../src/matcher.js";
 
 const baseSha = "a".repeat(40);
 const headSha = "b".repeat(40);
@@ -142,13 +143,56 @@ describe("loadGitHubPullRequest", () => {
     });
   });
 
-  it("checks each reviewer's permission only once", async () => {
+  it("checks actionable reviewers once per coherent evidence read", async () => {
     const permission = vi.fn(() => Promise.resolve<GitHubPermission>("write"));
     const api = gateway({ getRepositoryPermission: permission });
 
     await loadGitHubPullRequest(event, ".reviewready.yml", api);
 
     expect(permission).toHaveBeenCalledTimes(2);
+  });
+
+  it("fails closed when reviewer permission changes between evidence reads", async () => {
+    let lookup = 0;
+    const permission = vi.fn(() => {
+      const value: GitHubPermission = lookup++ % 2 === 0 ? "write" : "read";
+      return Promise.resolve(value);
+    });
+    const api = gateway({
+      listPullRequestReviews: vi.fn(() =>
+        Promise.resolve([
+          {
+            login: "maintainer",
+            state: "APPROVED",
+            submittedAt: "2026-08-11T00:00:00Z"
+          }
+        ])
+      ),
+      getRepositoryPermission: permission
+    });
+
+    await expect(loadGitHubPullRequest(event, ".reviewready.yml", api)).rejects.toMatchObject({
+      code: "GITHUB_SNAPSHOT_CHANGED"
+    });
+    expect(permission).toHaveBeenCalledTimes(4);
+  });
+
+  it("fails closed before permission lookups exceed the bounded reviewer limit", async () => {
+    const reviews = Array.from({ length: 101 }, (_, index) => ({
+      login: `reviewer-${String(index)}`,
+      state: "APPROVED",
+      submittedAt: "2026-08-11T00:00:00Z"
+    }));
+    const permission = vi.fn(() => Promise.resolve<GitHubPermission>("write"));
+    const api = gateway({
+      listPullRequestReviews: vi.fn(() => Promise.resolve(reviews)),
+      getRepositoryPermission: permission
+    });
+
+    await expect(loadGitHubPullRequest(event, ".reviewready.yml", api)).rejects.toMatchObject({
+      code: "GITHUB_EVIDENCE_INCOMPLETE"
+    });
+    expect(permission).not.toHaveBeenCalled();
   });
 
   it("only collects evidence types required by the triggered policy", async () => {
@@ -426,6 +470,44 @@ describe("loadGitHubPullRequest", () => {
     await expect(loadGitHubPullRequest(event, "../policy.yml", gateway())).rejects.toMatchObject({
       code: "INPUT_UNSAFE_PATH"
     });
+  });
+
+  it("shares the matching budget while planning required GitHub evidence", async () => {
+    const ruleCount = 2;
+    const patternCount = 100;
+    const pathCount = Math.ceil(MATCHING_OPERATION_BUDGET / (ruleCount * patternCount)) + 10;
+    const policy = [
+      "version: 1",
+      "rules:",
+      ...Array.from({ length: ruleCount }, (_, ruleIndex) => [
+        "  - id: budget-" + String(ruleIndex),
+        "    when:",
+        "      paths:",
+        "        none:",
+        ...Array.from(
+          { length: patternCount },
+          (_, patternIndex) =>
+            '          - "missing-' + String(ruleIndex) + "-" + String(patternIndex) + '/**"'
+        ),
+        "    require:",
+        "      - type: linked_issue"
+      ]).flat()
+    ].join("\n");
+    const listPullRequestFiles = vi.fn(() =>
+      Promise.resolve(
+        Array.from({ length: pathCount }, (_, pathIndex) => "changed/" + String(pathIndex) + ".ts")
+      )
+    );
+    const api = gateway({
+      getFileAtRevision: vi.fn(() => Promise.resolve(policy)),
+      listPullRequestFiles
+    });
+
+    await expect(loadGitHubPullRequest(event, ".reviewready.yml", api)).rejects.toMatchObject({
+      code: "POLICY_MATCHING_BUDGET_EXCEEDED",
+      kind: "policy"
+    });
+    expect(listPullRequestFiles).toHaveBeenCalledTimes(1);
   });
 
   it("wraps unexpected API failures without exposing their details", async () => {

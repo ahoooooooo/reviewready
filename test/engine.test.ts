@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import { evaluate } from "../src/engine.js";
 import type { InputError } from "../src/errors.js";
 import { parsePolicy } from "../src/policy.js";
-import type { PullRequestInput } from "../src/domain.js";
+import type { Policy, PullRequestInput } from "../src/domain.js";
+import { MATCHING_OPERATION_BUDGET } from "../src/matcher.js";
 
 const policy = parsePolicy(`
 version: 1
@@ -618,4 +619,34 @@ rules:
       expect(review?.evidence).toBe(expectedEvidence);
     }
   );
+});
+
+describe("policy matching budget", () => {
+  it("bounds matching work across the complete policy, not only one rule", () => {
+    const expensivePolicy: Policy = {
+      version: 1,
+      rules: Array.from({ length: 4 }, (_, ruleIndex) => ({
+        id: "expensive-" + String(ruleIndex),
+        when: {
+          paths: {
+            none: Array.from(
+              { length: 100 },
+              (_, patternIndex) => "missing/" + String(patternIndex) + "/**"
+            )
+          }
+        },
+        require: [{ type: "linked_issue" }]
+      }))
+    };
+    const expensiveInput = input({
+      changedFiles: Array.from({ length: 3000 }, (_, index) => "changed/" + String(index) + ".ts")
+    });
+
+    expect(() => evaluate(expensivePolicy, expensiveInput)).toThrow(
+      expect.objectContaining({
+        code: "POLICY_MATCHING_BUDGET_EXCEEDED"
+      })
+    );
+    expect(MATCHING_OPERATION_BUDGET).toBeGreaterThan(0);
+  });
 });

@@ -81,6 +81,16 @@ function reportSummary(item: RequirementResult): string {
   );
 }
 
+function hasCatchAllPathRule(policy: Policy): boolean {
+  return policy.rules.some(
+    (rule) =>
+      rule.when.labels === undefined &&
+      rule.when.paths?.any?.includes("**") === true &&
+      rule.when.paths.all === undefined &&
+      rule.when.paths.none === undefined
+  );
+}
+
 export function renderText(result: EvaluationResult): string {
   const { satisfied, missing } = splitResults(result);
   const lines = [
@@ -151,7 +161,14 @@ export function renderMarkdown(result: EvaluationResult): string {
 }
 
 export function explainPolicy(policy: Policy): string {
-  const lines = [`ReviewReady policy version ${String(policy.version)}`];
+  const lines = [
+    `ReviewReady policy version ${String(policy.version)}`,
+    "",
+    "Unmatched changes: v1 returns ready when no policy rule matches; no evidence requirements are evaluated.",
+    hasCatchAllPathRule(policy)
+      ? 'This policy has a broad path catch-all rule ("**").'
+      : "This policy has no unconditional catch-all rule."
+  ];
 
   for (const rule of policy.rules) {
     lines.push("", `Rule: ${escapeControlCharacters(rule.id)}`);

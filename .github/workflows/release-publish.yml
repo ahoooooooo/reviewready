@@ -1,0 +1,364 @@
+name: Publish verified release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact package version already present on main, for example 1.0.6
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: reviewready-release
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      # upload-artifact uses the runner artifact service for same-run uploads.
+      # Keep Actions mutation capability unavailable while audit code executes.
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
+    steps:
+      - name: Check out the selected main revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Bind the immutable release candidate
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ ! "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release version must be plain semantic version text." >&2
+            exit 1
+          fi
+          if [[ ! "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "The selected main revision is not a full commit SHA." >&2
+            exit 1
+          fi
+          status_code_from_response() {
+            local response="$1"
+            printf '%s\n' "$response" | awk '$1 ~ /^HTTP\// && $2 ~ /^[0-9][0-9][0-9]$/ { status=$2 } END { print status }'
+          }
+          tag_response=""
+          if tag_response="$(gh api --include "repos/$GITHUB_REPOSITORY/git/ref/tags/v$RELEASE_VERSION" 2>&1)"; then
+            tag_type="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v$RELEASE_VERSION" --jq '.object.type')"
+            tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v$RELEASE_VERSION" --jq '.object.sha')"
+            if [[ "$tag_type" == "tag" ]]; then
+              if [[ ! "$tag_sha" =~ ^[0-9a-f]{40}$ ]]; then
+                echo "Existing annotated tag object has an invalid SHA." >&2
+                exit 1
+              fi
+              tag_type="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$tag_sha" --jq '.object.type')"
+              tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$tag_sha" --jq '.object.sha')"
+            fi
+            if [[ "$tag_type" != "commit" || ! "$tag_sha" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "Existing immutable release tag does not resolve to a commit." >&2
+              exit 1
+            fi
+            if [[ "$tag_sha" != "$GITHUB_SHA" ]]; then
+              echo "Existing immutable release tag does not match the selected main revision." >&2
+              exit 1
+            fi
+          else
+            if [[ "$(status_code_from_response "$tag_response")" != "404" ]]; then
+              echo "Could not determine whether the immutable release tag is absent." >&2
+              exit 1
+            fi
+          fi
+          echo "RELEASE_COMMIT=$GITHUB_SHA" >> "$GITHUB_ENV"
+          git checkout --detach "$RELEASE_COMMIT"
+          node --input-type=module -e 'import fs from "node:fs"; const p=JSON.parse(fs.readFileSync("package.json","utf8")); if (p.version !== process.env.RELEASE_VERSION) { throw new Error("candidate package version does not match dispatch input"); }'
+
+      - name: Install locked dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts --no-audit
+
+      - name: Run complete release gates without publish privileges
+        run: |
+          npm run check
+          npm run audit:dependencies
+          if [[ -n "$(git status --porcelain=v1 --untracked-files=all -- dist/action)" ]]; then
+            echo "Action bundle changed during the release quality gate." >&2
+            exit 1
+          fi
+
+      - name: Build and audit one exact tarball
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/reviewready-release"
+          npm run release:preflight -- --artifact-dir "$RUNNER_TEMP/reviewready-release"
+          test -f "$RUNNER_TEMP/reviewready-release/ahoooooo-reviewready-$RELEASE_VERSION.tgz"
+          node --input-type=module -e 'import fs from "node:fs"; import crypto from "node:crypto"; const p=process.env.RUNNER_TEMP+"/reviewready-release/ahoooooo-reviewready-"+process.env.RELEASE_VERSION+".tgz"; const b=fs.readFileSync(p); fs.writeFileSync(process.env.RUNNER_TEMP+"/reviewready-release/release-metadata.json", JSON.stringify({version:process.env.RELEASE_VERSION, releaseCommit:process.env.RELEASE_COMMIT, tarball: "ahoooooo-reviewready-"+process.env.RELEASE_VERSION+".tgz", sha512:crypto.createHash("sha512").update(b).digest("hex"), shasum:crypto.createHash("sha1").update(b).digest("hex")})+"\n"); const text=fs.readFileSync("CHANGELOG.md","utf8"); const marker="## ["+process.env.RELEASE_VERSION+"]"; const start=text.indexOf(marker); if (start < 0) throw new Error("missing changelog entry"); const next=text.indexOf("\n## [", start + marker.length); fs.writeFileSync(process.env.RUNNER_TEMP+"/reviewready-release/release-notes.md", text.slice(start, next < 0 ? text.length : next).trim()+"\n");'
+
+      - name: Run packaged smoke on the exact audited artifact
+        run: node scripts/package-smoke.mjs --artifact-dir "$RUNNER_TEMP/reviewready-release"
+
+      - name: Upload the exact release candidate
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: reviewready-release-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/reviewready-release/*.tgz
+            ${{ runner.temp }}/reviewready-release/release-metadata.json
+            ${{ runner.temp }}/reviewready-release/release-notes.md
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    if: github.ref == 'refs/heads/main'
+    needs: audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: release
+    permissions:
+      contents: write
+      actions: read
+      id-token: write
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
+      RELEASE_COMMIT: ${{ github.sha }}
+    steps:
+      - name: Use Node.js 24
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Download the audited release candidate
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: reviewready-release-${{ github.sha }}
+          path: ${{ runner.temp }}/reviewready-release
+
+      - name: Verify candidate metadata before publication
+        shell: bash
+        run: |
+          RELEASE_DIR="$RUNNER_TEMP/reviewready-release" node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          import crypto from "node:crypto";
+          const root = process.env.RELEASE_DIR;
+          const metadata = JSON.parse(fs.readFileSync(root + "/release-metadata.json", "utf8"));
+          if (metadata.version !== process.env.RELEASE_VERSION || metadata.releaseCommit !== process.env.RELEASE_COMMIT) throw new Error("release candidate metadata does not match this workflow run");
+          const path = root + "/" + metadata.tarball;
+          const bytes = fs.readFileSync(path);
+          if (bytes.byteLength > 20 * 1024 * 1024) throw new Error("release artifact exceeds the bounded size");
+          if (crypto.createHash("sha512").update(bytes).digest("hex") !== metadata.sha512 || crypto.createHash("sha1").update(bytes).digest("hex") !== metadata.shasum) throw new Error("release candidate artifact hash changed");
+          NODE
+
+      - name: Publish the audited tarball through npm Trusted Publishing
+        shell: bash
+        run: |
+          existing_version=""
+          if existing_version="$(npm view "@ahoooooo/reviewready@$RELEASE_VERSION" version --loglevel=error 2>&1)"; then
+            if [[ "$existing_version" != "$RELEASE_VERSION" ]]; then
+              echo "The existing npm version does not match the requested release." >&2
+              exit 1
+            fi
+            echo "The exact npm version is already published; continuing with ref verification."
+          else
+            if ! grep -Eq '(^|[[:space:]])npm (ERR!|error) code E404([[:space:]]|$)' <<< "$existing_version"; then
+              echo "Could not determine whether the npm version is already published." >&2
+              exit 1
+            fi
+            npm publish "$RUNNER_TEMP/reviewready-release/ahoooooo-reviewready-$RELEASE_VERSION.tgz" --access public --provenance
+          fi
+
+      - name: Verify npm latest dist-tag before creating GitHub refs
+        run: |
+          npm_latest="$(npm view "@ahoooooo/reviewready@$RELEASE_VERSION" dist-tags.latest --loglevel=error)"
+          if [[ "$npm_latest" != "$RELEASE_VERSION" ]]; then
+            echo "npm latest dist-tag does not point to the requested release." >&2
+            exit 1
+          fi
+
+      - name: Verify registry integrity before creating GitHub refs
+        shell: bash
+        run: |
+          local_integrity="sha512-$(openssl dgst -sha512 -binary "$RUNNER_TEMP/reviewready-release/ahoooooo-reviewready-$RELEASE_VERSION.tgz" | openssl base64 -A)"
+          local_shasum="$(openssl dgst -sha1 -hex "$RUNNER_TEMP/reviewready-release/ahoooooo-reviewready-$RELEASE_VERSION.tgz" | awk '{print $2}')"
+          registry_integrity="$(npm view "@ahoooooo/reviewready@$RELEASE_VERSION" dist.integrity)"
+          registry_shasum="$(npm view "@ahoooooo/reviewready@$RELEASE_VERSION" dist.shasum)"
+          if [[ "$registry_integrity" != "$local_integrity" ]]; then
+            echo "Published npm integrity does not match the audited artifact." >&2
+            exit 1
+          fi
+          if [[ "$registry_shasum" != "$local_shasum" ]]; then
+            echo "Published registry shasum does not match the audited artifact." >&2
+            exit 1
+          fi
+
+      - name: Verify exact registry artifact, provenance, and clean-room behavior
+        shell: bash
+        run: |
+          registry_dir="$RUNNER_TEMP/reviewready-registry"
+          consumer_dir="$RUNNER_TEMP/reviewready-registry-consumer"
+          mkdir -p "$registry_dir" "$consumer_dir"
+          npm pack "@ahoooooo/reviewready@$RELEASE_VERSION" --json --ignore-scripts --pack-destination "$registry_dir" > "$registry_dir/pack.json"
+          registry_count="$(find "$registry_dir" -maxdepth 1 -type f -name '*.tgz' | wc -l)"
+          if [[ "$registry_count" -ne 1 ]]; then
+            echo "Registry pack did not produce exactly one tarball." >&2
+            exit 1
+          fi
+          registry_tarball="$(find "$registry_dir" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
+          local_integrity="sha512-$(openssl dgst -sha512 -binary "$RUNNER_TEMP/reviewready-release/ahoooooo-reviewready-$RELEASE_VERSION.tgz" | openssl base64 -A)"
+          registry_integrity="sha512-$(openssl dgst -sha512 -binary "$registry_tarball" | openssl base64 -A)"
+          local_shasum="$(openssl dgst -sha1 -hex "$RUNNER_TEMP/reviewready-release/ahoooooo-reviewready-$RELEASE_VERSION.tgz" | awk '{print $2}')"
+          registry_shasum="$(openssl dgst -sha1 -hex "$registry_tarball" | awk '{print $2}')"
+          if [[ "$registry_integrity" != "$local_integrity" || "$registry_shasum" != "$local_shasum" ]]; then
+            echo "Registry tarball bytes do not match the audited artifact." >&2
+            exit 1
+          fi
+          CONSUMER_DIR="$consumer_dir" node --input-type=module -e 'import fs from "node:fs"; fs.writeFileSync(process.env.CONSUMER_DIR+"/package.json", JSON.stringify({name:"reviewready-release-consumer", private:true, dependencies:{"@ahoooooo/reviewready":process.env.RELEASE_VERSION}}));'
+          npm install --ignore-scripts --no-audit --no-fund --prefix "$consumer_dir" "@ahoooooo/reviewready@$RELEASE_VERSION"
+          SIGNATURE_FILE="$registry_dir/signatures.json" CONSUMER_DIR="$consumer_dir" node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          import { execFileSync } from "node:child_process";
+          const output = execFileSync("npm", ["audit", "signatures", "--prefix", process.env.CONSUMER_DIR, "--json", "--include-attestations"], { encoding: "utf8", maxBuffer: 8 * 1024 * 1024 });
+          if (Buffer.byteLength(output, "utf8") > 8 * 1024 * 1024) throw new Error("npm signature output exceeds the bounded size");
+          fs.writeFileSync(process.env.SIGNATURE_FILE, output, "utf8");
+          NODE
+          LOCAL_SHA512="$(openssl dgst -sha512 -hex "$RUNNER_TEMP/reviewready-release/ahoooooo-reviewready-$RELEASE_VERSION.tgz" | awk '{print $2}')" node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          const data = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + "/reviewready-registry/signatures.json", "utf8"));
+          const verified = Array.isArray(data.verified) ? data.verified : [];
+          const item = verified.find((candidate) => candidate?.name === "@ahoooooo/reviewready" && candidate?.version === process.env.RELEASE_VERSION);
+          const provenance = item?.attestations?.provenance;
+          if (provenance?.predicateType !== "https://slsa.dev/provenance/v1") throw new Error("npm provenance attestation was not verified for the release package");
+          const bundle = item?.attestationBundles?.find((candidate) => candidate?.predicateType === "https://slsa.dev/provenance/v1");
+          const encodedPayload = bundle?.bundle?.dsseEnvelope?.payload;
+          if (typeof encodedPayload !== "string" || encodedPayload.length === 0) throw new Error("npm provenance DSSE payload is missing");
+          const payload = JSON.parse(Buffer.from(encodedPayload, "base64").toString("utf8"));
+          if (payload?.predicateType !== "https://slsa.dev/provenance/v1") throw new Error("npm provenance payload predicate is invalid");
+          if (!Array.isArray(payload.subject) || !payload.subject.some((subject) => subject?.digest?.sha512 === process.env.LOCAL_SHA512)) throw new Error("npm provenance subject does not match the audited artifact");
+          const workflow = payload?.predicate?.buildDefinition?.externalParameters?.workflow;
+          const resolved = payload?.predicate?.buildDefinition?.resolvedDependencies;
+          if (workflow?.repository !== "https://github.com/ahoooooooo/reviewready" || workflow?.path !== ".github/workflows/release-publish.yml" || workflow?.ref !== "refs/heads/main" || !Array.isArray(resolved) || !resolved.some((dependency) => dependency?.digest?.gitCommit === process.env.RELEASE_COMMIT)) throw new Error("npm provenance workflow or source commit does not match the release candidate");
+          NODE
+      - name: Create and verify the immutable GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          status_code_from_response() {
+            local response="$1"
+            printf '%s\n' "$response" | awk '$1 ~ /^HTTP\// && $2 ~ /^[0-9][0-9][0-9]$/ { status=$2 } END { print status }'
+          }
+          tag_response=""
+          if tag_response="$(gh api --include "repos/$GITHUB_REPOSITORY/git/ref/tags/v$RELEASE_VERSION" 2>&1)"; then
+            tag_type="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v$RELEASE_VERSION" --jq '.object.type')"
+            tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v$RELEASE_VERSION" --jq '.object.sha')"
+            if [[ "$tag_type" == "tag" ]]; then
+              tag_type="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$tag_sha" --jq '.object.type')"
+              tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$tag_sha" --jq '.object.sha')"
+            fi
+            if [[ "$tag_type" != "commit" || "$tag_sha" != "$RELEASE_COMMIT" ]]; then
+              echo "Immutable release tag does not match the verified candidate." >&2
+              exit 1
+            fi
+          else
+            if [[ "$(status_code_from_response "$tag_response")" != "404" ]]; then
+              echo "Could not determine whether the immutable release tag exists." >&2
+              exit 1
+            fi
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" --field ref="refs/tags/v$RELEASE_VERSION" --field sha="$RELEASE_COMMIT" >/dev/null
+          fi
+          release_response=""
+          if release_response="$(gh api --include "repos/$GITHUB_REPOSITORY/releases/tags/v$RELEASE_VERSION" 2>&1)"; then
+            echo "The GitHub release already exists; verifying it is resumable." >&2
+          else
+            if [[ "$(status_code_from_response "$release_response")" != "404" ]]; then
+              echo "Could not determine whether the GitHub release already exists." >&2
+              exit 1
+            fi
+            gh release create "v$RELEASE_VERSION" --target "$RELEASE_COMMIT" --title "ReviewReady $RELEASE_VERSION" --notes-file "$RUNNER_TEMP/reviewready-release/release-notes.md"
+          fi
+          release_target="$(gh release view "v$RELEASE_VERSION" --json targetCommitish --jq '.targetCommitish')"
+          if [[ "$release_target" != "$RELEASE_COMMIT" ]]; then
+            echo "GitHub release target does not match the verified main revision." >&2
+            exit 1
+          fi
+          release_metadata="$(gh release view "v$RELEASE_VERSION" --json tagName,targetCommitish,isDraft,isPrerelease,name,body)"
+          latest_release_tag="$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq '.tag_name')"
+          RELEASE_METADATA="$release_metadata" LATEST_RELEASE_TAG="$latest_release_tag" node --input-type=module -e 'import fs from "node:fs"; const metadata=JSON.parse(process.env.RELEASE_METADATA ?? "{}"); const expectedBody=fs.readFileSync(process.env.RUNNER_TEMP+"/reviewready-release/release-notes.md","utf8").trim(); if (metadata.tagName !== "v"+process.env.RELEASE_VERSION || metadata.targetCommitish !== process.env.RELEASE_COMMIT || metadata.isDraft !== false || metadata.isPrerelease !== false || metadata.name !== "ReviewReady "+process.env.RELEASE_VERSION || metadata.body?.trim() !== expectedBody || process.env.LATEST_RELEASE_TAG !== "v"+process.env.RELEASE_VERSION) throw new Error("GitHub release metadata does not match the verified release candidate");'
+          resolve_tag_commit() {
+            local ref_path="$1"
+            local object_type="$(gh api "$ref_path" --jq '.object.type')"
+            local object_sha="$(gh api "$ref_path" --jq '.object.sha')"
+            if [[ "$object_type" == "commit" && "$object_sha" =~ ^[0-9a-f]{40}$ ]]; then printf '%s' "$object_sha"; return; fi
+            if [[ "$object_type" != "tag" || ! "$object_sha" =~ ^[0-9a-f]{40}$ ]]; then echo "GitHub tag does not resolve to a commit or one-level annotated tag." >&2; exit 1; fi
+            local nested_type="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$object_sha" --jq '.object.type')"
+            local nested_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$object_sha" --jq '.object.sha')"
+            if [[ "$nested_type" != "commit" || ! "$nested_sha" =~ ^[0-9a-f]{40}$ ]]; then echo "GitHub annotated tag does not resolve directly to a commit." >&2; exit 1; fi
+            printf '%s' "$nested_sha"
+          }
+          immutable_tag_commit="$(resolve_tag_commit "repos/$GITHUB_REPOSITORY/git/ref/tags/v$RELEASE_VERSION")"
+          if [[ "$immutable_tag_commit" != "$RELEASE_COMMIT" ]]; then echo "Immutable release tag does not match the verified main revision." >&2; exit 1; fi
+
+      - name: Move and verify the stable v1 Action tag
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --method PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/v1" --field sha="$RELEASE_COMMIT" --field force=true >/dev/null
+          stable_tag_commit="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v1" --jq '.object.sha')"
+          stable_tag_type="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v1" --jq '.object.type')"
+           if [[ "$stable_tag_type" != "commit" || "$stable_tag_commit" != "$RELEASE_COMMIT" ]]; then
+             echo "Stable v1 tag does not match the verified main revision." >&2
+             exit 1
+           fi
+
+  registry-smoke:
+    if: github.ref == 'refs/heads/main'
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions: {}
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
+    steps:
+      - name: Use Node.js 24
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Install the exact published package without lifecycle scripts
+        shell: bash
+        run: |
+          consumer_dir="$RUNNER_TEMP/reviewready-registry-consumer"
+          mkdir -p "$consumer_dir"
+          CONSUMER_DIR="$consumer_dir" node --input-type=module -e 'import fs from "node:fs"; fs.writeFileSync(process.env.CONSUMER_DIR+"/package.json", JSON.stringify({name:"reviewready-release-consumer", private:true, dependencies:{"@ahoooooo/reviewready":process.env.RELEASE_VERSION}}));'
+          npm install --ignore-scripts --no-audit --no-fund --prefix "$consumer_dir" "@ahoooooo/reviewready@$RELEASE_VERSION"
+
+      - name: Run the registry clean-room CLI smoke without write or OIDC permissions
+        shell: bash
+        run: |
+          consumer_dir="$RUNNER_TEMP/reviewready-registry-consumer"
+          CONSUMER_DIR="$consumer_dir" node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          const root = process.env.CONSUMER_DIR;
+          const cli = root + "/node_modules/@ahoooooo/reviewready/dist/cli.js";
+          fs.writeFileSync(root + "/policy.yml", "version: 1\nrules:\n  - id: check\n    when: {}\n    require:\n      - type: check\n        name: test\n        conclusions: [success]\n");
+          fs.writeFileSync(root + "/input.json", JSON.stringify({ version: 1, changedFiles: ["src/index.ts"], body: "", labels: [], linkedIssues: [], checks: [{ name: "test", conclusion: "success" }], reviews: [] }));
+          if (!fs.existsSync(cli)) throw new Error("registry clean-room install did not contain the CLI");
+          NODE
+          node "$consumer_dir/node_modules/@ahoooooo/reviewready/dist/cli.js" validate --policy "$consumer_dir/policy.yml"
+          node "$consumer_dir/node_modules/@ahoooooo/reviewready/dist/cli.js" check --policy "$consumer_dir/policy.yml" --input "$consumer_dir/input.json" --json | node --input-type=module -e 'let text=""; process.stdin.on("data",(chunk)=>{text+=chunk; if (Buffer.byteLength(text,"utf8")>1048576) process.exit(1);}); process.stdin.on("end",()=>{const report=JSON.parse(text); if(report.status!=="ready") process.exit(1);});'
