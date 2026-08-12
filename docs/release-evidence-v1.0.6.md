@@ -1,47 +1,75 @@
 # ReviewReady v1.0.6 release evidence
 
-This release candidate contains the deterministic trust-core hardening that
-landed after v1.0.5. It must be published only from the verified final main
-commit, and the exact audited tarball must be the bytes submitted to npm.
+This document records the public v1.0.6 release containing the deterministic
+trust-core hardening that landed after v1.0.5. The exact audited tarball was
+submitted to npm through Trusted Publishing. The release candidate commit was
+`9cb239e3b81e00b0f82239eaf43843863ab51e2d`; main later advanced with a
+release-workflow recovery fix that does not change the published package bytes.
 
 ## Scope
 
-- [ ] P0/P1/P2 implementation work was reviewed locally with regression tests
-      after the final candidate is frozen.
-- [ ] The Action bundle is regenerated from the final release candidate and
+- [x] The v1 trust-core implementation was reviewed locally with regression
+      tests after the final candidate was frozen.
+- [x] The Action bundle was regenerated from the final release candidate and
       checked for synchronization.
-- [ ] The package and lockfile versions are aligned at 1.0.6.
-- [ ] The exact tarball path, SHA-512, npm integrity, registry provenance, Git
-      tag, GitHub Release, and stable v1 ref are recorded after publication.
+- [x] The package and lockfile versions are aligned at 1.0.6.
+- [x] The exact tarball SHA-512, npm integrity, registry provenance, Git tag,
+      GitHub Release, and stable v1 ref are recorded after publication.
 
 ## Local verification
 
-- [ ] npm run check
-- [ ] npm run audit:dependencies
-- [ ] npm run release:preflight -- --artifact-dir <verified-directory>
-- [ ] Clean-room install and CLI ready/not-ready/invalid smoke
-- [ ] Windows Node.js 22 packaged smoke
+- [x] npm run check
+- [x] npm run audit:dependencies
+- [x] npm run release:preflight -- --artifact-dir <verified-directory>
+- [x] Clean-room install and CLI ready/not-ready/invalid smoke
+- [x] Windows Node.js 22 packaged smoke
 
 ## Public verification
 
-- [ ] Publish @ahoooooo/reviewready@1.0.6 through npm Trusted Publishing.
-- [ ] Verify the registry tarball integrity equals the audited local tarball.
-- [ ] Verify exact-version install and CLI smoke from the registry package.
-- [ ] Create immutable Git tag v1.0.6 at the verified main commit.
-- [ ] Create the GitHub Release from that tag and move v1 only after npm
+- [x] Publish @ahoooooo/reviewready@1.0.6 through npm Trusted Publishing.
+- [x] Verify the registry tarball integrity equals the audited local tarball.
+- [x] Verify exact-version install and CLI smoke from the registry package.
+- [x] Create immutable Git tag v1.0.6 at the verified release commit.
+- [x] Create the GitHub Release from that tag and move v1 only after npm
       verification.
-- [ ] Verify the GitHub trusted workflow and ruleset require the intended
-      immutable Action/check identity.
-- [ ] Verify the GitHub release environment has the required reviewers
-      configured, and record the protection result without exposing secrets.
-- [ ] Verify the npm Trusted Publisher is bound to this repository, the exact
-      `.github/workflows/release-publish.yml` filename, `main`, and release
-      environment; record the configuration result.
+- [ ] Verify that GitHub rules require the trusted workflow and intended
+      immutable Action/check identity. The personal-repository ruleset still
+      lacks an organization-level required-workflow trust root.
+- [ ] Verify the release environment's required reviewers include an
+      independent reviewer and immutable tag protection; the current release
+      environment has only the repository owner available.
+- [x] Verify that the npm Trusted Publisher is bound to this repository, the
+      exact `.github/workflows/release-publish.yml` filename, `main`, and
+      release environment through the published provenance.
 
 ## Coordinates
 
 The final machine-readable coordinates belong in
-docs/release-evidence-v1.0.6.json and must pass
-npm run release:verify -- docs/release-evidence-v1.0.6.json --artifact
-<exact-tarball> after all public resources exist. No placeholder checksum or
-provenance value is evidence.
+docs/release-evidence-v1.0.6.json. `npm run release:verify` passed against the
+exact registry tarball URL recorded below. No placeholder checksum or
+provenance value is evidence, and the temporary downloaded artifact path is
+intentionally not committed.
+
+This evidence proves artifact and release-coordinate consistency; it does not
+claim that all GitHub issues are closed or that external governance blockers
+have been resolved.
+
+## Verified coordinates
+
+- Package: `@ahoooooo/reviewready@1.0.6`
+- Release candidate, immutable `v1.0.6`, stable `v1`, and release target:
+  `9cb239e3b81e00b0f82239eaf43843863ab51e2d`
+- Registry tarball: `https://registry.npmjs.org/@ahoooooo/reviewready/-/reviewready-1.0.6.tgz`
+- SHA-512: `4102b7ede0368c97fea5d9a479f1277e0cf08bbcb31ce3e1d92cfd39679f8a11915dc65528709c79488aa13162ab3e8650a8e8ac6558ecff446731b43114877d`
+- npm integrity: `sha512-QQK37eA2jJf+pdmkefEnfgzwi7yzHOPh2Sz9OWefihGRXcZVKHCceUiKoTFiqz6GUKjorGVY7P9EZzG0MRSHfQ==`
+- npm shasum: `53480590d40b254ef2d3eb22eca69918090154ef`
+- GitHub Release: `https://github.com/ahoooooooo/reviewready/releases/tag/v1.0.6`
+- Public verification: `npm run release:verify` passed against the exact
+  registry tarball and this evidence JSON.
+
+The initial publish workflow run completed npm publication but stopped while
+the registry propagated the new version. An idempotent rerun then created the
+immutable tag but stopped while `gh release` inferred a repository in its
+checkout-free job. The release was completed from that already verified tag
+without republishing or rewriting it; the explicit repository binding fix is
+now merged for future resumable releases.

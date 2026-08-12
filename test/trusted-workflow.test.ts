@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 const workflow = await readFile(".github/workflows/reviewready-trusted.yml", "utf8");
 const readme = await readFile("README.md", "utf8");
 const canonicalRepository = `ah${"o".repeat(8)}/reviewready`;
+const publishedReleaseCommit = "9cb239e3b81e00b0f82239eaf43843863ab51e2d";
 
 describe("trusted ReviewReady workflow", () => {
   it("uses the canonical GitHub repository as its immutable trust root", () => {
@@ -30,6 +31,13 @@ describe("trusted ReviewReady workflow", () => {
     expect(workflow).not.toContain(
       "uses: " + canonicalRepository + "@1b6856635d122e48075f709a757d25deb865c4f0"
     );
+  });
+
+  it("pins the trusted root and documented examples to the published v1.0.6 release", () => {
+    expect(workflow).toContain(`uses: ${canonicalRepository}@${publishedReleaseCommit} # v1.0.6`);
+    expect(readme).toContain(`uses: ${canonicalRepository}@${publishedReleaseCommit} # v1.0.6`);
+    expect(workflow).not.toContain("main v1.0.6 candidate");
+    expect(readme).not.toContain("v1.0.5 bootstrap pin");
   });
 
   it("has read-only permissions and never checks out or runs pull-request code", () => {
