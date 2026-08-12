@@ -27,6 +27,9 @@ describe("trusted ReviewReady workflow", () => {
     expect(workflow).not.toMatch(
       new RegExp(`uses: ${canonicalRepository.replace("/", "\\/")}@(?:main|v1|latest)\\b`, "u")
     );
+    expect(workflow).not.toContain(
+      "uses: " + canonicalRepository + "@1b6856635d122e48075f709a757d25deb865c4f0"
+    );
   });
 
   it("has read-only permissions and never checks out or runs pull-request code", () => {
