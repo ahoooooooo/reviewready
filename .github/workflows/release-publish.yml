@@ -357,7 +357,7 @@ jobs:
           import fs from "node:fs";
           const root = process.env.CONSUMER_DIR;
           const cli = root + "/node_modules/@ahoooooo/reviewready/dist/cli.js";
-          fs.writeFileSync(root + "/policy.yml", "version: 1\nrules:\n  - id: check\n    when: {}\n    require:\n      - type: check\n        name: test\n        conclusions: [success]\n");
+          fs.writeFileSync(root + "/policy.yml", "version: 1\nrules:\n  - id: check\n    when:\n      paths:\n        any: [\"src/**\"]\n    require:\n      - type: check\n        name: test\n        conclusions: [success]\n");
           fs.writeFileSync(root + "/input.json", JSON.stringify({ version: 1, changedFiles: ["src/index.ts"], body: "", labels: [], linkedIssues: [], checks: [{ name: "test", conclusion: "success" }], reviews: [] }));
           if (!fs.existsSync(cli)) throw new Error("registry clean-room install did not contain the CLI");
           NODE
