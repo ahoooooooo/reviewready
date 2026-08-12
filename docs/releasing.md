@@ -33,7 +33,19 @@ verification, the committed Action bundle check, and CodeQL before merge.
 
 After merge, build once and create one local tarball from the verified commit. The
 release tooling must record the exact tarball path and checksum. Do not perform a
-second build between tarball verification and publication.
+second build between tarball verification and publication. `dist/action` must be
+clean before `npm run release:preflight`; the preflight records the committed
+bundle state, rebuilds once, and fails if the build changes it. The
+.github/workflows/release-publish.yml workflow is a manual, protected
+environment implementation of this sequence; it requires npm Trusted Publishing
+to be configured for that exact workflow filename and does not accept an npm
+token secret.
+
+Before dispatching the workflow, independently verify that the GitHub release
+environment requires the intended reviewers. Also verify the npm Trusted Publisher
+configuration is bound to this repository, `.github/workflows/release-publish.yml`,
+the `main` branch, and the release environment. The YAML `environment` field
+alone is not evidence that either external protection is configured.
 
 ```console
 npm pack --json --ignore-scripts
@@ -45,7 +57,9 @@ source-tree dry run as proof that the final published bytes were audited.
 
 npm run release:preflight also records the committed Action bundle state before
 the build and fails if the build changes it. This prevents a stale checked-in
-dist/action tree from being silently replaced during release verification.
+dist/action tree from being silently replaced during release verification. The
+workflow then verifies npm integrity, SHA-1 shasum, registry tarball bytes, npm
+signatures/provenance, and a clean-room install before creating GitHub refs.
 
 ## 3. Verify the local artifact
 
@@ -77,7 +91,10 @@ must not mutate the audited artifact.
 - Record the package URL, tarball URL, integrity, provenance, and release commit in
   the release evidence.
 - Store the machine-readable release coordinates in the evidence JSON and run
-  npm run release:verify -- docs/release-evidence-vX.Y.Z.json. The verifier
+  npm run release:verify -- docs/release-evidence-vX.Y.Z.json --artifact
+  <exact-tarball>. The verifier hashes that exact regular file, then performs
+  bounded fail-closed checks against the public npm registry, npm Trusted
+  Publishing provenance, GitHub release metadata, and both tag refs. It
   requires package/lock/npm versions, local and registry SHA-512, the previous
   release, the final main commit, immutable tag, stable v1 tag, and GitHub
   release target to agree.

@@ -12,7 +12,7 @@ import {
 } from "./domain.js";
 import { PlatformError, ReviewReadyError } from "./errors.js";
 import { normalizeInput, normalizeRepositoryPath } from "./input.js";
-import { matchesRule } from "./matcher.js";
+import { MatchOperationBudget, matchesRule } from "./matcher.js";
 import { parsePolicy } from "./policy.js";
 
 const shaPattern = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/u;
@@ -144,7 +144,8 @@ function splitChangedFiles(files: readonly (string | GitHubChangedFile)[]): {
   return { changedFiles, previousChangedFiles };
 }
 
-const MAX_PERMISSION_LOOKUPS = 4;
+const MAX_PERMISSION_LOOKUPS = 100;
+const PERMISSION_LOOKUP_TIMEOUT_MS = 120_000;
 const MAX_SNAPSHOT_ATTEMPTS = 2;
 
 const pullRequestSnapshotSchema = z.object({
@@ -197,6 +198,7 @@ interface GitHubEvidenceSnapshot {
   readonly checkRuns: readonly GitHubCheckRun[];
   readonly reviews: readonly GitHubReview[];
   readonly linkedIssues: readonly number[];
+  readonly permissions: readonly (readonly [string, GitHubPermission])[];
 }
 
 export function fingerprintGitHubEvidence(
@@ -217,17 +219,36 @@ export function fingerprintGitHubEvidence(
 }
 
 function evidenceFingerprint(snapshot: GitHubEvidenceSnapshot): string {
-  return fingerprintGitHubEvidence(snapshot.checkRuns, snapshot.reviews, snapshot.linkedIssues);
+  const permissions = snapshot.permissions
+    .map(([login, permission]) => JSON.stringify([login, permission]))
+    .sort((first, second) => first.localeCompare(second, "en-US"));
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        evidence: fingerprintGitHubEvidence(
+          snapshot.checkRuns,
+          snapshot.reviews,
+          snapshot.linkedIssues
+        ),
+        permissions
+      }),
+      "utf8"
+    )
+    .digest("hex");
 }
 
 function sameEvidence(first: GitHubEvidenceSnapshot, second: GitHubEvidenceSnapshot): boolean {
   return evidenceFingerprint(first) === evidenceFingerprint(second);
 }
 
-function requiredEvidenceTypes(policy: Policy, input: PullRequestInput): Set<Requirement["type"]> {
+function requiredEvidenceTypes(
+  policy: Policy,
+  input: PullRequestInput,
+  budget: MatchOperationBudget
+): Set<Requirement["type"]> {
   const types = new Set<Requirement["type"]>();
   for (const rule of policy.rules) {
-    if (matchesRule(rule, input)) {
+    if (matchesRule(rule, input, budget)) {
       for (const requirement of rule.require) {
         types.add(requirement.type);
       }
@@ -257,6 +278,60 @@ async function mapWithConcurrency<T, R>(
 
   await Promise.all(Array.from({ length: Math.min(limit, values.length) }, () => worker()));
   return results;
+}
+
+function reviewLoginsForPermissionLookup(reviews: readonly GitHubReview[]): string[] {
+  const logins = new Set<string>();
+  for (const review of reviews) {
+    const state = reviewState(review.state);
+    if (state === undefined) {
+      throw new PlatformError(
+        "GITHUB_EVIDENCE_INCOMPLETE",
+        "GitHub returned an unsupported pull request review state."
+      );
+    }
+    if (state !== "pending" && state !== "commented" && review.login !== null) {
+      logins.add(review.login);
+    }
+  }
+  return [...logins];
+}
+
+async function lookupReviewerPermissions(
+  logins: readonly string[],
+  owner: string,
+  repo: string,
+  gateway: GitHubGateway
+): Promise<readonly (readonly [string, GitHubPermission])[]> {
+  if (logins.length > MAX_PERMISSION_LOOKUPS) {
+    throw new PlatformError(
+      "GITHUB_EVIDENCE_INCOMPLETE",
+      `GitHub returned too many distinct reviewers for permission association (limit: ${String(MAX_PERMISSION_LOOKUPS)}).`
+    );
+  }
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const work = mapWithConcurrency(
+    logins,
+    MAX_PERMISSION_LOOKUPS,
+    async (login) => [login, await gateway.getRepositoryPermission({ owner, repo, login })] as const
+  );
+  const deadline = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => {
+      reject(
+        new PlatformError(
+          "GITHUB_EVIDENCE_INCOMPLETE",
+          "GitHub reviewer permission association exceeded its bounded time limit."
+        )
+      );
+    }, PERMISSION_LOOKUP_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([work, deadline]);
+  } finally {
+    if (timeout !== undefined) {
+      clearTimeout(timeout);
+    }
+  }
 }
 
 export async function loadGitHubPullRequest(
@@ -309,7 +384,11 @@ export async function loadGitHubPullRequest(
         checks: [],
         reviews: []
       });
-      const evidenceTypes = requiredEvidenceTypes(policy, preliminaryInput);
+      const evidenceTypes = requiredEvidenceTypes(
+        policy,
+        preliminaryInput,
+        new MatchOperationBudget()
+      );
       const needsChecks = evidenceTypes.has("check");
       const needsReviews = evidenceTypes.has("maintainer_review");
       const needsLinkedIssues = evidenceTypes.has("linked_issue");
@@ -326,7 +405,13 @@ export async function loadGitHubPullRequest(
             ? gateway.listClosingIssueNumbers(common)
             : Promise.resolve<readonly number[]>([])
         ]);
-        return { checkRuns, reviews: rawReviews, linkedIssues };
+        const permissions = await lookupReviewerPermissions(
+          reviewLoginsForPermissionLookup(rawReviews),
+          owner,
+          repo,
+          gateway
+        );
+        return { checkRuns, reviews: rawReviews, linkedIssues, permissions };
       };
 
       const firstEvidence = await collectEvidence();
@@ -397,14 +482,7 @@ export async function loadGitHubPullRequest(
           }
         ];
       });
-      const logins = [...new Set(reviewsWithState.map((review) => review.login))];
-      const permissionEntries = await mapWithConcurrency(
-        logins,
-        MAX_PERMISSION_LOOKUPS,
-        async (login) =>
-          [login, await gateway.getRepositoryPermission({ owner, repo, login })] as const
-      );
-      const permissions = new Map(permissionEntries);
+      const permissions = new Map(secondEvidence.permissions);
 
       const input = normalizeInput({
         ...preliminaryInput,

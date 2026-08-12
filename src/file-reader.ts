@@ -14,6 +14,13 @@ export class CliFileError extends Error {
   }
 }
 
+export interface BoundedFileSystem {
+  lstat: (path: string) => Promise<Stats>;
+  open: (path: string, flags: "r") => Promise<FileHandle>;
+}
+
+const defaultFileSystem: BoundedFileSystem = { lstat, open };
+
 export function classifyFileSystemError(error: unknown): FileReadFailure {
   if (typeof error !== "object" || error === null) {
     return "read_failed";
@@ -59,13 +66,14 @@ function sameFileIdentity(first: Stats, second: Stats): boolean {
 
 export async function readBoundedFile(
   path: string,
-  maxBytes = MAX_CLI_FILE_BYTES
+  maxBytes = MAX_CLI_FILE_BYTES,
+  fileSystem: BoundedFileSystem = defaultFileSystem
 ): Promise<string> {
   ensureValidLimit(maxBytes);
 
   let handle: FileHandle | undefined;
   try {
-    const linkStats = await lstat(path);
+    const linkStats = await fileSystem.lstat(path);
     if (!linkStats.isFile()) {
       throw new CliFileError("not_regular");
     }
@@ -73,7 +81,7 @@ export async function readBoundedFile(
       throw new CliFileError("too_large");
     }
 
-    handle = await open(path, "r");
+    handle = await fileSystem.open(path, "r");
     const openedStats = await handle.stat();
     if (!openedStats.isFile()) {
       throw new CliFileError("not_regular");
@@ -85,7 +93,7 @@ export async function readBoundedFile(
       throw new CliFileError("too_large");
     }
 
-    const currentStats = await lstat(path);
+    const currentStats = await fileSystem.lstat(path);
     if (!currentStats.isFile()) {
       throw new CliFileError("not_regular");
     }
@@ -108,6 +116,19 @@ export async function readBoundedFile(
 
     if (bytesRead > maxBytes) {
       throw new CliFileError("too_large");
+    }
+    const finalStats = await handle.stat();
+    if (!finalStats.isFile()) {
+      throw new CliFileError("not_regular");
+    }
+    if (!sameFileIdentity(openedStats, finalStats)) {
+      throw new CliFileError("not_regular");
+    }
+    if (finalStats.size > maxBytes) {
+      throw new CliFileError("too_large");
+    }
+    if (bytesRead !== finalStats.size) {
+      throw new CliFileError("read_failed");
     }
     return buffer.subarray(0, bytesRead).toString("utf8");
   } catch (error) {

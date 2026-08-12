@@ -198,6 +198,8 @@ rules:
     const explanation = explainPolicy(policy);
 
     expect(explanation).toContain("Rule: source");
+    expect(explanation).toContain("Unmatched changes: v1 returns ready");
+    expect(explanation).toContain("This policy has no unconditional catch-all rule.");
     expect(explanation.indexOf("PR body section")).toBeLessThan(
       explanation.indexOf("PR body contains checked task-list text")
     );

@@ -1,0 +1,23 @@
+name: ReviewReady trusted enforcement
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: read
+  checks: read
+  statuses: read
+  issues: read
+
+jobs:
+  readiness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Evaluate pull-request evidence from the trusted base workflow
+        uses: ahooooooo/reviewready@1b6856635d122e48075f709a757d25deb865c4f0 # v1.0.5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          policy-path: .reviewready.yml

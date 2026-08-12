@@ -1,11 +1,20 @@
 # yaml-language-server: $schema=./reviewready.schema.json
 version: 1
 rules:
-  - id: source-change
-    description: Source changes need test evidence and human accountability.
+  - id: runtime-change
+    description: Runtime, test, fixture, policy, and toolchain changes need test evidence.
     when:
       paths:
-        any: ["src/**"]
+        any:
+          - "src/**"
+          - "test/**"
+          - "fixtures/**"
+          - ".reviewready.yml"
+          - "reviewready*.schema.json"
+          - "tsconfig*.json"
+          - "eslint.config.js"
+          - "vitest.config.ts"
+          - ".gitattributes"
     require:
       - type: pr_body_section
         heading: Testing
@@ -15,15 +24,39 @@ rules:
       - type: human_attestation
         text: I understand and take responsibility for this change.
 
-  - id: workflow-change
-    description: Workflow changes require a documented risk assessment.
+  - id: trust-boundary-change
+    description: Workflow, Action, package, release, security, and documentation changes need risk evidence.
     when:
       paths:
-        any: [".github/workflows/**", "action.yml"]
+        any:
+          - ".github/**"
+          - "action.yml"
+          - "dist/**"
+          - "package.json"
+          - "package-lock.json"
+          - "scripts/**"
+          - "README.md"
+          - "CHANGELOG.md"
+          - "AGENTS.md"
+          - ".codex/**"
+          - "CONTRIBUTING.md"
+          - "SECURITY.md"
+          - "docs/**"
     require:
       - type: pr_body_section
         heading: Risk
-      - type: maintainer_review
-        minimum: 1
+      - type: check
+        name: check
+        conclusions: [success]
       - type: human_attestation
         text: I understand and take responsibility for this change.
+
+  - id: coverage-catch-all
+    description: Every ordinary repository path must enter at least one self-policy rule.
+    when:
+      paths:
+        any: ["**"]
+    require:
+      - type: check
+        name: check
+        conclusions: [success]

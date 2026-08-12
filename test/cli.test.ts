@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, symlink, writeFile, type FileHandle } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -93,6 +93,70 @@ describe("bounded file reader", () => {
       name: "CliFileError",
       reason: "not_found"
     });
+  });
+
+  it("rejects a file that grows after the initial size checks", async () => {
+    const stats = (size: number) =>
+      ({
+        dev: 1,
+        ino: 2,
+        size,
+        isFile: () => true
+      }) as never;
+    const close = vi.fn().mockResolvedValue(undefined);
+    const handle = {
+      stat: vi.fn().mockResolvedValueOnce(stats(1)).mockResolvedValueOnce(stats(2)),
+      read: vi
+        .fn()
+        .mockImplementationOnce((buffer: Buffer, offset: number) => {
+          buffer[offset] = 0x61;
+          return Promise.resolve({ bytesRead: 1, buffer });
+        })
+        .mockResolvedValueOnce({ bytesRead: 0 }),
+      close
+    } as unknown as FileHandle;
+    const fileSystem = {
+      lstat: vi.fn().mockResolvedValueOnce(stats(1)).mockResolvedValueOnce(stats(1)),
+      open: vi.fn().mockResolvedValue(handle)
+    };
+
+    await expect(readBoundedFile("growing-policy.yml", 1, fileSystem)).rejects.toMatchObject({
+      name: "CliFileError",
+      reason: "too_large"
+    });
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("rejects same-inode content that changes size during the read", async () => {
+    const stats = (size: number) =>
+      ({
+        dev: 1,
+        ino: 2,
+        size,
+        isFile: () => true
+      }) as never;
+    const close = vi.fn().mockResolvedValue(undefined);
+    const handle = {
+      stat: vi.fn().mockResolvedValueOnce(stats(3)).mockResolvedValueOnce(stats(2)),
+      read: vi
+        .fn()
+        .mockImplementationOnce((buffer: Buffer, offset: number) => {
+          buffer.fill(0x61, offset, offset + 3);
+          return Promise.resolve({ bytesRead: 3, buffer });
+        })
+        .mockResolvedValueOnce({ bytesRead: 0 }),
+      close
+    } as unknown as FileHandle;
+    const fileSystem = {
+      lstat: vi.fn().mockResolvedValueOnce(stats(3)).mockResolvedValueOnce(stats(3)),
+      open: vi.fn().mockResolvedValue(handle)
+    };
+
+    await expect(readBoundedFile("truncated-policy.yml", 3, fileSystem)).rejects.toMatchObject({
+      name: "CliFileError",
+      reason: "read_failed"
+    });
+    expect(close).toHaveBeenCalledOnce();
   });
 });
 

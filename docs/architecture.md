@@ -74,14 +74,18 @@ with fork-safe permissions.
 
 Review-submitted events require a separate design decision because
 `pull_request_review` also uses the pull-request merge ref, while
-`pull_request_target` has no review-submitted activity type. Approval freshness may
-need to remain a GitHub branch-rule responsibility or use another authenticated,
-trusted reconciliation path.
+`pull_request_target` has no review-submitted activity type. Approval freshness
+remains a GitHub branch-rule responsibility until another authenticated, trusted
+reconciliation path is deployed. A review-event workflow loaded from an
+untrusted pull-request revision must never be a required readiness check.
 
 ## Evidence collection
 
-The Action supports `pull_request` and `pull_request_review` events. Review
-events may be submitted, edited, or dismissed. For GitHub review data,
+The Action source supports `pull_request`, `pull_request_review`, and
+`pull_request_target` events. The staged trusted workflow uses
+`pull_request_target` only after it is pinned to the published v1.0.6 commit;
+the pre-publication bootstrap pin remains an explicit non-authoritative state.
+Review events may be submitted, edited, or dismissed. For GitHub review data,
 `APPROVED`, `CHANGES_REQUESTED`, and `DISMISSED` states require a valid
 `submittedAt`; `COMMENTED` may omit it. Missing or malformed timestamps on
 those actionable states fail closed. Timestamp-free local fixtures retain their
@@ -124,6 +128,11 @@ Changed Git paths use POSIX separators. A rename retains both the new filename
 and previous filename for policy matching; a literal backslash is rejected
 instead of being rewritten.
 
+Policy matching compiles each unique glob once per evaluation, deduplicates
+paths and patterns, and shares a deterministic operation budget across all
+rules. Exceeding that budget is a stable policy error rather than a partial
+ready result.
+
 The repository audit is deliberately a different trust product. Its offline
 input binds the repository base SHA, policy path/revision, protected branch and
 ruleset target/ref scope, required-check provenance, every workflow root that
@@ -165,3 +174,9 @@ webhook action; it never carries body, prompt, workflow, secret, or token data.
 Every public error has a stable code and actionable, safely rendered message.
 Control characters are escaped before an error reaches CLI stderr or an Action
 failure annotation.
+
+Action publication is bounded at the output boundary: report-json is limited
+to 1,000,000 UTF-8 bytes and the Markdown summary to 1 MiB. Both strings are
+fully rendered and checked before any sink is written; summary, report-json, and
+status are published in that order, with status last. Sink failures become a
+sanitized ACTION_PUBLICATION_FAILED error.

@@ -1,0 +1,47 @@
+name: Windows package smoke
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/windows-smoke.yml"
+      - "fixtures/basic/**"
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/package-smoke.mjs"
+      - "src/**"
+      - "reviewready*.schema.json"
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  packaged-cli:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Install locked dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts --no-audit
+
+      - name: Build the package from the checked-out source
+        run: npm run bundle
+
+      - name: Pack and install the exact artifact
+        shell: pwsh
+        run: |
+          $artifactDir = Join-Path $env:RUNNER_TEMP "reviewready-package"
+          New-Item -ItemType Directory -Force -Path $artifactDir | Out-Null
+          npm pack --json --ignore-scripts --pack-destination $artifactDir
+          node scripts/package-smoke.mjs --artifact-dir $artifactDir

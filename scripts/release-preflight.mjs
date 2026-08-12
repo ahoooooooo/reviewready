@@ -11,7 +11,8 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
-  rmSync
+  rmSync,
+  writeFileSync
 } from "node:fs";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { tmpdir } from "node:os";
@@ -22,11 +23,15 @@ import { auditPackageEntries, extractPackResult } from "./verify-package.mjs";
 
 const MAX_TARBALL_BYTES = 20 * 1024 * 1024;
 const MAX_PROVENANCE_BYTES = 128 * 1024;
+const MAX_SIGNATURE_OUTPUT_BYTES = 8 * 1024 * 1024;
 const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u;
 const COMMIT = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/iu;
 const SHA512_HEX = /^[0-9a-f]{128}$/iu;
 const SHA512_INTEGRITY = /^sha512-[A-Za-z0-9+/]{86}==$/u;
 const SHASUM = /^[0-9a-f]{40}$/iu;
+const NPM_PROVENANCE_PREDICATE = "https://slsa.dev/provenance/v1";
+const RELEASE_WORKFLOW_PATH = ".github/workflows/release-publish.yml";
+const RELEASE_REPOSITORY = "https://github.com/ahoooooooo/reviewready";
 
 /**
  * @param {unknown} value
@@ -61,6 +66,14 @@ function readJson(path) {
  */
 export function sha512Hex(value) {
   return createHash("sha512").update(value).digest("hex");
+}
+
+/**
+ * @param {string | Uint8Array} value
+ * @returns {string}
+ */
+export function sha1Hex(value) {
+  return createHash("sha1").update(value).digest("hex");
 }
 
 /**
@@ -109,8 +122,14 @@ export function assertReleaseProvenance(value) {
     "previousVersion",
     "previousNpmVersion",
     "localSha512",
+    "localShasum",
     "registryIntegrity",
     "registryShasum",
+    "provenancePredicateType",
+    "provenanceRepository",
+    "provenanceWorkflow",
+    "provenanceRef",
+    "provenanceCommit",
     "tarballUrl",
     "releaseUrl",
     "releaseTarget"
@@ -152,8 +171,15 @@ export function assertReleaseProvenance(value) {
     throw new Error("GitHub release target does not match main commit");
   }
   const localSha512 = /** @type {string} */ (provenance.localSha512);
+  const localShasum = /** @type {string} */ (provenance.localShasum);
   const registryIntegrity = /** @type {string} */ (provenance.registryIntegrity);
-  if (!SHA512_HEX.test(localSha512) || !SHA512_INTEGRITY.test(registryIntegrity)) {
+  const registryShasum = /** @type {string} */ (provenance.registryShasum);
+  if (
+    !SHA512_HEX.test(localSha512) ||
+    !SHASUM.test(localShasum) ||
+    !SHA512_INTEGRITY.test(registryIntegrity) ||
+    !SHASUM.test(registryShasum)
+  ) {
     throw new Error("release SHA-512 metadata is invalid");
   }
   const registryHex = Buffer.from(registryIntegrity.slice("sha512-".length), "base64").toString(
@@ -162,8 +188,19 @@ export function assertReleaseProvenance(value) {
   if (registryHex !== localSha512) {
     throw new Error("registry integrity does not match local tarball");
   }
-  if (!SHASUM.test(/** @type {string} */ (provenance.registryShasum))) {
-    throw new Error("registry shasum is invalid");
+  if (registryShasum !== localShasum) {
+    throw new Error("registry shasum does not match the local tarball");
+  }
+  if (provenance.provenancePredicateType !== NPM_PROVENANCE_PREDICATE) {
+    throw new Error("npm provenance predicate type is invalid");
+  }
+  if (
+    provenance.provenanceRepository !== RELEASE_REPOSITORY ||
+    provenance.provenanceWorkflow !== RELEASE_WORKFLOW_PATH ||
+    provenance.provenanceRef !== "refs/heads/main" ||
+    provenance.provenanceCommit !== mainCommit
+  ) {
+    throw new Error("npm provenance does not bind the release workflow and commit");
   }
   const expectedTarball =
     "https://registry.npmjs.org/@ahoooooo/reviewready/-/reviewready-" + version + ".tgz";
@@ -171,6 +208,362 @@ export function assertReleaseProvenance(value) {
   if (provenance.tarballUrl !== expectedTarball || provenance.releaseUrl !== expectedRelease) {
     throw new Error("public release URL is invalid");
   }
+}
+
+/**
+ * @typedef {(input: string, init?: RequestInit) => Promise<Response>} ReleaseFetch
+ */
+
+/**
+ * @typedef {(args: string[], cwd: string) => string} NpmRunner
+ */
+
+/**
+ * @param {string} url
+ * @param {string} host
+ * @param {number} limit
+ * @param {ReleaseFetch} fetchImpl
+ * @returns {Promise<Buffer>}
+ */
+async function fetchBounded(url, host, limit, fetchImpl) {
+  const parsed = new globalThis.URL(url);
+  if (parsed.protocol !== "https:" || parsed.hostname !== host) {
+    throw new Error("release verification endpoint is not trusted");
+  }
+  const response = await fetchImpl(url, {
+    headers: { accept: "application/json", "user-agent": "reviewready-release-verifier" },
+    signal: globalThis.AbortSignal.timeout(15_000)
+  });
+  if (!response.ok) {
+    throw new Error("release verification endpoint returned an unexpected status");
+  }
+  const contentLength = response.headers.get("content-length");
+  if (contentLength !== null && (!/^\d+$/u.test(contentLength) || Number(contentLength) > limit)) {
+    throw new Error("release verification response exceeds the bounded size");
+  }
+  if (response.body === null) {
+    throw new Error("release verification response has no body");
+  }
+  const body = /** @type {ReadableStream<Uint8Array>} */ (response.body);
+  const reader = body.getReader();
+  /** @type {Buffer[]} */
+  const chunks = [];
+  let total = 0;
+  let done = false;
+  while (!done) {
+    const result = await reader.read();
+    done = result.done;
+    if (done) continue;
+    const chunk = result.value;
+    if (chunk === undefined) {
+      throw new Error("release verification response is malformed");
+    }
+    total += chunk.byteLength;
+    if (total > limit) {
+      await reader.cancel();
+      throw new Error("release verification response exceeds the bounded size");
+    }
+    chunks.push(Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+}
+
+/**
+ * @param {string} url
+ * @param {string} host
+ * @param {ReleaseFetch} fetchImpl
+ * @returns {Promise<Record<string, unknown>>}
+ */
+async function fetchJson(url, host, fetchImpl) {
+  const bytes = await fetchBounded(url, host, MAX_PROVENANCE_BYTES, fetchImpl);
+  /** @type {unknown} */
+  let parsed;
+  try {
+    parsed = JSON.parse(bytes.toString("utf8"));
+  } catch {
+    throw new Error("release verification endpoint returned invalid JSON");
+  }
+  return record(parsed);
+}
+
+/**
+ * @param {string} changelog
+ * @param {string} version
+ * @returns {string}
+ */
+function releaseNotesForVersion(changelog, version) {
+  const marker = "## [" + version + "]";
+  const start = changelog.indexOf(marker);
+  if (start < 0) {
+    throw new Error("changelog does not contain the release version");
+  }
+  const next = changelog.indexOf("\n## [", start + marker.length);
+  return changelog.slice(start, next < 0 ? changelog.length : next).trim();
+}
+
+/**
+ * @param {Record<string, unknown>} provenance
+ * @param {ReleaseFetch} fetchImpl
+ * @param {string} expectedReleaseBody
+ * @returns {Promise<void>}
+ */
+async function verifyPublicReleaseCoordinates(provenance, fetchImpl, expectedReleaseBody) {
+  const version = /** @type {string} */ (provenance.version);
+  const packageMetadata = await fetchJson(
+    "https://registry.npmjs.org/@ahoooooo/reviewready",
+    "registry.npmjs.org",
+    fetchImpl
+  );
+  if (packageMetadata.name !== "@ahoooooo/reviewready") {
+    throw new Error("registry package name does not match release provenance");
+  }
+  const distTags = record(packageMetadata["dist-tags"]);
+  if (distTags.latest !== version) {
+    throw new Error("registry latest dist-tag does not match release provenance");
+  }
+  const versions = record(packageMetadata.versions);
+  const versionMetadata = record(versions[version]);
+  const previousVersion = /** @type {string} */ (provenance.previousVersion);
+  if (!isRecord(versions[previousVersion])) {
+    throw new Error("previous npm release does not exist");
+  }
+  const dist = record(versionMetadata.dist);
+  if (
+    dist.integrity !== provenance.registryIntegrity ||
+    dist.shasum !== provenance.registryShasum ||
+    dist.tarball !== provenance.tarballUrl
+  ) {
+    throw new Error("registry metadata does not match release provenance");
+  }
+  const registryBytes = await fetchBounded(
+    /** @type {string} */ (provenance.tarballUrl),
+    "registry.npmjs.org",
+    MAX_TARBALL_BYTES,
+    fetchImpl
+  );
+  if (
+    sha512Hex(registryBytes) !== provenance.localSha512 ||
+    sha1Hex(registryBytes) !== provenance.localShasum
+  ) {
+    throw new Error("registry tarball bytes do not match release provenance");
+  }
+
+  const mainCommit = /** @type {string} */ (provenance.mainCommit);
+  const releaseApi =
+    "https://api.github.com/repos/ahoooooooo/reviewready/releases/tags/v" + version;
+  const release = await fetchJson(releaseApi, "api.github.com", fetchImpl);
+  const releaseBody = release.body;
+  if (
+    release.tag_name !== "v" + version ||
+    release.target_commitish !== mainCommit ||
+    release.draft !== false ||
+    release.prerelease !== false ||
+    release.name !== "ReviewReady " + version ||
+    typeof releaseBody !== "string" ||
+    releaseBody.trim() !== expectedReleaseBody
+  ) {
+    throw new Error("GitHub release metadata does not match release provenance");
+  }
+  const previousRelease = await fetchJson(
+    "https://api.github.com/repos/ahoooooooo/reviewready/releases/tags/v" + previousVersion,
+    "api.github.com",
+    fetchImpl
+  );
+  if (
+    previousRelease.tag_name !== "v" + previousVersion ||
+    previousRelease.draft !== false ||
+    previousRelease.prerelease !== false
+  ) {
+    throw new Error("previous GitHub release does not exist as a stable release");
+  }
+  const latestRelease = await fetchJson(
+    "https://api.github.com/repos/ahoooooooo/reviewready/releases/latest",
+    "api.github.com",
+    fetchImpl
+  );
+  if (latestRelease.tag_name !== "v" + version) {
+    throw new Error("GitHub latest release does not match release provenance");
+  }
+
+  /**
+   * @param {string} tagName
+   * @returns {Promise<string>}
+   */
+  const resolveTag = async (tagName) => {
+    const ref = await fetchJson(
+      "https://api.github.com/repos/ahoooooooo/reviewready/git/ref/tags/" + tagName,
+      "api.github.com",
+      fetchImpl
+    );
+    const object = record(ref.object);
+    const objectType = object.type;
+    const objectSha = object.sha;
+    if (objectType === "commit" && typeof objectSha === "string" && COMMIT.test(objectSha)) {
+      return objectSha;
+    }
+    if (objectType !== "tag" || typeof objectSha !== "string" || !COMMIT.test(objectSha)) {
+      throw new Error("GitHub tag does not resolve to a commit");
+    }
+    const tagObject = await fetchJson(
+      "https://api.github.com/repos/ahoooooooo/reviewready/git/tags/" + objectSha,
+      "api.github.com",
+      fetchImpl
+    );
+    const target = record(tagObject.object);
+    if (target.type !== "commit" || typeof target.sha !== "string" || !COMMIT.test(target.sha)) {
+      throw new Error("GitHub annotated tag does not resolve to a commit");
+    }
+    return target.sha;
+  };
+
+  if ((await resolveTag("v" + version)) !== mainCommit || (await resolveTag("v1")) !== mainCommit) {
+    throw new Error("GitHub tags do not match release provenance");
+  }
+}
+
+/**
+ * @param {Record<string, unknown>} provenance
+ * @param {string} cwd
+ * @param {NpmRunner} npmRunner
+ * @returns {void}
+ */
+function verifyNpmProvenance(provenance, cwd, npmRunner) {
+  const temporaryRoot = mkdtempSync(join(tmpdir(), "reviewready-release-signatures-"));
+  try {
+    writeFileSync(
+      join(temporaryRoot, "package.json"),
+      JSON.stringify({
+        name: "reviewready-release-signature-consumer",
+        private: true,
+        dependencies: { "@ahoooooo/reviewready": provenance.version }
+      }),
+      "utf8"
+    );
+    npmRunner(
+      ["install", "--ignore-scripts", "--no-audit", "--no-fund", "--prefix", temporaryRoot],
+      cwd
+    );
+    const output = npmRunner(
+      ["audit", "signatures", "--prefix", temporaryRoot, "--json", "--include-attestations"],
+      cwd
+    );
+    if (Buffer.byteLength(output, "utf8") > MAX_SIGNATURE_OUTPUT_BYTES) {
+      throw new Error("npm signature output exceeds the bounded size");
+    }
+    /** @type {unknown} */
+    const parsed = JSON.parse(output);
+    const data = record(parsed);
+    const verified = Array.isArray(data.verified) ? /** @type {unknown[]} */ (data.verified) : [];
+    const packageName = provenance.packageName;
+    const version = provenance.version;
+    const item = verified.find(
+      (candidate) =>
+        isRecord(candidate) && candidate.name === packageName && candidate.version === version
+    );
+    if (!isRecord(item)) {
+      throw new Error("npm provenance attestation is missing for the release package");
+    }
+    const attestations = record(item.attestations);
+    const npmProvenance = record(attestations.provenance);
+    if (npmProvenance.predicateType !== NPM_PROVENANCE_PREDICATE) {
+      throw new Error("npm provenance attestation predicate is invalid");
+    }
+    const bundles = Array.isArray(item.attestationBundles)
+      ? /** @type {unknown[]} */ (item.attestationBundles)
+      : [];
+    const bundle = bundles.find(
+      (candidate) => isRecord(candidate) && candidate.predicateType === NPM_PROVENANCE_PREDICATE
+    );
+    const bundleRecord = record(bundle);
+    const bundleBody = record(bundleRecord.bundle);
+    const dsse = record(bundleBody.dsseEnvelope);
+    if (typeof dsse.payload !== "string") {
+      throw new Error("npm provenance DSSE payload is missing");
+    }
+    /** @type {unknown} */
+    const parsedPayload = JSON.parse(Buffer.from(dsse.payload, "base64").toString("utf8"));
+    const payload = record(parsedPayload);
+    if (payload.predicateType !== NPM_PROVENANCE_PREDICATE) {
+      throw new Error("npm provenance payload predicate is invalid");
+    }
+    const subjects = Array.isArray(payload.subject)
+      ? /** @type {unknown[]} */ (payload.subject)
+      : [];
+    const subject = subjects.find(
+      (candidate) =>
+        isRecord(candidate) &&
+        isRecord(candidate.digest) &&
+        candidate.digest.sha512 === provenance.localSha512
+    );
+    if (!isRecord(subject)) {
+      throw new Error("npm provenance subject does not match the release tarball");
+    }
+    const predicate = record(payload.predicate);
+    const buildDefinition = record(predicate.buildDefinition);
+    const externalParameters = record(buildDefinition.externalParameters);
+    const workflow = record(externalParameters.workflow);
+    if (
+      workflow.repository !== RELEASE_REPOSITORY ||
+      workflow.path !== RELEASE_WORKFLOW_PATH ||
+      workflow.ref !== provenance.provenanceRef
+    ) {
+      throw new Error("npm provenance workflow identity does not match release provenance");
+    }
+    const resolvedDependencies = Array.isArray(buildDefinition.resolvedDependencies)
+      ? buildDefinition.resolvedDependencies
+      : [];
+    const resolvedCommit = resolvedDependencies.some(
+      (dependency) =>
+        isRecord(dependency) &&
+        isRecord(dependency.digest) &&
+        dependency.digest.gitCommit === provenance.mainCommit
+    );
+    if (!resolvedCommit) {
+      throw new Error("npm provenance source commit does not match release provenance");
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("npm provenance")) {
+      throw error;
+    }
+    throw new Error("npm provenance verification failed", { cause: error });
+  } finally {
+    rmSync(temporaryRoot, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Verify the recorded artifact and all public coordinates.
+ *
+ * @param {unknown} value
+ * @param {string} artifactPath
+ * @param {{ cwd?: string, fetchImpl?: ReleaseFetch, npmRunner?: NpmRunner }} [options]
+ * @returns {Promise<void>}
+ */
+export async function verifyReleaseProvenance(value, artifactPath, options = {}) {
+  assertReleaseProvenance(value);
+  const stats = lstatSync(artifactPath);
+  if (!stats.isFile() || stats.size > MAX_TARBALL_BYTES) {
+    throw new Error("release provenance artifact is too large or not a regular file");
+  }
+  const bytes = readFileSync(artifactPath);
+  const provenance = /** @type {Record<string, unknown>} */ (value);
+  if (sha512Hex(bytes) !== provenance.localSha512) {
+    throw new Error("local tarball SHA-512 does not match release provenance");
+  }
+  if (sha1Hex(bytes) !== provenance.localShasum) {
+    throw new Error("local tarball SHA-1 does not match release provenance");
+  }
+  const fetchImpl = options.fetchImpl ?? globalThis.fetch;
+  if (typeof fetchImpl !== "function") {
+    throw new Error("release verification fetch is unavailable");
+  }
+  const projectRoot = options.cwd ?? process.cwd();
+  const expectedReleaseBody = releaseNotesForVersion(
+    readFileSync(join(projectRoot, "CHANGELOG.md"), "utf8"),
+    /** @type {string} */ (provenance.version)
+  );
+  await verifyPublicReleaseCoordinates(provenance, fetchImpl, expectedReleaseBody);
+  verifyNpmProvenance(provenance, projectRoot, options.npmRunner ?? runNpm);
 }
 
 /**
@@ -185,10 +578,20 @@ export function assertActionBundleSynchronized(before, after) {
 }
 
 /**
+ * @param {string} status
+ * @returns {void}
+ */
+export function assertActionBundleClean(status) {
+  if (status.trim().length > 0) {
+    throw new Error("Action bundle must be clean before release preflight");
+  }
+}
+
+/**
  * @param {string} projectRoot
  * @returns {string}
  */
-function actionBundleState(projectRoot) {
+function actionBundleStatus(projectRoot) {
   const git = process.platform === "win32" ? "git.exe" : "git";
   /** @param {string[]} arguments_ @returns {string[]} */
   const safeArguments = (arguments_) => [
@@ -208,6 +611,15 @@ function actionBundleState(projectRoot) {
     ]),
     { cwd: projectRoot, encoding: "utf8" }
   );
+  return status;
+}
+
+/**
+ * @param {string} projectRoot
+ * @returns {string}
+ */
+function actionBundleState(projectRoot) {
+  const status = actionBundleStatus(projectRoot);
   const bundleRoot = resolve(projectRoot, "dist/action");
   /** @type {Array<{ path: string, sha512?: string, special?: boolean }>} */
   const files = [];
@@ -264,12 +676,31 @@ function runNpm(args, cwd) {
     return execFileSync(process.execPath, [npmExecPath, ...args], {
       cwd,
       encoding: "utf8",
+      maxBuffer: MAX_SIGNATURE_OUTPUT_BYTES,
       stdio: ["ignore", "pipe", "inherit"]
     });
+  }
+  if (process.platform === "win32") {
+    const bundledNpmCli = join(
+      dirname(process.execPath),
+      "node_modules",
+      "npm",
+      "bin",
+      "npm-cli.js"
+    );
+    if (existsSync(bundledNpmCli)) {
+      return execFileSync(process.execPath, [bundledNpmCli, ...args], {
+        cwd,
+        encoding: "utf8",
+        maxBuffer: MAX_SIGNATURE_OUTPUT_BYTES,
+        stdio: ["ignore", "pipe", "inherit"]
+      });
+    }
   }
   return execFileSync(process.platform === "win32" ? "npm.cmd" : "npm", args, {
     cwd,
     encoding: "utf8",
+    maxBuffer: MAX_SIGNATURE_OUTPUT_BYTES,
     stdio: ["ignore", "pipe", "inherit"]
   });
 }
@@ -359,7 +790,7 @@ function extractTarball(tarballPath, extractionRoot) {
 /**
  * @param {string} projectRoot
  * @param {string} artifactRoot
- * @returns {{ tarballPath: string, sha512: string, fileCount: number }}
+ * @returns {{ tarballPath: string, sha512: string, shasum: string, fileCount: number }}
  */
 function verifyExactTarball(projectRoot, artifactRoot) {
   mkdirSync(artifactRoot, { recursive: true });
@@ -404,7 +835,12 @@ function verifyExactTarball(projectRoot, artifactRoot) {
     if (errors.length > 0) {
       throw new Error(`package audit failed: ${errors.join("; ")}`);
     }
-    return { tarballPath, sha512: sha512Hex(tarballBytes), fileCount: entries.length };
+    return {
+      tarballPath,
+      sha512: sha512Hex(tarballBytes),
+      shasum: sha1Hex(tarballBytes),
+      fileCount: entries.length
+    };
   } finally {
     rmSync(extractionRoot, { recursive: true, force: true });
   }
@@ -462,7 +898,7 @@ function verifyCleanRoom(projectRoot, tarballPath) {
  *
  * @param {string} projectRoot
  * @param {string} [requestedArtifactRoot]
- * @returns {{ tarballPath: string, sha512: string, fileCount: number }}
+ * @returns {{ tarballPath: string, sha512: string, shasum: string, fileCount: number }}
  */
 export function runReleasePreflight(projectRoot, requestedArtifactRoot) {
   const ownsArtifactRoot = requestedArtifactRoot === undefined;
@@ -483,6 +919,7 @@ export function runReleasePreflight(projectRoot, requestedArtifactRoot) {
       lockVersion,
       changelog: readFileSync(join(projectRoot, "CHANGELOG.md"), "utf8")
     });
+    assertActionBundleClean(actionBundleStatus(projectRoot));
     const bundleBefore = actionBundleState(projectRoot);
     runNpm(["run", "bundle"], projectRoot);
     assertActionBundleSynchronized(bundleBefore, actionBundleState(projectRoot));
@@ -496,27 +933,34 @@ export function runReleasePreflight(projectRoot, requestedArtifactRoot) {
   }
 }
 
-function main() {
+export async function main() {
   const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
   const provenanceFlag = process.argv.indexOf("--provenance");
   if (provenanceFlag >= 0) {
     const evidencePath = process.argv[provenanceFlag + 1];
+    const artifactFlag = process.argv.indexOf("--artifact");
+    const artifactPath = artifactFlag >= 0 ? process.argv[artifactFlag + 1] : undefined;
     if (
       evidencePath === undefined ||
       evidencePath.startsWith("--") ||
+      artifactFlag < 0 ||
+      artifactPath === undefined ||
+      artifactPath.startsWith("--") ||
       process.argv.some(
         (argument, index) => index !== provenanceFlag && argument === "--provenance"
-      )
+      ) ||
+      process.argv.some((argument, index) => index !== artifactFlag && argument === "--artifact")
     ) {
-      throw new Error("--provenance requires one evidence JSON path");
+      throw new Error("--provenance requires an evidence JSON path and --artifact tarball path");
     }
     const absoluteEvidencePath = resolve(process.cwd(), evidencePath);
+    const absoluteArtifactPath = resolve(process.cwd(), artifactPath);
     const evidenceStats = lstatSync(absoluteEvidencePath);
     if (!evidenceStats.isFile() || evidenceStats.size > MAX_PROVENANCE_BYTES) {
       throw new Error("release provenance evidence is too large or not a file");
     }
     const evidence = readJson(absoluteEvidencePath);
-    assertReleaseProvenance(evidence);
+    await verifyReleaseProvenance(evidence, absoluteArtifactPath, { cwd: projectRoot });
     process.stdout.write("Release provenance passed.\n");
     return;
   }
@@ -534,6 +978,14 @@ function main() {
   );
 }
 
+/* c8 ignore start -- the module bootstrap is exercised by the CLI smoke workflow. */
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  main();
+  try {
+    await main();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "release verification failed";
+    process.stderr.write(message + "\n");
+    process.exitCode = 1;
+  }
 }
+/* c8 ignore stop */

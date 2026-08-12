@@ -19,14 +19,15 @@ pull-request code.
 
 ## Current status
 
-The published CLI and Action are available as v1.0.4 for evaluation and
-advisory workflows. The integration branch prepares v1.0.5 with additional
-live-ingress contracts; it must be published only from the verified final main
-commit. The v1.0.4 trust-core correctness fixes are released, but a normal
-`pull_request` workflow is still not a trusted enforcement root: it is loaded
-from the pull-request merge ref and can be modified by the contribution it
-evaluates. Loading policy contents from the base SHA does not by itself protect
-the caller workflow, Action pin, or `policy-path`.
+The latest published CLI and Action are v1.0.5. This checkout contains the
+v1.0.6 release candidate, which is not a public release until its exact
+tarball, npm provenance, immutable Git tag, GitHub Release, and stable Action
+ref have all been verified. The v1.0.5 trust-core and live-ingress contracts
+are released, but a normal `pull_request` workflow is still not a trusted
+enforcement root: it is loaded from the pull-request merge ref and can be
+modified by the contribution it evaluates. Loading policy contents from the
+base SHA does not by itself protect the caller workflow, Action pin, or
+`policy-path`.
 
 Issue [#35](https://github.com/ahoooooooo/reviewready/issues/35) tracks the trusted
 enforcement topology. [SECURITY.md](SECURITY.md) lists the other current evidence
@@ -45,7 +46,7 @@ reviewready validate --policy .reviewready.yml
 The Action can also be used in an advisory workflow:
 
 ```yaml
-- uses: ahooooooo/reviewready@695841517ce78050adb992165355024cd03918e5 # v1.0.4
+- uses: ahooooooo/reviewready@1b6856635d122e48075f709a757d25deb865c4f0 # v1.0.5
 ```
 
 The mutable `v1` tag is convenient, but an immutable verified commit is safer.
@@ -55,7 +56,8 @@ an independent repository or organization rule.
 
 Version 1 keeps the policy, result, and exit-code contracts stable. v1.0.4
 restores the original v1 public requirement-key encoding after the historical
-v1.0.3 regression; older release output is not rewritten.
+v1.0.3 regression, and v1.0.5 adds bounded webhook, App, audit, and release
+contracts. Older release output is not rewritten.
 
 ## How it works
 
@@ -113,7 +115,7 @@ Action-only repositories can copy the schema into the repository or reference an
 immutable release URL:
 
 ```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/ahoooooooo/reviewready/v1.0.4/reviewready.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ahoooooooo/reviewready/v1.0.5/reviewready.schema.json
 ```
 
 Keep the schema version aligned with the Action or CLI version being used. A local
@@ -159,7 +161,7 @@ jobs:
       statuses: read
       issues: read
     steps:
-      - uses: ahooooooo/reviewready@695841517ce78050adb992165355024cd03918e5 # v1.0.4
+      - uses: ahooooooo/reviewready@1b6856635d122e48075f709a757d25deb865c4f0 # v1.0.5
 ```
 
 Replace the example test commands with the target repository's own verification.
@@ -184,23 +186,38 @@ that may involve:
 - delegating approval freshness and required human review to GitHub branch rules
   when review events cannot be reconciled through a trusted workflow.
 
-These choices have different availability and security tradeoffs. Issue #35 will
-produce the supported reference topology for personal and organization-owned
-repositories. Until then, do not present a pull-request-modifiable check as a
-complete security boundary merely because its job name is required.
+The checked-in reference is staged for the v1.0.6 promotion: while v1.0.6 is
+unpublished it remains on the v1.0.5 bootstrap pin, so it must not yet be
+treated as an executable authoritative gate. After v1.0.6 publication, update
+the pin in a protected change to the exact verified v1.0.6 commit, then
+independently protect the workflow and policy path, require its unique
+job/check identity in GitHub rules, and verify branch freshness and review
+reconciliation in repository settings. The final trusted workflow uses
+pull_request_target, read-only permissions, and no checkout, download, cache
+restore, build, import, or command execution.
 
 The Action writes a job summary and exports:
 
 - `status`: `ready` or `not_ready`;
 - `report-json`: the versioned deterministic result.
 
+Before publication, the Action bounds report-json to 1,000,000 UTF-8 bytes and
+the Markdown summary to 1 MiB. Oversized or partially publishable results fail
+closed; the status output is written last. The publication order is summary,
+report-json, then status. Status is the commit marker: consumers must not treat
+an earlier summary or report-json as valid readiness evidence when the status
+output is absent.
+
 The report-json output and CLI check --json use the same v1 shape:
 outputVersion, status, policyVersion, triggeredRules, and requirements.
 Requirement key values retain the v1 public format; internal deduplication uses
 a separate structured identity so delimiter characters cannot merge unrelated
 requirements. When no rule matches, v1 keeps status ready and an empty
-requirement list, while text and Markdown reports explicitly say that no policy
-rules were evaluated.
+requirement list, while text, Markdown, and explain output explicitly identify
+that no policy rules were evaluated. Add a final paths.any: ["**"] rule when a
+repository requires every ordinary changed path to enter a policy rule. A
+future policy/output version may define an explicit unmatched strategy without
+changing this v1 behavior.
 
 It fails the job when evidence is missing or cannot be loaded safely. Configure
 the job as a required status check if it should block merging.

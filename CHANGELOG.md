@@ -40,6 +40,23 @@ the project uses semantic versioning.
 - Update the development dependency lockfile within existing major versions.
 - Add a reusable `npm run audit:dependencies` command for release and CI checks.
 
+## [1.0.6] - 2026-08-12
+
+### Added
+
+- Add a protected metadata-only trusted workflow reference, packaged Windows
+  smoke coverage, and an OIDC-only exact-artifact release workflow.
+- Add deterministic Action output bounds, policy-wide matching budgets, visible
+  unmatched-change explanations, and attestation provenance terminology.
+- Expand this repository's self-policy coverage across runtime, test, fixture,
+  package, release, workflow, and security-boundary files.
+
+### Security
+
+- Fail closed when a bounded local input grows after initial file checks.
+- Accept pull_request_target only for metadata-only evaluation and never execute
+  pull-request code.
+
 ## [1.0.5] - 2026-08-12
 
 ### Added

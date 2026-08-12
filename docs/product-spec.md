@@ -58,6 +58,14 @@ rules:
 All matching rules apply. Repeated equivalent requirements are evaluated once but
 reported under every triggering rule.
 
+In v1, a change that matches no rule remains ready with no evaluated
+requirements. Human-facing reports and reviewready explain make this zero-match
+state visible; it is not evidence that every changed path was classified.
+Repositories that require broad path coverage can add a final
+paths.any: ["**"] catch-all rule. A future policy/output version may add an
+explicit unmatched strategy (ready, not_ready, or error) without changing v1
+semantics.
+
 ## Normalized pull-request input
 
 The policy engine receives data, not an API client:
@@ -113,6 +121,10 @@ stderr.
   causes a retry or a fail-closed error.
 - A normal pull_request caller workflow is advisory unless the repository
   separately protects the trusted workflow root and required result.
+- The Action renders its Markdown summary and report-json completely before
+  writing either sink. It rejects report-json above 1,000,000 UTF-8 bytes or a
+  Markdown summary above 1 MiB with a stable fail-closed error, and publishes
+  the status output last so a failed later output cannot leave status=ready.
 
 ## v1 quality bar
 
