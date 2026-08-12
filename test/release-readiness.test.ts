@@ -184,6 +184,15 @@ describe("release readiness metadata", () => {
     );
   });
 
+  it("keeps the registry smoke policy fixture valid for the v1 schema", async () => {
+    const workflow = await readFile(".github/workflows/release-publish.yml", "utf8");
+    const smokeStart = workflow.indexOf("  registry-smoke:\n");
+    const smokeJob = workflow.slice(smokeStart);
+
+    expect(smokeJob).not.toContain("when: {}");
+    expect(smokeJob).toContain('when:\\n      paths:\\n        any: [\\"src/**\\"]');
+  });
+
   it("keeps the registry smoke version bound to the dispatch input", async () => {
     const workflow = await readFile(".github/workflows/release-publish.yml", "utf8");
     const document = YAML.parse(workflow) as {
