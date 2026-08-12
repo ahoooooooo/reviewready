@@ -4,6 +4,7 @@ import { checkConclusions, type PullRequestInput } from "./domain.js";
 import { InputError } from "./errors.js";
 
 const shortText = z.string().min(1).max(500);
+const MAX_EXPANDED_PATHS = 3000;
 
 const inputSchema = z
   .object({
@@ -76,16 +77,23 @@ export function normalizeInput(value: unknown): PullRequestInput {
     throw new InputError("INPUT_SCHEMA_INVALID", `Pull-request input is invalid: ${details}`);
   }
 
+  const changedFiles = [...new Set(parsed.data.changedFiles.map(normalizeRepositoryPath))];
+  const previousChangedFiles =
+    parsed.data.previousChangedFiles === undefined
+      ? undefined
+      : [...new Set(parsed.data.previousChangedFiles.map(normalizeRepositoryPath))];
+  const expandedPaths = new Set([...changedFiles, ...(previousChangedFiles ?? [])]);
+  if (expandedPaths.size > MAX_EXPANDED_PATHS) {
+    throw new InputError(
+      "INPUT_TOO_MANY_PATHS",
+      `Changed and previous repository paths exceed the expanded path limit of ${String(MAX_EXPANDED_PATHS)}.`
+    );
+  }
+
   return {
     ...parsed.data,
-    changedFiles: [...new Set(parsed.data.changedFiles.map(normalizeRepositoryPath))],
-    ...(parsed.data.previousChangedFiles === undefined
-      ? {}
-      : {
-          previousChangedFiles: [
-            ...new Set(parsed.data.previousChangedFiles.map(normalizeRepositoryPath))
-          ]
-        }),
+    changedFiles,
+    ...(previousChangedFiles === undefined ? {} : { previousChangedFiles }),
     labels: [...new Set(parsed.data.labels)],
     linkedIssues: [...new Set(parsed.data.linkedIssues)]
   };

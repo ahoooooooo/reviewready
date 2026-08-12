@@ -2,7 +2,7 @@ import micromatch from "micromatch";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { PolicyRule, PullRequestInput } from "../src/domain.js";
-import { MATCHING_OPERATION_BUDGET, matchesRule } from "../src/matcher.js";
+import { MATCHING_OPERATION_BUDGET, MatchOperationBudget, matchesRule } from "../src/matcher.js";
 
 const input: PullRequestInput = {
   version: 1,
@@ -132,6 +132,19 @@ describe("matchesRule", () => {
       )
     ).toBe(true);
     expect(matchesRule(rule({ labels: { any: ["bug*"] } }), input)).toBe(false);
+  });
+
+  it("reuses compiled globs across rules sharing one evaluation budget", () => {
+    const compile = micromatch.matcher.bind(micromatch);
+    const matcherSpy = vi
+      .spyOn(micromatch, "matcher")
+      .mockImplementation((pattern, options) => compile(pattern, options));
+    const budget = new MatchOperationBudget();
+
+    expect(matchesRule(rule({ paths: { any: ["src/**"] } }), input, budget)).toBe(true);
+    expect(matchesRule(rule({ paths: { any: ["src/**"] } }), input, budget)).toBe(true);
+
+    expect(matcherSpy).toHaveBeenCalledTimes(1);
   });
 
   it("fails deterministically before an excessive path comparison budget is exhausted", () => {

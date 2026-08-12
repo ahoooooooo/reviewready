@@ -73,6 +73,27 @@ describe("auditPackageEntries", () => {
     expect(buildStep).toBeLessThan(packageAuditStep);
   });
 
+  it("defines a narrow CLI package surface and pins runtime dependencies", async () => {
+    const packageJson = JSON.parse(await readFile("package.json", "utf8")) as {
+      dependencies?: Record<string, string>;
+      exports?: Record<string, unknown>;
+    };
+
+    expect(packageJson.exports).toEqual({
+      ".": {
+        types: "./dist/cli.d.ts",
+        default: "./dist/cli.js"
+      },
+      "./package.json": "./package.json",
+      "./reviewready.schema.json": "./reviewready.schema.json",
+      "./reviewready.audit.schema.json": "./reviewready.audit.schema.json",
+      "./reviewready.result.schema.json": "./reviewready.result.schema.json"
+    });
+    expect(
+      Object.values(packageJson.dependencies ?? {}).every((value) => /^\d+\.\d+\.\d+$/u.test(value))
+    ).toBe(true);
+  });
+
   it("accepts the documented package surface without private metadata", () => {
     expect(auditPackageEntries(requiredEntries())).toEqual([]);
   });

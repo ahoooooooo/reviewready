@@ -1,6 +1,19 @@
 import { describe, expect, it } from "vitest";
 
-import { normalizeRepositoryPath } from "../src/input.js";
+import { normalizeInput, normalizeRepositoryPath } from "../src/input.js";
+
+function validInput(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    version: 1,
+    changedFiles: ["src/index.ts"],
+    body: "",
+    labels: [],
+    linkedIssues: [],
+    checks: [],
+    reviews: [],
+    ...overrides
+  };
+}
 
 describe("normalizeRepositoryPath", () => {
   it.each(["README.md", "src/index.ts", ".github/workflows/ci.yml"])(
@@ -24,4 +37,39 @@ describe("normalizeRepositoryPath", () => {
       );
     }
   );
+
+  it("rejects an expanded rename path set beyond the bounded total", () => {
+    expect(() =>
+      normalizeInput(
+        validInput({
+          changedFiles: Array.from({ length: 3000 }, (_, index) => `new/${String(index)}.ts`),
+          previousChangedFiles: ["old/original.ts"]
+        })
+      )
+    ).toThrow(expect.objectContaining({ code: "INPUT_TOO_MANY_PATHS" }));
+  });
+
+  it("deduplicates overlapping rename paths before enforcing the expanded bound", () => {
+    const normalized = normalizeInput(
+      validInput({
+        changedFiles: Array.from({ length: 3000 }, (_, index) => `path/${String(index)}.ts`),
+        previousChangedFiles: ["path/0.ts"]
+      })
+    );
+
+    expect(normalized.changedFiles).toHaveLength(3000);
+    expect(normalized.previousChangedFiles).toEqual(["path/0.ts"]);
+  });
+
+  it("validates unsafe previous rename paths at the input boundary", () => {
+    expect(() => normalizeInput(validInput({ previousChangedFiles: ["../secret.ts"] }))).toThrow(
+      expect.objectContaining({ code: "INPUT_UNSAFE_PATH" })
+    );
+  });
+
+  it("reports malformed normalized input through the stable input error", () => {
+    expect(() => normalizeInput(validInput({ version: 2 }))).toThrow(
+      expect.objectContaining({ code: "INPUT_SCHEMA_INVALID" })
+    );
+  });
 });

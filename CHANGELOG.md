@@ -19,6 +19,10 @@ the project uses semantic versioning.
   advisories fail the primary quality job explicitly.
 - Generate and check in third-party license notices for dependencies bundled into
   the distributed JavaScript Action.
+- Treat indented Markdown code blocks as non-visible evidence, and reject unsafe
+  policy text containing control, format, bidi, or multiline characters.
+- Fail closed at Check Run/status and rename-path expansion boundaries, with one
+  bounded GitHub retry that respects rate-limit headers.
 
 ### Documentation
 
@@ -48,6 +52,8 @@ the project uses semantic versioning.
   smoke coverage, and an OIDC-only exact-artifact release workflow.
 - Add deterministic Action output bounds, policy-wide matching budgets, visible
   unmatched-change explanations, and attestation provenance terminology.
+- Add a narrow CLI/schema package export surface, exact production dependency
+  pins, cross-rule glob reuse, and enforceable per-file core coverage gates.
 - Expand this repository's self-policy coverage across runtime, test, fixture,
   package, release, workflow, and security-boundary files.
 

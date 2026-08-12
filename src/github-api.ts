@@ -29,6 +29,8 @@ const MAX_PULL_REQUEST_FILES = 3000;
 const MAX_REVIEWS = 1000;
 const MAX_CLOSING_ISSUES = 100;
 const GITHUB_REQUEST_TIMEOUT_MS = 60_000;
+const MAX_GITHUB_RETRIES = 1;
+const MAX_RETRY_DELAY_MS = 2_000;
 const isoTimestampPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/u;
 const immutableGitShaPattern = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/u;
 
@@ -37,6 +39,94 @@ function incompleteEvidence(kind: string, limit: number): PlatformError {
     "GITHUB_EVIDENCE_INCOMPLETE",
     `GitHub returned an incomplete or oversized ${kind} set; ReviewReady cannot evaluate it safely (limit: ${String(limit)}).`
   );
+}
+
+function errorStatus(error: unknown): number | undefined {
+  if (typeof error !== "object" || error === null) {
+    return undefined;
+  }
+  const status = (error as { readonly status?: unknown }).status;
+  return Number.isSafeInteger(status) ? (status as number) : undefined;
+}
+
+function errorHeaders(error: unknown): unknown {
+  if (typeof error !== "object" || error === null) {
+    return undefined;
+  }
+  const response = (error as { readonly response?: unknown }).response;
+  if (typeof response !== "object" || response === null) {
+    return undefined;
+  }
+  return (response as { readonly headers?: unknown }).headers;
+}
+
+function headerValue(headers: unknown, name: string): string | undefined {
+  if (typeof headers !== "object" || headers === null) {
+    return undefined;
+  }
+  for (const [key, value] of Object.entries(headers as Record<string, unknown>)) {
+    if (key.toLowerCase() === name.toLowerCase()) {
+      return typeof value === "string" ? value : undefined;
+    }
+  }
+  return undefined;
+}
+
+function retryDelay(error: unknown): number | undefined {
+  const status = errorStatus(error);
+  if (
+    status !== 408 &&
+    status !== 425 &&
+    status !== 429 &&
+    status !== 500 &&
+    status !== 502 &&
+    status !== 503 &&
+    status !== 504 &&
+    status !== 403
+  ) {
+    return undefined;
+  }
+
+  const headers = errorHeaders(error);
+  const retryAfter = headerValue(headers, "retry-after");
+  if (retryAfter !== undefined) {
+    const seconds = Number(retryAfter);
+    if (!Number.isFinite(seconds) || seconds < 0 || seconds * 1_000 > MAX_RETRY_DELAY_MS) {
+      return undefined;
+    }
+    return Math.ceil(seconds * 1_000);
+  }
+
+  const remaining = headerValue(headers, "x-ratelimit-remaining");
+  const reset = headerValue(headers, "x-ratelimit-reset");
+  if (remaining === "0" && reset !== undefined) {
+    const resetSeconds = Number(reset);
+    if (!Number.isSafeInteger(resetSeconds)) {
+      return undefined;
+    }
+    const delay = resetSeconds * 1_000 - Date.now();
+    return delay >= 0 && delay <= MAX_RETRY_DELAY_MS ? delay : undefined;
+  }
+
+  return status === 403 ? undefined : 100;
+}
+
+async function withGitHubRetry<T>(operation: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; attempt <= MAX_GITHUB_RETRIES; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (attempt >= MAX_GITHUB_RETRIES) {
+        throw error;
+      }
+      const delay = retryDelay(error);
+      if (delay === undefined) {
+        throw error;
+      }
+      await new Promise<void>((resolve) => setTimeout(resolve, delay));
+    }
+  }
+  throw new Error("GitHub retry loop exhausted unexpectedly.");
 }
 
 function permission(value: string): GitHubPermission {
@@ -365,7 +455,11 @@ function mergeCheckAndStatusEvidence(
       const latest = uniquelyLatestEvidence(candidates);
       return { name, conclusion: latest === undefined ? null : evidenceConclusion(latest) };
     });
-  return [...checkResults, ...statusResults, ...aggregateResults];
+  const merged = [...checkResults, ...statusResults, ...aggregateResults];
+  if (merged.length > MAX_CHECK_RUNS) {
+    throw incompleteEvidence("combined check and commit status", MAX_CHECK_RUNS);
+  }
+  return merged;
 }
 
 async function collectPages<T>(
@@ -382,6 +476,9 @@ async function collectPages<T>(
       throw incompleteEvidence(kind, maxItems);
     }
     result.push(...items);
+    if (result.length >= maxItems) {
+      throw incompleteEvidence(kind, maxItems);
+    }
     if (items.length < pageSize) {
       return result;
     }
@@ -451,6 +548,9 @@ async function collectApiPages<T>(
       throw incompleteEvidence(kind, maxItems);
     }
     result.push(...items);
+    if (result.length >= maxItems) {
+      throw incompleteEvidence(kind, maxItems);
+    }
 
     if (pageResult.hasNext) {
       if (pageResult.nextPage !== page + 1) {
@@ -493,21 +593,23 @@ async function allCheckRuns(
   let reportedTotal: number | undefined;
   const records = await collectApiPages<CheckRunRecord>(
     async (page) => {
-      const response = await octokit.rest.checks.listForRef({
-        owner,
-        repo,
-        ref,
-        filter: "latest",
-        per_page: 100,
-        page
-      });
+      const response = await withGitHubRetry(() =>
+        octokit.rest.checks.listForRef({
+          owner,
+          repo,
+          ref,
+          filter: "latest",
+          per_page: 100,
+          page
+        })
+      );
       const checkRuns = response.data.check_runs;
       if (
         !Array.isArray(checkRuns) ||
         !Number.isSafeInteger(response.data.total_count) ||
         response.data.total_count < checkRuns.length ||
         response.data.total_count < 0 ||
-        response.data.total_count > MAX_CHECK_RUNS
+        response.data.total_count >= MAX_CHECK_RUNS
       ) {
         throw incompleteEvidence("check runs", MAX_CHECK_RUNS);
       }
@@ -561,13 +663,15 @@ async function allCommitStatuses(
 ): Promise<CommitStatusRecord[]> {
   return collectApiPages(
     async (page) => {
-      const response = await octokit.rest.repos.listCommitStatusesForRef({
-        owner,
-        repo,
-        ref,
-        per_page: CHECK_RUN_PAGE_SIZE,
-        page
-      });
+      const response = await withGitHubRetry(() =>
+        octokit.rest.repos.listCommitStatusesForRef({
+          owner,
+          repo,
+          ref,
+          per_page: CHECK_RUN_PAGE_SIZE,
+          page
+        })
+      );
       if (!Array.isArray(response.data)) {
         throw incompleteEvidence("commit statuses", MAX_COMMIT_STATUSES);
       }
@@ -624,11 +728,13 @@ export function createGitHubGateway(token: string): GitHubGateway {
       repo,
       pullNumber
     }): Promise<GitHubPullRequestSnapshot> => {
-      const response = await octokit.rest.pulls.get({
-        owner,
-        repo,
-        pull_number: pullNumber
-      });
+      const response = await withGitHubRetry(() =>
+        octokit.rest.pulls.get({
+          owner,
+          repo,
+          pull_number: pullNumber
+        })
+      );
       const data = response.data;
       const base = data.base as { sha?: unknown } | null | undefined;
       const head = data.head as { sha?: unknown } | null | undefined;
@@ -655,13 +761,15 @@ export function createGitHubGateway(token: string): GitHubGateway {
       };
     },
     getFileAtRevision: async ({ owner, repo, path, ref }) => {
-      const response = await octokit.request("GET /repos/{owner}/{repo}/contents/{path}", {
-        owner,
-        repo,
-        path,
-        ref,
-        headers: { accept: "application/vnd.github.raw+json" }
-      });
+      const response = await withGitHubRetry(() =>
+        octokit.request("GET /repos/{owner}/{repo}/contents/{path}", {
+          owner,
+          repo,
+          path,
+          ref,
+          headers: { accept: "application/vnd.github.raw+json" }
+        })
+      );
       if (typeof response.data !== "string") {
         throw new TypeError("GitHub did not return raw file content.");
       }
@@ -673,13 +781,15 @@ export function createGitHubGateway(token: string): GitHubGateway {
     listPullRequestFiles: async ({ owner, repo, pullNumber }) => {
       const files = await collectApiPages(
         async (page) => {
-          const response = await octokit.rest.pulls.listFiles({
-            owner,
-            repo,
-            pull_number: pullNumber,
-            per_page: CHECK_RUN_PAGE_SIZE,
-            page
-          });
+          const response = await withGitHubRetry(() =>
+            octokit.rest.pulls.listFiles({
+              owner,
+              repo,
+              pull_number: pullNumber,
+              per_page: CHECK_RUN_PAGE_SIZE,
+              page
+            })
+          );
           if (!Array.isArray(response.data)) {
             throw incompleteEvidence("pull-request files", MAX_PULL_REQUEST_FILES);
           }
@@ -711,13 +821,15 @@ export function createGitHubGateway(token: string): GitHubGateway {
     listPullRequestReviews: async ({ owner, repo, pullNumber }) => {
       const reviews = await collectApiPages(
         async (page) => {
-          const response = await octokit.rest.pulls.listReviews({
-            owner,
-            repo,
-            pull_number: pullNumber,
-            per_page: CHECK_RUN_PAGE_SIZE,
-            page
-          });
+          const response = await withGitHubRetry(() =>
+            octokit.rest.pulls.listReviews({
+              owner,
+              repo,
+              pull_number: pullNumber,
+              per_page: CHECK_RUN_PAGE_SIZE,
+              page
+            })
+          );
           if (!Array.isArray(response.data)) {
             throw incompleteEvidence("pull-request reviews", MAX_REVIEWS);
           }
@@ -741,11 +853,13 @@ export function createGitHubGateway(token: string): GitHubGateway {
     },
     getRepositoryPermission: async ({ owner, repo, login }) => {
       try {
-        const response = await octokit.rest.repos.getCollaboratorPermissionLevel({
-          owner,
-          repo,
-          username: login
-        });
+        const response = await withGitHubRetry(() =>
+          octokit.rest.repos.getCollaboratorPermissionLevel({
+            owner,
+            repo,
+            username: login
+          })
+        );
         return permission(response.data.permission);
       } catch (error) {
         if (
@@ -759,27 +873,29 @@ export function createGitHubGateway(token: string): GitHubGateway {
       }
     },
     listClosingIssueNumbers: async ({ owner, repo, pullNumber }) => {
-      const response = await octokit.graphql<{
-        repository: {
-          pullRequest: {
-            closingIssuesReferences: {
-              nodes: readonly ({ readonly number: number } | null)[];
-              pageInfo?: { readonly hasNextPage: boolean };
-            };
+      const response = await withGitHubRetry(() =>
+        octokit.graphql<{
+          repository: {
+            pullRequest: {
+              closingIssuesReferences: {
+                nodes: readonly ({ readonly number: number } | null)[];
+                pageInfo?: { readonly hasNextPage: boolean };
+              };
+            } | null;
           } | null;
-        } | null;
-      }>(
-        `query ReviewReadyClosingIssues($owner: String!, $repo: String!, $pullNumber: Int!) {
-          repository(owner: $owner, name: $repo) {
-            pullRequest(number: $pullNumber) {
-              closingIssuesReferences(first: 100) {
-                nodes { number }
-                pageInfo { hasNextPage }
+        }>(
+          `query ReviewReadyClosingIssues($owner: String!, $repo: String!, $pullNumber: Int!) {
+            repository(owner: $owner, name: $repo) {
+              pullRequest(number: $pullNumber) {
+                closingIssuesReferences(first: 100) {
+                  nodes { number }
+                  pageInfo { hasNextPage }
+                }
               }
             }
-          }
-        }`,
-        { owner, repo, pullNumber }
+          }`,
+          { owner, repo, pullNumber }
+        )
       );
       const references = response.repository?.pullRequest?.closingIssuesReferences;
       if (references === undefined) {

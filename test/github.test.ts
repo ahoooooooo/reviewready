@@ -29,9 +29,15 @@ const event = {
 describe("GitHub evidence fingerprint", () => {
   it("returns a cryptographic digest for the canonical evidence set", () => {
     const digest = fingerprintGitHubEvidence(
-      [{ name: "test", conclusion: "success", app: "github-actions" }],
-      [{ login: "maintainer", state: "APPROVED", submittedAt: "2026-08-11T00:00:00Z" }],
-      [7]
+      [
+        { name: "test", conclusion: "success", app: "github-actions" },
+        { name: "lint", conclusion: "success", app: "github-actions" }
+      ],
+      [
+        { login: "maintainer", state: "APPROVED", submittedAt: "2026-08-11T00:00:00Z" },
+        { login: "second", state: "COMMENTED" }
+      ],
+      [7, 8]
     );
 
     expect(digest).toMatch(/^[0-9a-f]{64}$/u);
@@ -150,6 +156,46 @@ describe("loadGitHubPullRequest", () => {
     await loadGitHubPullRequest(event, ".reviewready.yml", api);
 
     expect(permission).toHaveBeenCalledTimes(2);
+  });
+
+  it("canonicalizes multiple reviewer permissions and snapshot labels", async () => {
+    const getPullRequestSnapshot = vi.fn(() =>
+      Promise.resolve({
+        number: 42,
+        baseSha,
+        headSha,
+        updatedAt: "2026-08-11T00:00:00Z",
+        body: event.pull_request.body,
+        labels: ["zeta", "alpha"]
+      })
+    );
+    const listPullRequestReviews = vi.fn(() =>
+      Promise.resolve([
+        { login: "maintainer", state: "APPROVED", submittedAt: "2026-08-11T00:00:00Z" },
+        { login: "second", state: "APPROVED", submittedAt: "2026-08-11T00:01:00Z" }
+      ])
+    );
+    const api = gateway({ getPullRequestSnapshot, listPullRequestReviews });
+
+    await expect(loadGitHubPullRequest(event, ".reviewready.yml", api)).resolves.toBeDefined();
+  });
+
+  it("fails closed when reviewer permission association exceeds its time bound", async () => {
+    vi.useFakeTimers();
+    try {
+      const api = gateway({
+        getRepositoryPermission: vi.fn(() => new Promise<GitHubPermission>(() => undefined))
+      });
+      const result = loadGitHubPullRequest(event, ".reviewready.yml", api);
+      const assertion = expect(result).rejects.toMatchObject({
+        code: "GITHUB_EVIDENCE_INCOMPLETE"
+      });
+      await vi.advanceTimersByTimeAsync(120_000);
+
+      await assertion;
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("fails closed when reviewer permission changes between evidence reads", async () => {
