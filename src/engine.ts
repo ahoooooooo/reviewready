@@ -257,6 +257,7 @@ interface MarkdownHeading {
 
 const headingPattern = /^\s{0,3}(#{1,6})[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$/u;
 const visibleMarkdownTextPattern = /[^\p{White_Space}\p{Control}\p{Format}\p{Mark}]/u;
+const indentedCodePattern = /^(?: {4}|\t)/u;
 
 function markdownHeading(line: string): MarkdownHeading | undefined {
   const match = headingPattern.exec(line);
@@ -272,6 +273,9 @@ function markdownHeading(line: string): MarkdownHeading | undefined {
 }
 
 function hasVisibleMarkdownText(line: string): boolean {
+  if (indentedCodePattern.test(line)) {
+    return false;
+  }
   return visibleMarkdownTextPattern.test(stripInvisibleHtmlEntities(line));
 }
 

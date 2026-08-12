@@ -5,7 +5,16 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "json-summary"],
+      include: [
+        "src/engine.ts",
+        "src/input.ts",
+        "src/matcher.ts",
+        "src/policy.ts",
+        "src/github.ts",
+        "src/github-api.ts"
+      ],
       thresholds: {
+        perFile: true,
         lines: 90,
         functions: 90,
         branches: 85,

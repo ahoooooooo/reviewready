@@ -180,6 +180,14 @@ rules:
     ).toBe("missing");
   });
 
+  it("does not count indented code blocks as visible section evidence", () => {
+    const result = evaluate(policy, input({ body: "## Testing\n    hidden command output" }));
+
+    expect(
+      result.requirements.find((requirement) => requirement.type === "pr_body_section")?.status
+    ).toBe("missing");
+  });
+
   it("does not count default-ignorable characters as visible section content", () => {
     const result = evaluate(policy, input({ body: "## Testing\n\u200B" }));
 

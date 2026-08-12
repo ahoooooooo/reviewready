@@ -132,7 +132,9 @@ stderr.
 - Integration tests cover CLI exit codes and GitHub event normalization.
 - Security regression tests cover path traversal, malicious headings, untrusted
   strings, self-modified head policy, pagination, and API failures.
-- Core modules maintain at least 90% line/function/statement and 85% branch coverage.
+- The core trust modules (`engine.ts`, `input.ts`, `matcher.ts`, `policy.ts`,
+  `github.ts`, and `github-api.ts`) each maintain at least 90% line/function/
+  statement and 85% branch coverage; the coverage gate enforces this per file.
 - `npm run check` performs formatting, linting, type checking, tests, and production
   bundling from a clean dependency install.
 
