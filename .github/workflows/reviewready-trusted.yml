@@ -17,7 +17,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Evaluate pull-request evidence from the trusted base workflow
-        uses: ahoooooooo/reviewready@9cb239e3b81e00b0f82239eaf43843863ab51e2d # v1.0.6
+        uses: ahoooooooo/reviewready@f21ed2e94efedb01f73e518c39765cef72c58e1c # v1.0.7
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           policy-path: .reviewready.yml

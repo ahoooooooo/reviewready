@@ -83,7 +83,7 @@ untrusted pull-request revision must never be a required readiness check.
 
 The Action source supports `pull_request`, `pull_request_review`, and
 `pull_request_target` events. The staged trusted workflow uses
-`pull_request_target` only after it is pinned to the published v1.0.6 commit;
+`pull_request_target` only after it is pinned to the published v1.0.7 commit;
 the pre-publication bootstrap pin remains an explicit non-authoritative state.
 Review events may be submitted, edited, or dismissed. For GitHub review data,
 `APPROVED`, `CHANGES_REQUESTED`, and `DISMISSED` states require a valid
