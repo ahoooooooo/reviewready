@@ -3,12 +3,24 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 const workflow = await readFile(".github/workflows/reviewready-trusted.yml", "utf8");
+const canonicalRepository = `ah${"o".repeat(8)}/reviewready`;
 
 describe("trusted ReviewReady workflow", () => {
+  it("uses the canonical GitHub repository as its immutable trust root", () => {
+    expect(workflow).toContain(`uses: ${canonicalRepository}@`);
+  });
+
   it("runs from pull_request_target with a fully immutable Action pin", () => {
     expect(workflow).toContain("pull_request_target:");
-    expect(workflow).toMatch(/uses: ahooooooo\/reviewready@[0-9a-f]{40}(?:\s+#.*)?\r?\n/u);
-    expect(workflow).not.toMatch(/uses: ahooooooo\/reviewready@(?:main|v1|latest)\b/u);
+    expect(workflow).toMatch(
+      new RegExp(
+        `uses: ${canonicalRepository.replace("/", "\\/")}@[0-9a-f]{40}(?:\\s+#.*)?\\r?\\n`,
+        "u"
+      )
+    );
+    expect(workflow).not.toMatch(
+      new RegExp(`uses: ${canonicalRepository.replace("/", "\\/")}@(?:main|v1|latest)\\b`, "u")
+    );
   });
 
   it("has read-only permissions and never checks out or runs pull-request code", () => {
