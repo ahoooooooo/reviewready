@@ -9,6 +9,7 @@ policy. It never claims code is correct and never approves or merges a PR.
 - `docs/product-spec.md`: v1 behavior and non-goals.
 - `docs/architecture.md`: trust boundaries and module rules.
 - `docs/ai-development.md`: how humans and coding agents evolve this repository.
+- `docs/exec-plans/active/post-v1.md`: fixed post-v1 node order and promotion gates.
 - `docs/exec-plans/completed/v1.md`: historical v1 delivery plan and decision log.
 - `docs/releasing.md`: current release and artifact-verification process.
 - `docs/release-evidence-v1.md`: historical local v1 release-candidate verification.

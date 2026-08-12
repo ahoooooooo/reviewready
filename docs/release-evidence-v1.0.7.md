@@ -9,7 +9,7 @@ the release was treated as complete.
 
 - [x] The package and lockfile versions are aligned at 1.0.7.
 - [x] The published npm README identifies the v1.0.7 CLI/Action and schema
-      contract; its advisory example retains the earlier immutable v1.0.6 SHA
+      contract; its advisory example retains the earlier commit-pinned v1.0.6 SHA
       because an already-published package cannot be rewritten.
 - [x] The exact tarball hashes, registry provenance, GitHub Release, and stable
       `v1` ref are recorded in `docs/release-evidence-v1.0.7.json`.
@@ -28,7 +28,8 @@ the release was treated as complete.
 
 - [x] Publish `@ahoooooo/reviewready@1.0.7` through npm Trusted Publishing.
 - [x] Verify the exact registry artifact and npm provenance.
-- [x] Create immutable Git tag `v1.0.7` and its GitHub Release.
+- [x] Create semantic-version Git tag `v1.0.7`, treated as immutable by project
+      policy, and its GitHub Release.
 - [x] Move stable `v1` only after npm and GitHub release verification.
 - [x] Update the trusted workflow to the exact v1.0.7 release commit in this
       protected follow-up change.
@@ -38,7 +39,7 @@ the release was treated as complete.
 ## Verified coordinates
 
 - Package: `@ahoooooo/reviewready@1.0.7`
-- Release candidate, immutable `v1.0.7`, stable `v1`, and release target:
+- Release candidate, semantic-version `v1.0.7`, stable `v1`, and release target:
   `f21ed2e94efedb01f73e518c39765cef72c58e1c`
 - Registry tarball: `https://registry.npmjs.org/@ahoooooo/reviewready/-/reviewready-1.0.7.tgz`
 - Local audited SHA-512: `8df75a340d9196d0e309b60ab6e36eb0f38ab5ead7f0acddf15c663791c6082490a7a1c5f69c4812aa0cf93fc07ea8caea1fd1b28e82e49fa9fa8a58912b51d5`
@@ -60,6 +61,8 @@ regression test without changing the published bytes or release refs.
 
 This evidence proves artifact and release-coordinate consistency; it does not
 claim that all GitHub issues are closed or that external governance blockers
-have been resolved.
+have been resolved. GitHub release immutability was not enabled for this
+historical release, so the recorded SHA alignment is evidence of observed state,
+not proof that the platform prevents a future ref or Release mutation.
 
 No placeholder checksum or provenance value is evidence.

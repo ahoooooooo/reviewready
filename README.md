@@ -20,17 +20,24 @@ pull-request code.
 ## Current status
 
 The latest published CLI and Action are v1.0.7. Its exact audited tarball, npm
-provenance, immutable Git tag, GitHub Release, and stable Action ref have all
-been verified. The v1.0.6 trust-core and live-ingress contracts are released,
-but a normal `pull_request` workflow is still not a trusted enforcement root:
-it is loaded from the pull-request merge ref and can be modified by the
-contribution it evaluates. Loading policy contents from the base SHA does not
-by itself protect the caller workflow, Action pin, or `policy-path`.
+provenance, semantic-version tag target, GitHub Release target, and stable Action
+ref have all been verified against one commit. The v1.0.6 trust-core and
+live-ingress contracts are released, but a normal `pull_request` workflow is
+still not a trusted enforcement root: it is loaded from the pull-request merge
+ref and can be modified by the contribution it evaluates. Loading policy
+contents from the base SHA does not by itself protect the caller workflow,
+Action pin, or `policy-path`.
 
-Issue [#35](https://github.com/ahoooooooo/reviewready/issues/35) tracks the trusted
-enforcement topology. [SECURITY.md](SECURITY.md) lists the other current evidence
-boundary limitations. Existing immutable release tags will not be rewritten;
-corrections belong in a new patch release.
+Issue [#54](https://github.com/ahoooooooo/reviewready/issues/54) tracks live
+repository governance. The current required check selects the GitHub Actions
+App, which does not uniquely bind one workflow definition or event; the
+dedicated-provider contract is tracked in
+[#56](https://github.com/ahoooooooo/reviewready/issues/56).
+[SECURITY.md](SECURITY.md) lists the other current evidence boundaries.
+Semantic-version release tags will not be rewritten under project policy, but
+GitHub release immutability was not enabled for the historical v1.0.7 release;
+[#60](https://github.com/ahoooooooo/reviewready/issues/60) tracks protection for
+future releases.
 
 ## Quick start
 
@@ -46,6 +53,12 @@ The Action can also be used in an advisory workflow:
 ```yaml
 - uses: ahoooooooo/reviewready@9cb239e3b81e00b0f82239eaf43843863ab51e2d # v1.0.6
 ```
+
+Both advisory examples intentionally retain the audited v1.0.6 commit shipped
+in the published v1.0.7 package README, because published npm package bytes
+cannot be rewritten. The repository's checked-in trusted reference uses the
+verified v1.0.7 release commit; #60 tracks reconciliation of every public
+example in a future, separately authorized release.
 
 The mutable `v1` tag is convenient, but an immutable verified commit is safer.
 The advisory workflow below must not be configured as the repository's only
