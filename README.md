@@ -19,7 +19,7 @@ pull-request code.
 
 ## Current status
 
-The latest published CLI and Action are v1.0.6. Its exact audited tarball, npm
+The latest published CLI and Action are v1.0.7. Its exact audited tarball, npm
 provenance, immutable Git tag, GitHub Release, and stable Action ref have all
 been verified. The v1.0.6 trust-core and live-ingress contracts are released,
 but a normal `pull_request` workflow is still not a trusted enforcement root:
@@ -54,8 +54,9 @@ an independent repository or organization rule.
 
 Version 1 keeps the policy, result, and exit-code contracts stable. v1.0.4
 restores the original v1 public requirement-key encoding after the historical
-v1.0.3 regression, and v1.0.5 adds bounded webhook, App, audit, and release
-contracts. Older release output is not rewritten.
+v1.0.3 regression, v1.0.5 adds bounded webhook, App, audit, and release
+contracts, and v1.0.6 hardens the deterministic trust core. v1.0.7 synchronizes
+the published documentation. Older release output is not rewritten.
 
 ## How it works
 
@@ -113,7 +114,7 @@ Action-only repositories can copy the schema into the repository or reference an
 immutable release URL:
 
 ```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/ahoooooooo/reviewready/v1.0.6/reviewready.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ahoooooooo/reviewready/v1.0.7/reviewready.schema.json
 ```
 
 Keep the schema version aligned with the Action or CLI version being used. A local
@@ -184,9 +185,9 @@ that may involve:
 - delegating approval freshness and required human review to GitHub branch rules
   when review events cannot be reconciled through a trusted workflow.
 
-The checked-in reference is now pinned in a protected change to the exact
-verified v1.0.6 release commit. It is still not an authoritative merge gate
-until the workflow and policy path are independently protected, its unique
+The checked-in reference is pinned in a protected change to an immutable
+verified ReviewReady release commit. It is still not an authoritative merge
+gate until the workflow and policy path are independently protected, its unique
 job/check identity is required in GitHub rules, and branch freshness and review
 reconciliation are verified in repository settings. The trusted workflow uses
 pull_request_target, read-only permissions, and no checkout, download, cache

@@ -2,8 +2,10 @@ import { readFile } from "node:fs/promises";
 
 import { describe, expect, it } from "vitest";
 
+const packageManifest = JSON.parse(await readFile("package.json", "utf8")) as { version?: unknown };
 const workflow = await readFile(".github/workflows/reviewready-trusted.yml", "utf8");
 const readme = await readFile("README.md", "utf8");
+const changelog = await readFile("CHANGELOG.md", "utf8");
 const canonicalRepository = `ah${"o".repeat(8)}/reviewready`;
 const publishedReleaseCommit = "9cb239e3b81e00b0f82239eaf43843863ab51e2d";
 
@@ -38,6 +40,13 @@ describe("trusted ReviewReady workflow", () => {
     expect(readme).toContain(`uses: ${canonicalRepository}@${publishedReleaseCommit} # v1.0.6`);
     expect(workflow).not.toContain("main v1.0.6 candidate");
     expect(readme).not.toContain("v1.0.5 bootstrap pin");
+  });
+
+  it("keeps the package version, README status, and changelog release aligned", () => {
+    expect(typeof packageManifest.version).toBe("string");
+    const version = String(packageManifest.version);
+    expect(readme).toContain(`latest published CLI and Action are v${version}`);
+    expect(changelog).toContain(`## [${version}]`);
   });
 
   it("has read-only permissions and never checks out or runs pull-request code", () => {

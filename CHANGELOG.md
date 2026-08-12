@@ -42,6 +42,13 @@ the project uses semantic versioning.
   advisory and authoritative deployment.
 - Document editor schema options for repositories consuming ReviewReady.
 
+## [1.0.7] - 2026-08-12
+
+### Changed
+
+- Synchronize the published npm README, release version, and schema reference
+  with the verified v1.0.7 release coordinates.
+
 ### Changed
 
 - Cancel superseded CI runs for the same ref, bound job execution time, and verify
