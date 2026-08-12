@@ -288,14 +288,14 @@ jobs:
               echo "Could not determine whether the GitHub release already exists." >&2
               exit 1
             fi
-            gh release create "v$RELEASE_VERSION" --target "$RELEASE_COMMIT" --title "ReviewReady $RELEASE_VERSION" --notes-file "$RUNNER_TEMP/reviewready-release/release-notes.md"
+            gh release create "v$RELEASE_VERSION" --target "$RELEASE_COMMIT" --title "ReviewReady $RELEASE_VERSION" --notes-file "$RUNNER_TEMP/reviewready-release/release-notes.md" --repo "$GITHUB_REPOSITORY"
           fi
-          release_target="$(gh release view "v$RELEASE_VERSION" --json targetCommitish --jq '.targetCommitish')"
+          release_target="$(gh release view "v$RELEASE_VERSION" --json targetCommitish --jq '.targetCommitish' --repo "$GITHUB_REPOSITORY")"
           if [[ "$release_target" != "$RELEASE_COMMIT" ]]; then
             echo "GitHub release target does not match the verified main revision." >&2
             exit 1
           fi
-          release_metadata="$(gh release view "v$RELEASE_VERSION" --json tagName,targetCommitish,isDraft,isPrerelease,name,body)"
+          release_metadata="$(gh release view "v$RELEASE_VERSION" --json tagName,targetCommitish,isDraft,isPrerelease,name,body --repo "$GITHUB_REPOSITORY")"
           latest_release_tag="$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq '.tag_name')"
           RELEASE_METADATA="$release_metadata" LATEST_RELEASE_TAG="$latest_release_tag" node --input-type=module -e 'import fs from "node:fs"; const metadata=JSON.parse(process.env.RELEASE_METADATA ?? "{}"); const expectedBody=fs.readFileSync(process.env.RUNNER_TEMP+"/reviewready-release/release-notes.md","utf8").trim(); if (metadata.tagName !== "v"+process.env.RELEASE_VERSION || metadata.targetCommitish !== process.env.RELEASE_COMMIT || metadata.isDraft !== false || metadata.isPrerelease !== false || metadata.name !== "ReviewReady "+process.env.RELEASE_VERSION || metadata.body?.trim() !== expectedBody || process.env.LATEST_RELEASE_TAG !== "v"+process.env.RELEASE_VERSION) throw new Error("GitHub release metadata does not match the verified release candidate");'
           resolve_tag_commit() {

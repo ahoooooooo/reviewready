@@ -78,6 +78,21 @@ describe("release readiness metadata", () => {
     expect(tagCreation).toBeGreaterThan(registryVerification);
   });
 
+  it("passes the repository explicitly to release CLI calls in the checkout-free publish job", async () => {
+    const workflow = await readFile(".github/workflows/release-publish.yml", "utf8");
+    const releaseStart = workflow.indexOf("- name: Create and verify the immutable GitHub release");
+    const stableTagStart = workflow.indexOf("- name: Move and verify the stable v1 Action tag");
+    const releaseStep = workflow.slice(releaseStart, stableTagStart);
+    const releaseCommands = [...releaseStep.matchAll(/gh release (?:create|view)[^\r\n]+/gu)].map(
+      ([command]) => command
+    );
+
+    expect(releaseCommands).toHaveLength(3);
+    expect(
+      releaseCommands.every((command) => command.includes('--repo "$GITHUB_REPOSITORY"'))
+    ).toBe(true);
+  });
+
   it("resolves an existing annotated release tag before a resumable publish", async () => {
     const workflow = await readFile(".github/workflows/release-publish.yml", "utf8");
     const start = workflow.indexOf("- name: Bind the immutable release candidate");
