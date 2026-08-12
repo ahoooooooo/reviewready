@@ -1406,6 +1406,37 @@ describe("createGitHubGateway", () => {
       api.listPullRequestReviews({ owner: "octocat", repo: "demo", pullNumber: 42 })
     ).rejects.toMatchObject({ code: "GITHUB_EVIDENCE_INCOMPLETE" });
   });
+
+  it.each([
+    [
+      "duplicate next relations",
+      '<https://api.github.test?page=2>; rel="next", <https://api.github.test?page=3>; rel="next"'
+    ],
+    ["duplicate next page parameters", '<https://api.github.test?page=2&page=999>; rel="next"']
+  ])("rejects ambiguous next-page Link metadata (%s)", async (_label, link) => {
+    const client = fakeOctokit();
+    vi.mocked(client.rest.pulls.listReviews).mockImplementation((arguments_) => {
+      const page = (arguments_ as { readonly page?: number }).page ?? 1;
+      return Promise.resolve(
+        page === 1
+          ? {
+              data: Array.from({ length: 100 }, () => ({
+                user: { login: "reviewer" },
+                state: "COMMENTED"
+              })),
+              headers: { link }
+            }
+          : { data: [], headers: {} }
+      ) as never;
+    });
+    vi.mocked(getOctokit).mockReturnValue(client);
+    const api = createGitHubGateway("secret");
+
+    await expect(
+      api.listPullRequestReviews({ owner: "octocat", repo: "demo", pullNumber: 42 })
+    ).rejects.toMatchObject({ code: "GITHUB_EVIDENCE_INCOMPLETE" });
+  });
+
   it("rejects a pull request file response at the API boundary", async () => {
     const client = fakeOctokit();
     vi.mocked(client.rest.pulls.listFiles).mockResolvedValueOnce({

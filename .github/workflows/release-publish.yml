@@ -82,7 +82,8 @@ jobs:
               exit 1
             fi
           fi
-          echo "RELEASE_COMMIT=$GITHUB_SHA" >> "$GITHUB_ENV"
+          RELEASE_COMMIT="$GITHUB_SHA"
+          echo "RELEASE_COMMIT=$RELEASE_COMMIT" >> "$GITHUB_ENV"
           git checkout --detach "$RELEASE_COMMIT"
           node --input-type=module -e 'import fs from "node:fs"; const p=JSON.parse(fs.readFileSync("package.json","utf8")); if (p.version !== process.env.RELEASE_VERSION) { throw new Error("candidate package version does not match dispatch input"); }'
 

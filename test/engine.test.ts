@@ -196,6 +196,17 @@ rules:
     ).toBe("missing");
   });
 
+  it.each(["## Testing\n[](#)", "## Testing\n[<!-- hidden -->](https://example.test)"])(
+    "does not count empty Markdown markers as visible section content",
+    (body) => {
+      const result = evaluate(policy, input({ body }));
+
+      expect(
+        result.requirements.find((requirement) => requirement.type === "pr_body_section")?.status
+      ).toBe("missing");
+    }
+  );
+
   it("ignores headings and attestations inside fenced code blocks", () => {
     const result = evaluate(
       policy,

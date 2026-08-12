@@ -23,6 +23,13 @@ the project uses semantic versioning.
   policy text containing control, format, bidi, or multiline characters.
 - Fail closed at Check Run/status and rename-path expansion boundaries, with one
   bounded GitHub retry that respects rate-limit headers.
+- Reject empty inline/reference Markdown link markers and incomplete anonymous
+  actionable reviews instead of treating their shape as visible evidence.
+- Fail closed on ambiguous Link pagination metadata and probe partial audit pages
+  for hidden continuation data; keep runtime policy descriptions aligned with
+  the strict policy text schema.
+- Correct the canonical Action repository examples and bind the release audit
+  checkout to the selected commit before running any release gate.
 
 ### Documentation
 
