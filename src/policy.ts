@@ -2,9 +2,24 @@ import { parse } from "yaml";
 import { z } from "zod";
 
 import { checkConclusions, policyLimits, type Policy } from "./domain.js";
-import { PolicyError } from "./errors.js";
+import { escapeControlCharacters, PolicyError } from "./errors.js";
 
-const text = z.string().trim().min(1).max(policyLimits.maxTextLength);
+const policyTextRuntimePattern = /^(?!\s)(?!.*\s$)(?!.*[\p{Control}\p{Format}\u2028\u2029]).+$/u;
+export const POLICY_TEXT_SCHEMA_PATTERN =
+  "^(?!\\s)(?!.*\\s$)(?!.*[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u0600-\\u0605\\u061C\\u06DD\\u070F\\u0890-\\u0891\\u08E2\\u180E\\u200B-\\u200F\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\u2028\\u2029\\uFEFF\\uFFF9-\\uFFFB]).+$";
+const policyTextErrorPrefix = "Policy text is unsafe: ";
+const text = z
+  .string()
+  .min(1)
+  .max(policyLimits.maxTextLength)
+  .superRefine((value, context) => {
+    if (!policyTextRuntimePattern.test(value)) {
+      context.addIssue({
+        code: "custom",
+        message: policyTextErrorPrefix + escapeControlCharacters(value)
+      });
+    }
+  });
 const matchValues = z.array(text).min(1).max(policyLimits.maxMatchValues);
 
 const matchSetSchema = z
@@ -146,8 +161,11 @@ export function parsePolicy(source: string): Policy {
 
   const parsed = policySchema.safeParse(document);
   if (!parsed.success) {
+    const textError = parsed.error.issues.some((issue) =>
+      issue.message.startsWith(policyTextErrorPrefix)
+    );
     throw new PolicyError(
-      "POLICY_SCHEMA_INVALID",
+      textError ? "POLICY_TEXT_INVALID" : "POLICY_SCHEMA_INVALID",
       `Policy does not match version 1 schema: ${formatSchemaIssues(parsed.error)}`
     );
   }

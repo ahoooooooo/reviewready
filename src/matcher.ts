@@ -15,6 +15,7 @@ type PathMatcher = (value: string) => boolean;
 
 export class MatchOperationBudget {
   private operations = 0;
+  private readonly pathMatchers = new Map<string, PathMatcher>();
 
   public consume(): void {
     if (this.operations >= MATCHING_OPERATION_BUDGET) {
@@ -24,6 +25,18 @@ export class MatchOperationBudget {
       );
     }
     this.operations += 1;
+  }
+
+  public pathMatcher(pattern: string): PathMatcher {
+    const existing = this.pathMatchers.get(pattern);
+    if (existing !== undefined) {
+      return existing;
+    }
+
+    this.consume();
+    const matcher = micromatch.matcher(pattern, pathMatcherOptions);
+    this.pathMatchers.set(pattern, matcher);
+    return matcher;
   }
 }
 
@@ -84,20 +97,8 @@ function matchesPaths(
   matchSet: MatchSet,
   budget: MatchOperationBudget
 ): boolean {
-  const compiled = new Map<string, PathMatcher>();
-  const getMatcher = (pattern: string): PathMatcher => {
-    const existing = compiled.get(pattern);
-    if (existing !== undefined) {
-      return existing;
-    }
-
-    budget.consume();
-    const matcher = micromatch.matcher(pattern, pathMatcherOptions);
-    compiled.set(pattern, matcher);
-    return matcher;
-  };
   const isMatch = (value: string, pattern: string): boolean => {
-    const matcher = getMatcher(pattern);
+    const matcher = budget.pathMatcher(pattern);
     budget.consume();
     return matcher(value);
   };

@@ -32,6 +32,16 @@
   "bin": {
     "reviewready": "dist/cli.js"
   },
+  "exports": {
+    ".": {
+      "types": "./dist/cli.d.ts",
+      "default": "./dist/cli.js"
+    },
+    "./package.json": "./package.json",
+    "./reviewready.schema.json": "./reviewready.schema.json",
+    "./reviewready.audit.schema.json": "./reviewready.audit.schema.json",
+    "./reviewready.result.schema.json": "./reviewready.result.schema.json"
+  },
   "files": [
     "dist/*.js",
     "dist/*.d.ts",
@@ -62,11 +72,11 @@
     "prepack": "npm run build"
   },
   "dependencies": {
-    "@actions/core": "^3.0.1",
-    "@actions/github": "^9.1.1",
-    "micromatch": "^4.0.8",
-    "yaml": "^2.9.0",
-    "zod": "^4.4.3"
+    "@actions/core": "3.0.1",
+    "@actions/github": "9.1.1",
+    "micromatch": "4.0.8",
+    "yaml": "2.9.0",
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

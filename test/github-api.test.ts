@@ -147,15 +147,14 @@ describe("collectCheckRunPages", () => {
     expect(fetchPage).toHaveBeenNthCalledWith(2, 2);
   });
 
-  it("accepts exactly 1,000 runs only after confirming there is no next page", async () => {
+  it("fails closed at the exact Check Run collection boundary", async () => {
     const fetchPage = vi.fn((page: number) =>
       Promise.resolve(page <= 10 ? Array.from({ length: 100 }, () => completed("check")) : [])
     );
 
-    const runs = await collectCheckRunPages(fetchPage);
-
-    expect(runs).toHaveLength(1000);
-    expect(fetchPage).toHaveBeenCalledTimes(11);
+    await expect(collectCheckRunPages(fetchPage)).rejects.toMatchObject({
+      code: "GITHUB_EVIDENCE_INCOMPLETE"
+    });
   });
 
   it("fails closed when a check-run page exists beyond the safe boundary", async () => {
@@ -176,6 +175,70 @@ describe("collectCheckRunPages", () => {
     await expect(collectCheckRunPages(fetchPage)).rejects.toMatchObject({
       code: "GITHUB_EVIDENCE_INCOMPLETE"
     });
+  });
+
+  it("fails closed when Check Runs and legacy statuses exceed the normalized evidence bound", async () => {
+    const client = fakeOctokit();
+    vi.mocked(client.rest.checks.listForRef).mockImplementation((arguments_) => {
+      const page = (arguments_ as { readonly page?: number }).page ?? 1;
+      const count = page <= 5 ? 100 : page === 6 ? 1 : 0;
+      return Promise.resolve({
+        data: {
+          total_count: 501,
+          check_runs: Array.from({ length: count }, (_, index) => ({
+            id: page * 100 + index,
+            name: `check-${String(page * 100 + index)}`,
+            status: "completed",
+            conclusion: "success",
+            completed_at: "2026-08-11T10:00:00Z",
+            app: { slug: "github-actions" }
+          }))
+        },
+        headers: {}
+      }) as never;
+    });
+    vi.mocked(client.rest.repos.listCommitStatusesForRef).mockImplementation((arguments_) => {
+      const page = (arguments_ as { readonly page?: number }).page ?? 1;
+      const count = page <= 5 ? 100 : page === 6 ? 1 : 0;
+      return Promise.resolve({
+        data: Array.from({ length: count }, (_, index) => ({
+          id: page * 100 + index,
+          context: `status-${String(page * 100 + index)}`,
+          state: "success",
+          updated_at: "2026-08-11T10:00:00Z"
+        })),
+        headers: {}
+      }) as never;
+    });
+    vi.mocked(getOctokit).mockReturnValue(client);
+    const api = createGitHubGateway("secret");
+
+    await expect(
+      api.listCheckRuns({ owner: "octocat", repo: "demo", ref: "head" })
+    ).rejects.toMatchObject({ code: "GITHUB_EVIDENCE_INCOMPLETE" });
+  });
+
+  it("retries one rate-limited evidence page using the bounded Retry-After delay", async () => {
+    const client = fakeOctokit();
+    let calls = 0;
+    vi.mocked(client.rest.checks.listForRef).mockImplementation(() => {
+      calls += 1;
+      if (calls === 1) {
+        const error = Object.assign(new Error("rate limited"), {
+          status: 429,
+          response: { headers: { "retry-after": "0" } }
+        });
+        return Promise.reject(error);
+      }
+      return Promise.resolve({ data: { total_count: 0, check_runs: [] }, headers: {} }) as never;
+    });
+    vi.mocked(getOctokit).mockReturnValue(client);
+    const api = createGitHubGateway("secret");
+
+    await expect(
+      api.listCheckRuns({ owner: "octocat", repo: "demo", ref: "head" })
+    ).resolves.toEqual([]);
+    expect(calls).toBe(3);
   });
 });
 

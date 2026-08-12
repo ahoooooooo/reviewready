@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { checkConclusions, policyLimits } from "../src/domain.js";
 import type { PolicyError } from "../src/errors.js";
-import { parsePolicy } from "../src/policy.js";
+import { parsePolicy, POLICY_TEXT_SCHEMA_PATTERN } from "../src/policy.js";
 
 const validPolicy = `
 version: 1
@@ -71,6 +71,20 @@ rules:
     expect(() =>
       parsePolicy(validPolicy.replace("version: 1", "version: 1\nallow_merge: true"))
     ).toThrow(expect.objectContaining<Partial<PolicyError>>({ code: "POLICY_SCHEMA_INVALID" }));
+  });
+
+  it.each([
+    ["leading whitespace", " Testing"],
+    ["trailing whitespace", "Testing "],
+    ["control character", "Testing\u0007"],
+    ["bidirectional control", "Testing\u202E"],
+    ["multiline text", "Testing\ncontinued"]
+  ])("rejects unsafe policy text (%s)", (_name, value) => {
+    const source = validPolicy.replace("heading: Testing", `heading: ${JSON.stringify(value)}`);
+
+    expect(() => parsePolicy(source)).toThrow(
+      expect.objectContaining<Partial<PolicyError>>({ code: "POLICY_TEXT_INVALID" })
+    );
   });
 
   it("rejects duplicate rule identifiers", () => {
@@ -154,7 +168,7 @@ rules:
 
     expect(schema.properties.rules.maxItems).toBe(policyLimits.maxRules);
     expect(schema.$defs.text.maxLength).toBe(policyLimits.maxTextLength);
-    expect(schema.$defs.text.pattern).toBe("\\S");
+    expect(schema.$defs.text.pattern).toBe(POLICY_TEXT_SCHEMA_PATTERN);
     expect(schema.$defs.matchValues.maxItems).toBe(policyLimits.maxMatchValues);
     expect(schema.$defs.rule.properties.require.maxItems).toBe(policyLimits.maxRequirementsPerRule);
     expect(schema.$defs.conclusion.enum).toEqual([...checkConclusions]);
