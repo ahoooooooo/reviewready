@@ -48,7 +48,7 @@ function publicRequirementKey(requirement: Requirement): string {
     case "linked_issue":
       return "linked_issue";
     case "check":
-      return `check:${requirement.name}:${[...new Set(requirement.conclusions)].sort().join(",")}:${requirement.app ?? ""}`;
+      return `check:${requirement.name}:${[...requirement.conclusions].sort().join(",")}:${requirement.app ?? ""}`;
     case "maintainer_review":
       return `maintainer_review:${String(requirement.minimum)}`;
     case "human_attestation":
@@ -322,7 +322,7 @@ function hasAttestation(body: string, wantedText: string): boolean {
 
   return lines.some((line) => {
     const match = /^[ \t]{0,3}[-*+][ \t]+\[[xX]\][ \t]+(.+?)[ \t]*$/u.exec(line);
-    return match?.[1]?.trim() === wantedText;
+    return match?.[1]?.trim() === wantedText && hasVisibleMarkdownText(match[1]);
   });
 }
 
@@ -461,7 +461,9 @@ export function evaluate(policy: Policy, value: unknown): EvaluationResult {
       const identity = requirementIdentity(requirement);
       const existing = results.get(identity);
       if (existing !== undefined) {
-        existing.ruleIds.push(rule.id);
+        if (!existing.ruleIds.includes(rule.id)) {
+          existing.ruleIds.push(rule.id);
+        }
         continue;
       }
 

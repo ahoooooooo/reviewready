@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+
 import { describe, expect, it } from "vitest";
 
 import { evaluate } from "../src/engine.js";
@@ -56,6 +58,66 @@ interface ReviewReductionCase {
 }
 
 describe("evaluate", () => {
+  it("does not duplicate a rule id when one rule repeats an equivalent requirement", () => {
+    const duplicatePolicy = parsePolicy(`
+version: 1
+rules:
+  - id: duplicate
+    when:
+      paths:
+        any: [src/**]
+    require:
+      - type: linked_issue
+      - type: linked_issue
+`);
+
+    const result = evaluate(duplicatePolicy, input({ linkedIssues: [7] }));
+
+    expect(result.requirements).toHaveLength(1);
+    expect(result.requirements[0]?.ruleIds).toEqual(["duplicate"]);
+  });
+
+  it("preserves duplicate conclusion entries in the v1 public requirement key", () => {
+    const duplicateConclusionPolicy = parsePolicy(`
+version: 1
+rules:
+  - id: check
+    when:
+      paths:
+        any: [src/**]
+    require:
+      - type: check
+        name: build
+        conclusions: [success, success]
+`);
+
+    const result = evaluate(
+      duplicateConclusionPolicy,
+      input({ checks: [{ name: "build", conclusion: "success" }] })
+    );
+
+    expect(result.requirements[0]?.key).toBe("check:build:success,success:");
+  });
+
+  it("does not treat an invisible combining mark as visible human attestation", () => {
+    const invisibleText = "\u034f";
+    const invisiblePolicy: Policy = {
+      version: 1,
+      rules: [
+        {
+          id: "attestation",
+          when: { paths: { any: ["src/**"] } },
+          require: [{ type: "human_attestation", text: invisibleText }]
+        }
+      ]
+    };
+
+    const result = evaluate(invisiblePolicy, input({ body: `- [x] ${invisibleText}` }));
+
+    expect(result.status).toBe("not_ready");
+    expect(result.requirements[0]?.status).toBe("missing");
+  });
+
   it("keeps check requirements distinct when names or apps contain delimiters", () => {
     const collisionPolicy = parsePolicy(`
 version: 1
@@ -91,6 +153,44 @@ rules:
       "check:a:success:success:b",
       "check:a:success:success:b"
     ]);
+  });
+
+  it("matches the v1 JSON golden result for all five requirement types", async () => {
+    const goldenPolicy = parsePolicy(`
+version: 1
+rules:
+  - id: all-evidence
+    when:
+      paths:
+        any: [src/**]
+    require:
+      - type: pr_body_section
+        heading: Testing
+      - type: linked_issue
+      - type: check
+        name: build
+        conclusions: [success, failure]
+        app: github-actions
+      - type: maintainer_review
+        minimum: 1
+      - type: human_attestation
+        text: I understand.
+`);
+
+    const result = evaluate(
+      goldenPolicy,
+      input({
+        body: ["## Testing", "Tests passed.", "", "- [x] I understand."].join("\n"),
+        linkedIssues: [7],
+        checks: [{ name: "build", conclusion: "success", app: "github-actions" }],
+        reviews: [{ login: "maintainer", state: "approved", maintainer: true }]
+      })
+    );
+
+    const golden = JSON.parse(
+      await readFile("fixtures/basic/v1-all-requirements-result.json", "utf8")
+    ) as unknown;
+    expect(result).toEqual(golden);
   });
 
   it("prefers an unqualified aggregate over an app-specific check for generic requirements", () => {

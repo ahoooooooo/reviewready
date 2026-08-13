@@ -4,15 +4,25 @@ import { z } from "zod";
 import { checkConclusions, policyLimits, type Policy } from "./domain.js";
 import { escapeControlCharacters, PolicyError } from "./errors.js";
 
-const policyTextRuntimePattern = /^(?!\s)(?!.*\s$)(?!.*[\p{Control}\p{Format}\u2028\u2029]).+$/u;
+const policyTextRuntimePattern =
+  /^(?!\s)(?!.*\s$)(?!.*[\p{Control}\p{Format}\u2028\u2029])(?=.*[\p{Letter}\p{Number}\p{Punctuation}\p{Symbol}]).+$/u;
 export const POLICY_TEXT_SCHEMA_PATTERN =
-  "^(?!\\s)(?!.*\\s$)(?!.*[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u0600-\\u0605\\u061C\\u06DD\\u070F\\u0890-\\u0891\\u08E2\\u180E\\u200B-\\u200F\\u202A-\\u202E\\u2060-\\u2064\\u2066-\\u206F\\u2028\\u2029\\uFEFF\\uFFF9-\\uFFFB]).+$";
+  "^(?!\\s)(?!.*\\s$)(?!.*[\\p{Control}\\p{Format}\\u2028\\u2029])(?=.*[\\p{Letter}\\p{Number}\\p{Punctuation}\\p{Symbol}]).+$";
 const policyTextErrorPrefix = "Policy text is unsafe: ";
 const text = z
   .string()
   .min(1)
-  .max(policyLimits.maxTextLength)
   .superRefine((value, context) => {
+    if (Array.from(value).length > policyLimits.maxTextLength) {
+      context.addIssue({
+        code: "custom",
+        message:
+          policyTextErrorPrefix +
+          "Text exceeds the " +
+          String(policyLimits.maxTextLength) +
+          " Unicode code-point limit."
+      });
+    }
     if (!policyTextRuntimePattern.test(value)) {
       context.addIssue({
         code: "custom",

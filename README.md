@@ -33,6 +33,9 @@ repository governance. The current required check selects the GitHub Actions
 App, which does not uniquely bind one workflow definition or event; the
 dedicated-provider contract is tracked in
 [#56](https://github.com/ahoooooooo/reviewready/issues/56).
+[docs/governance-evidence-ta1.md](docs/governance-evidence-ta1.md) records the
+current exact revisions, observed controls, unavailable settings, and remaining
+advisory boundary.
 [SECURITY.md](SECURITY.md) lists the other current evidence boundaries.
 Semantic-version release tags will not be rewritten under project policy, but
 GitHub release immutability was not enabled for the historical v1.0.7 release;
@@ -251,6 +254,12 @@ Stable exit codes:
 
 The local CLI consumes normalized JSON rather than contacting GitHub. This keeps
 the engine reproducible and makes policies easy to test with fixtures.
+Policy and normalized-input files are read only when they are regular files and
+are bounded at 4 MiB (4,194,304 raw bytes) before UTF-8 decoding. Missing,
+unreadable, non-regular, oversized, or otherwise incomplete reads fail with
+exit code 2. Policy text fields are limited to 500 Unicode code points; the
+same visible-text and control/format-character contract is enforced by the
+runtime parser and reviewready.schema.json.
 
 ### Repository audit
 
@@ -316,6 +325,10 @@ previous path are evaluated; the Git separator is never rewritten.
   maintain, or admin permission is approved. GitHub APPROVED,
   CHANGES_REQUESTED, and DISMISSED reviews require valid timestamps;
   COMMENTED may omit one. Timestamp-free local fixtures use their array order.
+  Permission association retains at most 100 distinct actionable reviewers and
+  performs at most 8 permission requests concurrently. It keeps the latest
+  timestamped opinionated state per case-insensitive login and omits pending or
+  commented reviews; unsupported or incomplete states fail closed.
 - `human_attestation`: the PR body contains the exact checked task-list text. This
   verifies visible text only; it does not verify identity, understanding,
   authorship, or legal responsibility.

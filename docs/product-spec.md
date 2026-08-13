@@ -85,6 +85,9 @@ The human_attestation requirement verifies only that the specified checked text
 is visible in the pull-request body. It does not establish identity,
 understanding, authorship, or legal responsibility. Literal backslashes in Git
 paths are invalid input; they are not rewritten as separators.
+Policy text values are at most 500 Unicode code points and must contain visible
+non-control, non-format content without leading or trailing whitespace. The
+published JSON Schema and runtime parser implement the same contract.
 
 GitHub-specific fetching and normalization live outside the engine.
 
@@ -97,6 +100,8 @@ GitHub-specific fetching and normalization live outside the engine.
 Exit codes are stable: `0` ready/valid, `1` not ready, `2` configuration or
 runtime error. JSON output is versioned and written to stdout; diagnostics go to
 stderr.
+Policy and normalized-input files are bounded to 4 MiB of raw bytes and must be
+regular files. The limit is applied before decoding or JSON/YAML parsing.
 
 ## Security and authority
 
@@ -119,6 +124,10 @@ stderr.
 - Required checks, reviews, and linked issues are read twice with a bounded
   canonical comparison; a changed evidence set while the PR snapshot is stable
   causes a retry or a fail-closed error.
+- Reviewer permission association is bounded to 100 distinct actionable
+  reviewers and 8 concurrent permission requests. It selects the latest valid
+  timestamped opinionated state per case-insensitive login and does not perform
+  permission lookups for pending or commented reviews.
 - A normal pull_request caller workflow is advisory unless the repository
   separately protects the trusted workflow root and required result.
 - The Action renders its Markdown summary and report-json completely before

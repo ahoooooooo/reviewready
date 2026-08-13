@@ -67,6 +67,18 @@ describe("normalizeRepositoryPath", () => {
     );
   });
 
+  it("deduplicates labels and linked issue numbers deterministically", () => {
+    const normalized = normalizeInput(
+      validInput({
+        labels: ["bug", "bug", "security"],
+        linkedIssues: [7, 7, 42, 7]
+      })
+    );
+
+    expect(normalized.labels).toEqual(["bug", "security"]);
+    expect(normalized.linkedIssues).toEqual([7, 42]);
+  });
+
   it("reports malformed normalized input through the stable input error", () => {
     expect(() => normalizeInput(validInput({ version: 2 }))).toThrow(
       expect.objectContaining({ code: "INPUT_SCHEMA_INVALID" })

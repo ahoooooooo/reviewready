@@ -117,7 +117,11 @@ is not rewritten.
 
 The adapter first loads the base policy and changed paths, then requests only
 the evidence types required by the triggered rules. Reviewer permission lookups
-use a small concurrency bound. Check Runs collected for an immutable commit ref
+use a maximum of 100 distinct actionable reviewer identities and 8 concurrent
+requests. Identity keys are case-insensitive; the latest valid timestamped
+opinionated review is retained for each login, while pending and commented
+reviews do not trigger permission lookups. Missing or malformed timestamps on
+actionable GitHub review states fail closed. Check Runs collected for an immutable commit ref
 must echo that ref; GitHub's nullable timestamps for queued or in-progress runs
 remain pending rather than becoming successful evidence. A current pull-request
 snapshot is read before collection, between the two evidence reads, and after
@@ -129,6 +133,11 @@ fail-closed error.
 Changed Git paths use POSIX separators. A rename retains both the new filename
 and previous filename for policy matching; a literal backslash is rejected
 instead of being rewritten.
+
+The CLI reads policy and normalized-input files as regular, non-symlink files
+with a hard 4 MiB raw-byte limit before decoding. Policy text has a shared
+500-Unicode-code-point visible-text contract in the runtime parser and the
+published Draft 2020-12 schema.
 
 Policy matching compiles each unique glob once per evaluation, deduplicates
 paths and patterns, and shares a deterministic operation budget across all

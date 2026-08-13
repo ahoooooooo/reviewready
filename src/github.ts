@@ -145,6 +145,7 @@ function splitChangedFiles(files: readonly (string | GitHubChangedFile)[]): {
 }
 
 const MAX_PERMISSION_LOOKUPS = 100;
+const PERMISSION_LOOKUP_CONCURRENCY = 8;
 const PERMISSION_LOOKUP_TIMEOUT_MS = 120_000;
 const MAX_SNAPSHOT_ATTEMPTS = 2;
 
@@ -280,8 +281,25 @@ async function mapWithConcurrency<T, R>(
   return results;
 }
 
+function reviewTimestamp(value: string | undefined): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp) ? undefined : timestamp;
+}
+
+function isLaterReview(current: GitHubReview, candidate: GitHubReview): boolean {
+  const currentTimestamp = reviewTimestamp(current.submittedAt);
+  const candidateTimestamp = reviewTimestamp(candidate.submittedAt);
+  if (currentTimestamp === undefined || candidateTimestamp === undefined) {
+    return false;
+  }
+  return candidateTimestamp >= currentTimestamp;
+}
+
 function reviewLoginsForPermissionLookup(reviews: readonly GitHubReview[]): string[] {
-  const logins = new Set<string>();
+  const latestByLogin = new Map<string, GitHubReview>();
   for (const review of reviews) {
     const state = reviewState(review.state);
     if (state === undefined) {
@@ -290,11 +308,26 @@ function reviewLoginsForPermissionLookup(reviews: readonly GitHubReview[]): stri
         "GitHub returned an unsupported pull request review state."
       );
     }
-    if (state !== "pending" && state !== "commented" && review.login !== null) {
-      logins.add(review.login);
+    if (
+      state !== "pending" &&
+      state !== "commented" &&
+      (review.submittedAt === undefined || reviewTimestamp(review.submittedAt) === undefined)
+    ) {
+      throw new PlatformError(
+        "GITHUB_EVIDENCE_INCOMPLETE",
+        "GitHub returned an actionable review without a valid submission timestamp."
+      );
+    }
+    if (state === "pending" || state === "commented" || review.login === null) {
+      continue;
+    }
+    const loginKey = review.login.toLocaleLowerCase("en-US");
+    const current = latestByLogin.get(loginKey);
+    if (current === undefined || isLaterReview(current, review)) {
+      latestByLogin.set(loginKey, review);
     }
   }
-  return [...logins];
+  return [...latestByLogin.values()].map((review) => review.login as string);
 }
 
 async function lookupReviewerPermissions(
@@ -312,7 +345,7 @@ async function lookupReviewerPermissions(
   let timeout: ReturnType<typeof setTimeout> | undefined;
   const work = mapWithConcurrency(
     logins,
-    MAX_PERMISSION_LOOKUPS,
+    PERMISSION_LOOKUP_CONCURRENCY,
     async (login) => [login, await gateway.getRepositoryPermission({ owner, repo, login })] as const
   );
   const deadline = new Promise<never>((_, reject) => {
@@ -465,10 +498,13 @@ export async function loadGitHubPullRequest(
             "GitHub returned an unsupported pull request review state."
           );
         }
-        if (state !== "commented" && review.submittedAt === undefined) {
+        if (
+          state !== "commented" &&
+          (review.submittedAt === undefined || reviewTimestamp(review.submittedAt) === undefined)
+        ) {
           throw new PlatformError(
             "GITHUB_EVIDENCE_INCOMPLETE",
-            "GitHub returned a review state without a submission timestamp."
+            "GitHub returned an actionable review without a valid submission timestamp."
           );
         }
         if (review.login === null) {

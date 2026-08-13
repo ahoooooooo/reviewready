@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { evaluate } from "../src/engine.js";
 import { runAction, type ActionRuntime } from "../src/action-runner.js";
+import { runCli } from "../src/cli.js";
 import type { GitHubGateway } from "../src/github.js";
 import { parsePolicy } from "../src/policy.js";
 import { renderJson, renderMarkdown } from "../src/report.js";
@@ -149,6 +150,39 @@ describe("runAction", () => {
     expect(action.outputCalls).toEqual(["report-json", "status"]);
     expect(action.summaries.join("\n")).toContain("## ReviewReady: ready");
     expect(action.failures).toEqual([]);
+  });
+
+  it("keeps Action report-json semantically equal to CLI --json", async () => {
+    const action = runtime({
+      ...gateway(["src/index.ts"], event.pull_request.body, policy),
+      listClosingIssueNumbers: () => Promise.resolve([42])
+    });
+
+    await runAction(action);
+
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+    const exitCode = await runCli(
+      [
+        "check",
+        "--policy",
+        "fixtures/basic/.reviewready.yml",
+        "--input",
+        "fixtures/basic/ready.json",
+        "--json"
+      ],
+      {
+        readFile,
+        stdout: (value) => stdout.push(value),
+        stderr: (value) => stderr.push(value)
+      }
+    );
+
+    expect(exitCode).toBe(0);
+    expect(stderr).toEqual([]);
+    expect(JSON.parse(action.outputs.get("report-json") ?? "{}")).toEqual(
+      JSON.parse(stdout.join(""))
+    );
   });
 
   it("fails the check with an actionable not-ready summary", async () => {
