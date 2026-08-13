@@ -64,10 +64,11 @@ the Action pin, input path, permissions, job dependencies, or even the job that
 reports a required check. Required status checks match job/check names and may pin
 the GitHub App, but that does not identify an immutable workflow definition.
 
-Issue #35 tracks the supported trusted topology. Candidate roots include an
-organization ruleset-required workflow selected by repository/ref/SHA,
-independently protected workflow and policy files, or a metadata-only
-`pull_request_target` workflow from the base branch. A trusted
+ADR 0001 defines the supported trust boundary. Issue #54 tracks live repository
+governance and issue #56 tracks the dedicated provider/App contract. Candidate
+roots include an organization ruleset-required workflow selected by
+repository/ref/SHA, independently protected workflow and policy files, or a
+metadata-only `pull_request_target` workflow from the base branch. A trusted
 `pull_request_target` design must not check out, download, import, cache, build, or
 execute pull-request code. Untrusted build and test CI remains on `pull_request`
 with fork-safe permissions.
@@ -82,9 +83,10 @@ untrusted pull-request revision must never be a required readiness check.
 ## Evidence collection
 
 The Action source supports `pull_request`, `pull_request_review`, and
-`pull_request_target` events. The staged trusted workflow uses
-`pull_request_target` only after it is pinned to the published v1.0.7 commit;
-the pre-publication bootstrap pin remains an explicit non-authoritative state.
+`pull_request_target` events. The checked-in trusted reference uses
+`pull_request_target` and is pinned to the published v1.0.7 commit. That
+protects the selected base workflow from the evaluated PR, but the current
+GitHub Actions App requirement does not uniquely identify that workflow.
 Review events may be submitted, edited, or dismissed. For GitHub review data,
 `APPROVED`, `CHANGES_REQUESTED`, and `DISMISSED` states require a valid
 `submittedAt`; `COMMENTED` may omit it. Missing or malformed timestamps on

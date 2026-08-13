@@ -64,9 +64,11 @@ same-name successful job unless an independent rule protects the enforcement
 workflow.
 
 Do not use the v1.0.5 advisory `pull_request` example as the sole authoritative
-merge gate. Issue #35 tracks supported trusted topologies, including organization
-ruleset workflows, independently protected enforcement files, and carefully
-limited metadata-only `pull_request_target` evaluation. A
+merge gate. ADR 0001 defines the supported trust boundary; issue #54 tracks live
+repository governance and issue #56 tracks a dedicated provider/App contract.
+Candidate topologies include organization ruleset workflows, independently
+protected enforcement files, and carefully limited metadata-only
+`pull_request_target` evaluation. A
 `pull_request_target` workflow must never check out, download, import, cache, build,
 or execute pull-request code.
 
@@ -74,10 +76,12 @@ or execute pull-request code.
 
 - A mutable major Action tag is convenient but weaker than a full commit SHA.
   High-assurance adopters should pin the release commit and use update automation.
-- The checked-in trusted workflow is a staged v1.0.6 reference and is not an
-  authority until its Action pin is updated to the verified v1.0.6 commit and the
-  repository settings protect both the workflow root and its required check. The
-  remaining deployment limitation is tracked in issue #35.
+- The checked-in trusted workflow is a metadata-only `pull_request_target`
+  reference pinned to the exact v1.0.7 release commit. The active ruleset selects
+  the GitHub Actions App as the required-check source, but GitHub required checks
+  do not bind one workflow definition or event trigger. Do not call this a unique
+  authoritative provider until issue #54's governance evidence and issue #56's
+  dedicated-provider boundary are satisfied.
 - A successful named check proves only that GitHub recorded that conclusion; it
   does not prove the check itself is trustworthy. Restrict app identity where it
   matters and protect workflow changes separately. The ordinary `pull_request`
