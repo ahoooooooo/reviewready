@@ -12,7 +12,7 @@ import {
   type FileReadFailure
 } from "./file-reader.js";
 import { createGitHubAuditClient } from "./github-audit-api.js";
-import { collectRepositoryAuditSnapshot } from "./github-audit.js";
+import { MAX_AUDIT_WORKFLOW_ROOTS, collectRepositoryAuditSnapshot } from "./github-audit.js";
 import { parsePolicy } from "./policy.js";
 import { explainPolicy, renderJson, renderText } from "./report.js";
 
@@ -106,8 +106,14 @@ function parseArguments(argv: readonly string[]): ParsedArguments {
       }
       tokenEnv = value;
     } else if (option === "--protected-workflow") {
+      if (protectedWorkflowPaths.length >= MAX_AUDIT_WORKFLOW_ROOTS) {
+        throw new InputError("CLI_USAGE", "The workflow root limit was exceeded.");
+      }
       protectedWorkflowPaths.push(value);
     } else if (option === "--trusted-workflow") {
+      if (trustedWorkflowPaths.length >= MAX_AUDIT_WORKFLOW_ROOTS) {
+        throw new InputError("CLI_USAGE", "The workflow root limit was exceeded.");
+      }
       trustedWorkflowPaths.push(value);
     } else if (option === "--policy") {
       if (policy !== undefined) {
@@ -255,11 +261,11 @@ async function readCliFile(path: string, kind: "policy" | "input", io: CliIo): P
   }
 }
 
-function parseJson(source: string): unknown {
+function parseJson(source: string, subject = "Pull-request input"): unknown {
   try {
     return JSON.parse(source) as unknown;
   } catch (error) {
-    throw new InputError("INPUT_JSON_INVALID", "Pull-request input is not valid JSON.", {
+    throw new InputError("INPUT_JSON_INVALID", subject + " is not valid JSON.", {
       cause: error
     });
   }
@@ -305,7 +311,7 @@ export async function runCli(argv: readonly string[], io: CliIo = defaultIo): Pr
           report = auditRepository(snapshot);
         } else {
           const inputPath = requiredPath(parsed.input, "--input");
-          const input = parseJson(await readCliFile(inputPath, "input", io));
+          const input = parseJson(await readCliFile(inputPath, "input", io), "Audit input");
           report = auditRepository(input);
         }
         io.stdout(

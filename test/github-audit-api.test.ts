@@ -9,7 +9,20 @@ vi.mock("@actions/github", () => ({ getOctokit: vi.fn() }));
 const sha = "a".repeat(40);
 
 function response(data: unknown, headers: Record<string, string> = {}) {
-  return { data, headers, status: 200 };
+  const normalizedData =
+    typeof data === "object" &&
+    data !== null &&
+    !Array.isArray(data) &&
+    "default_branch" in data &&
+    !("owner" in data) &&
+    !("name" in data)
+      ? {
+          ...(data as Record<string, unknown>),
+          owner: { login: "octocat" },
+          name: "demo"
+        }
+      : data;
+  return { data: normalizedData, headers, status: 200 };
 }
 
 function fakeRequest() {
@@ -81,6 +94,9 @@ function fakeRequest() {
       );
     }
     if (route === "GET /repos/{owner}/{repo}/contents/.github/workflows") {
+      if (params.page === 2) {
+        return Promise.resolve(response([]));
+      }
       return Promise.resolve(
         response([
           { path: ".github/workflows/reviewready.yml", type: "file" },
@@ -101,6 +117,24 @@ function fakeRequest() {
 
 describe("GitHub repository audit API adapter", () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it("binds repository identity to the API response", async () => {
+    const request = vi.fn(() =>
+      Promise.resolve(
+        response({
+          owner: { login: "attacker" },
+          name: "demo",
+          default_branch: "main"
+        })
+      )
+    );
+    vi.mocked(getOctokit).mockReturnValue({ request } as never);
+    const client = createGitHubAuditClient("secret", { sleep: () => Promise.resolve() });
+
+    await expect(client.getRepository({ owner: "octocat", repo: "demo" })).rejects.toThrow(
+      "repository-identity-mismatch"
+    );
+  });
 
   it("maps read-only GitHub responses into the collector contract", async () => {
     const request = fakeRequest();
@@ -205,6 +239,88 @@ describe("GitHub repository audit API adapter", () => {
     expect(sleep).toHaveBeenCalledTimes(1);
   });
 
+  it("rejects non-success responses even when a response body looks valid", async () => {
+    const request = vi.fn(() =>
+      Promise.resolve({ data: { default_branch: "main" }, headers: {}, status: 500 })
+    );
+    vi.mocked(getOctokit).mockReturnValue({ request } as never);
+    const client = createGitHubAuditClient("secret", { sleep: () => Promise.resolve() });
+
+    await expect(client.getRepository({ owner: "octocat", repo: "demo" })).rejects.toThrow(
+      "request-failed"
+    );
+  });
+
+  it("rejects a response without an explicit HTTP status", async () => {
+    const request = vi.fn(() => Promise.resolve({ data: { default_branch: "main" }, headers: {} }));
+    vi.mocked(getOctokit).mockReturnValue({ request } as never);
+    const client = createGitHubAuditClient("secret", { sleep: () => Promise.resolve() });
+
+    await expect(client.getRepository({ owner: "octocat", repo: "demo" })).rejects.toThrow(
+      "response-status-invalid"
+    );
+  });
+
+  it("follows bounded workflow-directory pagination", async () => {
+    const request = vi.fn((route: string, params: Record<string, unknown>) => {
+      if (route !== "GET /repos/{owner}/{repo}/contents/.github/workflows") {
+        return Promise.reject(new Error("unexpected route"));
+      }
+      if (params.page === undefined || params.page === 1) {
+        return Promise.resolve(
+          response([{ path: ".github/workflows/one.yml", type: "file" }], {
+            link: '<https://api.github.com/repos/octocat/demo/contents/.github/workflows?page=2>; rel="next"'
+          })
+        );
+      }
+      if (params.page === 2) {
+        return Promise.resolve(response([{ path: ".github/workflows/two.yml", type: "file" }]));
+      }
+      return Promise.resolve(response([]));
+    });
+    vi.mocked(getOctokit).mockReturnValue({ request } as never);
+    const client = createGitHubAuditClient("secret", { sleep: () => Promise.resolve() });
+
+    await expect(
+      client.listWorkflowFiles({ owner: "octocat", repo: "demo", ref: sha })
+    ).resolves.toEqual([
+      { path: ".github/workflows/one.yml", type: "file" },
+      { path: ".github/workflows/two.yml", type: "file" }
+    ]);
+    expect(request).toHaveBeenCalledWith(
+      "GET /repos/{owner}/{repo}/contents/.github/workflows",
+      expect.objectContaining({ page: 1, per_page: 100, ref: sha })
+    );
+  });
+
+  it("rejects a ruleset detail whose identity changes from the listed summary", async () => {
+    const request = vi.fn((route: string, params: Record<string, unknown>) => {
+      if (route === "GET /repos/{owner}/{repo}/rulesets") {
+        return Promise.resolve(params.page === 1 ? response([{ id: 7 }]) : response([]));
+      }
+      if (route === "GET /repos/{owner}/{repo}/rulesets/{ruleset_id}") {
+        return Promise.resolve(
+          response({
+            id: 8,
+            name: "wrong",
+            target: "branch",
+            enforcement: "active",
+            conditions: { ref_name: { include: ["~DEFAULT_BRANCH"] } },
+            bypass_actors: [],
+            rules: []
+          })
+        );
+      }
+      return Promise.reject(new Error("unexpected route"));
+    });
+    vi.mocked(getOctokit).mockReturnValue({ request } as never);
+    const client = createGitHubAuditClient("secret", { sleep: () => Promise.resolve() });
+
+    await expect(client.listRulesets({ owner: "octocat", repo: "demo" })).rejects.toThrow(
+      "ruleset-id-mismatch"
+    );
+  });
+
   it("normalizes only a confirmed protection 404 as absent", async () => {
     const request = fakeRequest();
     request.mockImplementation((route, params) => {
@@ -234,6 +350,21 @@ describe("GitHub repository audit API adapter", () => {
     await expect(client.getRepository({ owner: "octocat", repo: "demo" })).rejects.toThrow(
       "response-size-limit"
     );
+  });
+
+  it("keeps raw workflow and policy source within the analyzer limit", async () => {
+    const request = vi.fn(() => Promise.resolve(response("x".repeat(256 * 1024 + 1))));
+    vi.mocked(getOctokit).mockReturnValue({ request } as never);
+    const client = createGitHubAuditClient("secret", { sleep: () => Promise.resolve() });
+
+    await expect(
+      client.getFileAtRevision({
+        owner: "octocat",
+        repo: "demo",
+        path: ".github/workflows/reviewready.yml",
+        ref: sha
+      })
+    ).rejects.toThrow("file-content-invalid");
   });
 
   it("does not start a retry after the overall collection deadline", async () => {
@@ -638,8 +769,10 @@ describe("GitHub repository audit API adapter", () => {
       })
     ).rejects.toThrow("ruleset-target-invalid");
 
-    const invalidWorkflow = vi.fn(() =>
-      Promise.resolve(response([{ path: ".github/workflows/bad.yml", type: "socket" }]))
+    const invalidWorkflow = vi.fn((_route: string, params: Record<string, unknown>) =>
+      Promise.resolve(
+        response(params.page === 2 ? [] : [{ path: ".github/workflows/bad.yml", type: "socket" }])
+      )
     );
     vi.mocked(getOctokit).mockReturnValue({ request: invalidWorkflow } as never);
     await expect(
@@ -727,8 +860,11 @@ describe("GitHub repository audit API adapter", () => {
   });
 
   it("normalizes workflow extensions and tag protection patterns", async () => {
-    const request = vi.fn((route: string) => {
+    const request = vi.fn((route: string, params: Record<string, unknown>) => {
       if (route === "GET /repos/{owner}/{repo}/contents/.github/workflows") {
+        if (params.page === 2) {
+          return Promise.resolve(response([]));
+        }
         return Promise.resolve(
           response([
             { path: ".github/workflows/readme.md", type: "file" },

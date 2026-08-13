@@ -292,8 +292,12 @@ loads policy and workflow bytes at one immutable base SHA, uses bounded REST
 pagination/retries/response size/deadline, and returns `incomplete` when
 settings or the base revision are not authoritative. Protected and trusted
 workflow roots are explicit out-of-band inputs; a check name or ordinary API
-success never establishes a trust root. The collector never checks out or
-executes repository code.
+success never establishes a trust root. Each root option is bounded and must
+name an observed workflow, but it remains a caller assertion rather than
+independent GitHub authority. Workflow and policy source are bounded to 256 KiB.
+The current live command prints a report only; it does not write an evidence
+bundle or claim that a later offline replay is byte-identical. The collector
+never checks out or executes repository code.
 
 The GitHub App JWT/token and webhook HMAC/replay modules are library contracts
 for an external service. ReviewReady does not include an HTTP server, secret

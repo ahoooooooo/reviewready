@@ -1,8 +1,9 @@
 # ReviewReady post-v1 trust roadmap
 
 Status: **PL-0 complete on 2026-08-13; TA-1 local exit evidence is complete on
-the codex/ta-1-hardening branch.** The branch still requires normal GitHub
-integration review; no promotion to TA-2 has occurred.
+the codex/ta-1-hardening branch.** TA-1 still requires normal GitHub
+integration review. TA-2 hardening is being prepared on the separate
+codex/ta-2-hardening branch; TA-2 has not passed its promotion gate.
 
 This is the forward execution plan after the verified v1.0.7 release. It does
 not authorize product implementation, repository-setting changes, publication,
@@ -180,6 +181,14 @@ pilot, or release. If unique workflow provenance is unavailable, TA-1 records th
 check as advisory; it does not manufacture an authority claim.
 
 ### TA-2 — reproducible live audit and dogfood evidence
+
+The current TA-2 hardening batch covers bounded root inputs, repository
+identity binding, workflow-directory pagination, API response status, ruleset
+scope isolation, source-size parity, and audit-schema/CLI regressions. It does
+not yet implement or claim a replayable evidence bundle. Canonical
+serialization, bundle privacy/source retention, exact caller-supplied revision
+semantics, atomic settings sampling, and independent provider authority remain
+explicit SOL MAX design gates.
 
 Objective: produce a deterministic, read-only, replayable audit of ReviewReady at
 one exact revision. Tracked by #55.

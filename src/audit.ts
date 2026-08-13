@@ -493,6 +493,7 @@ function auditSnapshot(snapshot: AuditSnapshot): AuditReport {
   }
 
   const applicableRulesets: AuditSnapshot["rulesets"] = [];
+  const relevantRulesets: AuditSnapshot["rulesets"] = [];
   for (const ruleset of snapshot.rulesets) {
     const repositoryScope = evaluateRulesetRepositoryScope(ruleset, snapshot.repository);
     if (!repositoryScope.valid) {
@@ -521,7 +522,12 @@ function auditSnapshot(snapshot: AuditSnapshot): AuditReport {
         ),
         true
       );
+      continue;
     }
+    if (ruleset.target === "branch" && !scope.applies) {
+      continue;
+    }
+    relevantRulesets.push(ruleset);
     if (ruleset.enforcement === "active" && scope.applies) {
       applicableRulesets.push(ruleset);
     }
@@ -572,7 +578,7 @@ function auditSnapshot(snapshot: AuditSnapshot): AuditReport {
     }
   }
 
-  for (const ruleset of snapshot.rulesets) {
+  for (const ruleset of relevantRulesets) {
     const path = `rulesets.${String(ruleset.id)}`;
     if (ruleset.bypassActorsKnown === false) {
       add(

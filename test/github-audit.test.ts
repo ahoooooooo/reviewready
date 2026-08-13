@@ -107,6 +107,16 @@ describe("GitHub repository audit collector", () => {
     );
   });
 
+  it("accepts GitHub's canonical casing for an equivalent repository identity", async () => {
+    const snapshot = await collectRepositoryAuditSnapshot("Octocat", "Demo", client(), {
+      protectedWorkflowPaths: [workflowPath],
+      trustedWorkflowPaths: [workflowPath]
+    });
+
+    expect(snapshot.completeness.complete).toBe(true);
+    expect(auditRepository(snapshot)).toMatchObject({ auditVersion: 1, status: "pass" });
+  });
+
   it("fails closed when the evaluated branch changes during collection", async () => {
     const api = client({
       getBranch: vi
@@ -133,6 +143,73 @@ describe("GitHub repository audit collector", () => {
     expect(snapshot.completeness.missing).toEqual(
       expect.arrayContaining(["trusted-workflow-root", "workflow-protection-root"])
     );
+  });
+
+  it("fails closed for unbounded or unobserved workflow roots", async () => {
+    const tooManyRoots = await collectRepositoryAuditSnapshot("octocat", "demo", client(), {
+      trustedWorkflowPaths: Array.from(
+        { length: 101 },
+        (_, index) => ".github/workflows/trusted-" + String(index) + ".yml"
+      )
+    });
+    expect(tooManyRoots.completeness.missing).toContain("workflow-root-limit");
+
+    const tooManyProtectedRoots = await collectRepositoryAuditSnapshot(
+      "octocat",
+      "demo",
+      client(),
+      {
+        protectedWorkflowPaths: Array.from(
+          { length: 101 },
+          (_, index) => ".github/workflows/protected-" + String(index) + ".yml"
+        )
+      }
+    );
+    expect(tooManyProtectedRoots.completeness.missing).toContain("workflow-root-limit");
+
+    const unobservedRoot = await collectRepositoryAuditSnapshot("octocat", "demo", client(), {
+      protectedWorkflowPaths: [workflowPath, ".github/workflows/other.yml"],
+      trustedWorkflowPaths: [workflowPath, ".github/workflows/other.yml"]
+    });
+    expect(unobservedRoot.completeness.missing).toContain("workflow-root-not-observed");
+  });
+
+  it("keeps invalid branch input out of the incomplete snapshot", async () => {
+    const snapshot = await collectRepositoryAuditSnapshot("octocat", "demo", client(), {
+      branch: "b".repeat(513)
+    });
+
+    expect(snapshot.completeness.complete).toBe(false);
+    expect(snapshot.repository.defaultBranch).toBe("unknown");
+  });
+
+  it("fails closed when the API changes repository identity", async () => {
+    const snapshot = await collectRepositoryAuditSnapshot(
+      "octocat",
+      "demo",
+      client({
+        getRepository: vi.fn(() =>
+          Promise.resolve({ owner: "attacker", name: "demo", defaultBranch: "main" })
+        )
+      })
+    );
+
+    expect(snapshot.completeness.missing).toContain("repository-identity-mismatch");
+  });
+
+  it("rejects workflow source beyond the static analyzer limit", async () => {
+    const snapshot = await collectRepositoryAuditSnapshot(
+      "octocat",
+      "demo",
+      client({
+        getFileAtRevision: vi.fn(({ path }: AuditRepositoryArguments & { path: string }) =>
+          Promise.resolve(path === ".reviewready.yml" ? policySource : "x".repeat(256 * 1024 + 1))
+        )
+      }),
+      { protectedWorkflowPaths: [workflowPath], trustedWorkflowPaths: [workflowPath] }
+    );
+
+    expect(snapshot.completeness.missing).toContain("workflow-source-limit");
   });
 
   it("normalizes invalid repository and policy inputs into incomplete snapshots", async () => {

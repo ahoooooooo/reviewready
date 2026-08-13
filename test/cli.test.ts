@@ -16,7 +16,10 @@ import {
 } from "../src/file-reader.js";
 
 vi.mock("../src/github-audit-api.js", () => ({ createGitHubAuditClient: vi.fn() }));
-vi.mock("../src/github-audit.js", () => ({ collectRepositoryAuditSnapshot: vi.fn() }));
+vi.mock("../src/github-audit.js", () => ({
+  MAX_AUDIT_WORKFLOW_ROOTS: 100,
+  collectRepositoryAuditSnapshot: vi.fn()
+}));
 
 const fixture = (...parts: string[]): string => resolve("fixtures", "basic", ...parts);
 const temporaryDirectories = new Set<string>();
@@ -454,6 +457,22 @@ describe("audit command", () => {
     expect(io.stderrLines).toEqual([]);
   });
 
+  it("rejects an unbounded workflow-root option list before live collection", async () => {
+    const io = capture();
+    const args = ["audit", "--github", "octocat/demo", "--token-env", "REVIEWREADY_TEST_TOKEN"];
+    for (let index = 0; index < 101; index += 1) {
+      args.push("--trusted-workflow", ".github/workflows/trusted-" + String(index) + ".yml");
+    }
+
+    process.env.REVIEWREADY_TEST_TOKEN = "secret-token";
+    try {
+      expect(await runCli(args, io)).toBe(2);
+    } finally {
+      delete process.env.REVIEWREADY_TEST_TOKEN;
+    }
+    expect(io.stderrLines.join("\n")).toContain("workflow root limit");
+  });
+
   it("collects a live audit without accepting a token on the command line", async () => {
     const io = capture();
     const liveSnapshot = JSON.parse(snapshot) as unknown;
@@ -496,6 +515,15 @@ describe("audit command", () => {
         trustedWorkflowPaths: [".github/workflows/reviewready.yml"]
       })
     );
+  });
+
+  it("uses audit-specific wording for invalid snapshot JSON", async () => {
+    const io = capture();
+    io.readFile = () => Promise.resolve("{");
+
+    expect(await runCli(["audit", "--input", "audit.json"], io)).toBe(2);
+    expect(io.stderrLines.join("\n")).toContain("Audit input is not valid JSON.");
+    expect(io.stderrLines.join("\n")).not.toContain("Pull-request input");
   });
 
   it("returns incomplete audits with exit code 2 and supports SARIF", async () => {

@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 
+import Ajv2020Module from "ajv/dist/2020.js";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -8,6 +9,12 @@ import {
   renderAuditSarif,
   type AuditSnapshot
 } from "../src/audit.js";
+
+type Draft2020Constructor = new (options?: { readonly allErrors?: boolean }) => {
+  compile: (schema: object) => (data: unknown) => boolean;
+};
+
+const Ajv2020 = Ajv2020Module as unknown as Draft2020Constructor;
 
 const shaA = "a".repeat(40);
 const shaB = "b".repeat(40);
@@ -97,6 +104,29 @@ describe("repository audit", () => {
     ];
 
     const report = auditRepository(rawSnapshot);
+
+    expect(report).toMatchObject({ auditVersion: 1, status: "pass", findings: [] });
+  });
+
+  it("does not audit a branch ruleset outside the evaluated default branch", () => {
+    const snapshot = validSnapshot();
+    const ruleset = snapshot.rulesets[0];
+    if (ruleset === undefined) {
+      throw new Error("fixture ruleset is required");
+    }
+    snapshot.rulesets = [
+      {
+        ...ruleset,
+        refPatterns: ["refs/heads/release/*"],
+        enforcement: "disabled",
+        bypassActors: [{ id: "release-bypass", type: "user" }],
+        allowForcePushes: true,
+        allowDeletions: true,
+        requiredChecks: []
+      }
+    ];
+
+    const report = auditRepository(snapshot);
 
     expect(report).toMatchObject({ auditVersion: 1, status: "pass", findings: [] });
   });
@@ -499,6 +529,26 @@ describe("repository audit", () => {
     expect(report.findings[0]?.code).toBe("AUDIT_INPUT_INVALID");
     expect(sarif.version).toBe("2.1.0");
     expect(sarif.runs).toHaveLength(1);
+  });
+
+  it("keeps every audit status inside the published Draft 2020-12 schema", async () => {
+    const schema = JSON.parse(await readFile("reviewready.audit.schema.json", "utf8")) as object;
+    const validate = new Ajv2020({ allErrors: true }).compile(schema);
+
+    const failedSnapshot = validSnapshot();
+    const workflow = failedSnapshot.workflows[0];
+    if (workflow === undefined) {
+      throw new Error("fixture workflow is required");
+    }
+    workflow.trustedRoot = false;
+
+    for (const report of [
+      auditRepository(validSnapshot()),
+      auditRepository(failedSnapshot),
+      auditRepository({})
+    ]) {
+      expect(validate(JSON.parse(renderAuditJson(report)))).toBe(true);
+    }
   });
 
   it("keeps malformed audit JSON inside the public schema shape", () => {

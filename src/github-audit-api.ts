@@ -1,5 +1,6 @@
 import { getOctokit } from "@actions/github";
 
+import { MAX_AUDIT_SOURCE_BYTES, MAX_AUDIT_WORKFLOW_SOURCES } from "./github-audit.js";
 import type {
   AuditBranchProtection,
   AuditGitHubClient,
@@ -17,7 +18,6 @@ const MAX_RULESETS = 100;
 const MAX_API_REQUESTS = 64;
 const MAX_RETRIES = 1;
 const MAX_RETRY_DELAY_MS = 2_000;
-const MAX_SOURCE_BYTES = 512 * 1024;
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 const MAX_DEADLINE_MS = 120_000;
 const SHA = /^[0-9a-f]{40}$/iu;
@@ -369,7 +369,7 @@ function rulesetChecks(value: unknown): { readonly name: string; readonly appId?
   return values.map((entry) => check(entry, "integration_id"));
 }
 
-function mapRuleset(value: unknown): AuditRuleset {
+function mapRuleset(value: unknown, expectedId?: number): AuditRuleset {
   const item = record(value);
   const target = item.target;
   if (target !== "branch" && target !== "tag" && target !== "push" && target !== "repository") {
@@ -442,8 +442,12 @@ function mapRuleset(value: unknown): AuditRuleset {
   const rawBypass = item.bypass_actors;
   const bypassActorsKnown = Array.isArray(rawBypass);
   const bypassActors = bypassActorsKnown ? rawBypass.map(actor) : [];
+  const id = integerField(item.id);
+  if (expectedId !== undefined && id !== expectedId) {
+    throw new AuditApiFailure("ruleset-id-mismatch");
+  }
   return {
-    id: integerField(item.id),
+    id,
     name: stringField(item.name),
     target,
     refPatterns: includes.map((entry) => stringField(entry)),
@@ -540,8 +544,18 @@ export function createGitHubAuditClient(
             "X-GitHub-Api-Version": API_VERSION
           }
         });
+        if (response.status === undefined) {
+          throw new AuditApiFailure("response-status-invalid");
+        }
         if (response.status === 304) {
           throw new AuditApiFailure("conditional-response-without-body");
+        }
+        if (
+          !Number.isSafeInteger(response.status) ||
+          response.status < 200 ||
+          response.status >= 300
+        ) {
+          throw new AuditApiFailure("request-failed", response.status);
         }
         validateResponseSize(response);
         return response;
@@ -565,7 +579,19 @@ export function createGitHubAuditClient(
   return {
     getRepository: async ({ owner, repo }): Promise<AuditRepositoryMetadata> => {
       const data = record((await read("GET /repos/{owner}/{repo}", { owner, repo })).data);
-      return { owner, name: repo, defaultBranch: stringField(data.default_branch) };
+      const responseOwner = stringField(record(data.owner).login);
+      const responseName = stringField(data.name);
+      if (
+        responseOwner.toLowerCase() !== owner.toLowerCase() ||
+        responseName.toLowerCase() !== repo.toLowerCase()
+      ) {
+        throw new AuditApiFailure("repository-identity-mismatch");
+      }
+      return {
+        owner: responseOwner,
+        name: responseName,
+        defaultBranch: stringField(data.default_branch)
+      };
     },
     getBranch: async ({ owner, repo, branch }) => {
       const data = record(
@@ -616,21 +642,31 @@ export function createGitHubAuditClient(
               repo,
               ruleset_id: id
             })
-          ).data
+          ).data,
+          id
         );
       });
       return details;
     },
     listWorkflowFiles: async ({ owner, repo, ref }) => {
-      const response = await read("GET /repos/{owner}/{repo}/contents/.github/workflows", {
-        owner,
-        repo,
-        ref
-      });
-      if (!Array.isArray(response.data) || response.data.length > MAX_RULESETS) {
-        throw new AuditApiFailure("workflow-list-invalid");
-      }
-      return response.data.flatMap((entry): AuditWorkflowFile[] => {
+      const entries = await collectPages(
+        async (page) => {
+          const response = await read("GET /repos/{owner}/{repo}/contents/.github/workflows", {
+            owner,
+            repo,
+            ref,
+            per_page: PAGE_SIZE,
+            page
+          });
+          if (!Array.isArray(response.data)) {
+            throw new AuditApiFailure("workflow-list-invalid");
+          }
+          return { items: response.data, headers: response.headers };
+        },
+        MAX_AUDIT_WORKFLOW_SOURCES,
+        "workflows"
+      );
+      return entries.flatMap((entry): AuditWorkflowFile[] => {
         const item = record(entry);
         const path = stringField(item.path);
         if (!/\.(?:yml|yaml)$/iu.test(path)) {
@@ -651,7 +687,7 @@ export function createGitHubAuditClient(
       );
       if (
         typeof response.data !== "string" ||
-        Buffer.byteLength(response.data, "utf8") > MAX_SOURCE_BYTES
+        Buffer.byteLength(response.data, "utf8") > MAX_AUDIT_SOURCE_BYTES
       ) {
         throw new AuditApiFailure("file-content-invalid");
       }

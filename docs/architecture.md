@@ -159,6 +159,11 @@ any base revision change is incomplete. API response bytes, pages, retries,
 concurrency, request count, and total deadline are bounded. A missing or
 redacted bypass list is unknown. Workflow protection and trusted-root facts are
 explicit caller-supplied roots, not conclusions derived from API visibility.
+Each supplied root is bounded and must be present in the observed workflow
+listing, but the caller assertion is not independent provider authority.
+Workflow and policy source are bounded to 256 KiB. The current live CLI emits
+only an audit report; it does not persist a snapshot or evidence bundle, and
+therefore does not claim offline replay parity.
 Push rulesets are valid repository controls without a branch ref scope; they are
 retained in the normalized audit snapshot but cannot satisfy branch checks or
 produce branch force-push/deletion findings. Those controls are evaluated only

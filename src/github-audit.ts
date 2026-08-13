@@ -3,11 +3,13 @@ import { createHash } from "node:crypto";
 import type { AuditSnapshot } from "./audit.js";
 import { parsePolicy } from "./policy.js";
 import { normalizeRepositoryPath } from "./input.js";
+import { MAX_WORKFLOW_SOURCE_BYTES } from "./workflow-security.js";
 
 export const MAX_AUDIT_WORKFLOW_SOURCES = 100;
-export const MAX_AUDIT_SOURCE_BYTES = 512 * 1024;
+export const MAX_AUDIT_SOURCE_BYTES = MAX_WORKFLOW_SOURCE_BYTES;
 export const MAX_AUDIT_REPOSITORY_TEXT = 512;
 export const MAX_AUDIT_COLLECTION_CONCURRENCY = 4;
+export const MAX_AUDIT_WORKFLOW_ROOTS = 100;
 
 export interface AuditRepositoryArguments {
   readonly owner: string;
@@ -86,6 +88,14 @@ function safeRepositoryName(value: string, fallback: string): string {
   return REPOSITORY_NAME.test(value) ? value : fallback;
 }
 
+function safeRepositoryText(value: string, fallback: string): string {
+  return value.length > 0 &&
+    value.length <= MAX_AUDIT_REPOSITORY_TEXT &&
+    !/[\p{Control}\p{Format}\u2028\u2029]/u.test(value)
+    ? value
+    : fallback;
+}
+
 function validSha(value: string): boolean {
   return SHA.test(value);
 }
@@ -119,7 +129,11 @@ function safeWorkflowPath(value: string): string {
   }
 }
 
-function validateRepositoryMetadata(value: unknown): AuditRepositoryMetadata {
+function validateRepositoryMetadata(
+  value: unknown,
+  expectedOwner?: string,
+  expectedName?: string
+): AuditRepositoryMetadata {
   if (
     typeof value !== "object" ||
     value === null ||
@@ -140,6 +154,12 @@ function validateRepositoryMetadata(value: unknown): AuditRepositoryMetadata {
     defaultBranch.includes("\0")
   ) {
     throw failure("repository-metadata-invalid");
+  }
+  if (
+    (expectedOwner !== undefined && owner.toLowerCase() !== expectedOwner.toLowerCase()) ||
+    (expectedName !== undefined && name.toLowerCase() !== expectedName.toLowerCase())
+  ) {
+    throw failure("repository-identity-mismatch");
   }
   return { owner, name, defaultBranch };
 }
@@ -221,7 +241,7 @@ function incompleteSnapshot(
     repository: {
       owner: safeRepositoryName(owner, "unknown"),
       name: safeRepositoryName(repo, "unknown"),
-      defaultBranch: defaultBranch.length > 0 ? defaultBranch : "unknown"
+      defaultBranch: safeRepositoryText(defaultBranch, "unknown")
     },
     baseRevision: {
       sha: validSha(baseSha) ? baseSha : "0".repeat(40),
@@ -261,8 +281,20 @@ export async function collectRepositoryAuditSnapshot(
       throw failure("repository-identity-invalid");
     }
     policyPath = safePolicyPath(options.policyPath);
+    const protectedWorkflowOptions = options.protectedWorkflowPaths ?? [];
+    const trustedWorkflowOptions = options.trustedWorkflowPaths ?? [];
+    if (
+      protectedWorkflowOptions.length > MAX_AUDIT_WORKFLOW_ROOTS ||
+      trustedWorkflowOptions.length > MAX_AUDIT_WORKFLOW_ROOTS
+    ) {
+      throw failure("workflow-root-limit");
+    }
     const arguments_ = { owner: normalizedOwner, repo: normalizedRepo };
-    const repository = validateRepositoryMetadata(await client.getRepository(arguments_));
+    const repository = validateRepositoryMetadata(
+      await client.getRepository(arguments_),
+      normalizedOwner,
+      normalizedRepo
+    );
     defaultBranch = options.branch ?? repository.defaultBranch;
     if (
       defaultBranch.length === 0 ||
@@ -304,12 +336,8 @@ export async function collectRepositoryAuditSnapshot(
       }),
       (path) => path
     );
-    const protectedPaths = new Set(
-      (options.protectedWorkflowPaths ?? []).map((path) => safeWorkflowPath(path))
-    );
-    const trustedPaths = new Set(
-      (options.trustedWorkflowPaths ?? []).map((path) => safeWorkflowPath(path))
-    );
+    const protectedPaths = new Set(protectedWorkflowOptions.map((path) => safeWorkflowPath(path)));
+    const trustedPaths = new Set(trustedWorkflowOptions.map((path) => safeWorkflowPath(path)));
     const sources = await mapWithConcurrency(
       workflowPaths,
       MAX_AUDIT_COLLECTION_CONCURRENCY,
@@ -332,6 +360,12 @@ export async function collectRepositoryAuditSnapshot(
     );
     const policy = policyFacts(policySource);
     const missing = new Set<string>();
+    const observedWorkflowPaths = new Set(workflowPaths);
+    for (const root of [...protectedPaths, ...trustedPaths]) {
+      if (!observedWorkflowPaths.has(root)) {
+        missing.add("workflow-root-not-observed");
+      }
+    }
     if (workflowPaths.length > 0 && protectedPaths.size === 0) {
       missing.add("workflow-protection-root");
     }
@@ -339,7 +373,11 @@ export async function collectRepositoryAuditSnapshot(
       missing.add("trusted-workflow-root");
     }
 
-    const endingRepository = validateRepositoryMetadata(await client.getRepository(arguments_));
+    const endingRepository = validateRepositoryMetadata(
+      await client.getRepository(arguments_),
+      normalizedOwner,
+      normalizedRepo
+    );
     const endingBranch = validateBranch(
       await client.getBranch({ ...arguments_, branch: defaultBranch }),
       defaultBranch
