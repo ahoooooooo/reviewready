@@ -15,7 +15,7 @@ const REQUEST_TIMEOUT_MS = 60_000;
 const PAGE_SIZE = 100;
 const MAX_PAGES = 10;
 const MAX_RULESETS = 100;
-const MAX_API_REQUESTS = 64;
+const MAX_API_REQUESTS = 512;
 const MAX_RETRIES = 1;
 const MAX_RETRY_DELAY_MS = 2_000;
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
@@ -33,6 +33,17 @@ type RequestFunction = (
   route: string,
   parameters: Record<string, unknown>
 ) => Promise<RequestResponse>;
+type FetchImplementation = (
+  ...arguments_: Parameters<typeof globalThis.fetch>
+) => ReturnType<typeof globalThis.fetch>;
+type RequestWithDefaults = RequestFunction & {
+  readonly endpoint?: {
+    readonly DEFAULTS?: {
+      readonly request?: { readonly fetch?: FetchImplementation };
+    };
+  };
+  readonly defaults?: (defaults: Record<string, unknown>) => RequestFunction;
+};
 
 export interface GitHubAuditApiOptions {
   readonly sleep?: (milliseconds: number) => Promise<void>;
@@ -130,6 +141,79 @@ function validateResponseSize(response: RequestResponse): void {
   if (Buffer.byteLength(serialized, "utf8") > MAX_RESPONSE_BYTES) {
     throw new AuditApiFailure("response-size-limit");
   }
+}
+
+function responseFailure(response: Response, status: number): Response {
+  return new Response("", {
+    status,
+    statusText: "ReviewReady bounded response rejected",
+    headers: response.headers
+  });
+}
+
+async function cancelReader(reader: ByteStreamReader): Promise<void> {
+  try {
+    await reader.cancel();
+  } catch {
+    return;
+  }
+}
+
+async function boundedResponse(response: Response): Promise<Response> {
+  const contentLength = response.headers.get("content-length");
+  let failureStatus: number | undefined;
+  if (contentLength !== null) {
+    const parsed = Number(contentLength);
+    if (!Number.isSafeInteger(parsed) || parsed < 0) {
+      failureStatus = 502;
+    } else if (parsed > MAX_RESPONSE_BYTES) {
+      failureStatus = 413;
+    }
+  }
+  const source = response.body as unknown;
+  if (source === null || source === undefined) {
+    return failureStatus === undefined ? response : responseFailure(response, failureStatus);
+  }
+  const reader = (source as { readonly getReader: () => ByteStreamReader }).getReader();
+  if (failureStatus !== undefined) {
+    await cancelReader(reader);
+    return responseFailure(response, failureStatus);
+  }
+  const chunks: Uint8Array[] = [];
+  let bytes = 0;
+  try {
+    let chunk = await reader.read();
+    while (!chunk.done) {
+      if (!(chunk.value instanceof Uint8Array)) {
+        await cancelReader(reader);
+        return responseFailure(response, 502);
+      }
+      if (bytes + chunk.value.byteLength > MAX_RESPONSE_BYTES) {
+        await cancelReader(reader);
+        return responseFailure(response, 413);
+      }
+      bytes += chunk.value.byteLength;
+      chunks.push(chunk.value);
+      chunk = await reader.read();
+    }
+  } catch (error) {
+    await cancelReader(reader);
+    throw error;
+  }
+  return new Response(Buffer.concat(chunks), {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers
+  });
+}
+
+interface ByteStreamReader {
+  read: () => Promise<{ readonly done: boolean; readonly value?: unknown }>;
+  cancel: (reason?: unknown) => Promise<unknown>;
+}
+
+function boundedFetch(fetchImplementation: FetchImplementation): FetchImplementation {
+  return async (...arguments_) => boundedResponse(await fetchImplementation(...arguments_));
 }
 
 function errorStatus(error: unknown): number | undefined {
@@ -329,6 +413,7 @@ function reviewBypassActors(value: unknown): {
   const data = record(allowance);
   const result: { readonly id: string; readonly type?: "user" | "team" | "app" | "integration" }[] =
     [];
+  let complete = true;
   for (const [field, type] of [
     ["users", "user"],
     ["teams", "team"],
@@ -336,6 +421,7 @@ function reviewBypassActors(value: unknown): {
   ] as const) {
     const values = data[field];
     if (values === undefined) {
+      complete = false;
       continue;
     }
     if (!Array.isArray(values)) {
@@ -359,7 +445,7 @@ function reviewBypassActors(value: unknown): {
       }
     }
   }
-  return { actors: result, known: true };
+  return { actors: result, known: complete };
 }
 
 function mapBranchProtection(value: unknown, branch: string): AuditBranchProtection {
@@ -410,19 +496,33 @@ function mapRuleset(value: unknown, expectedId?: number): AuditRuleset {
     throw new AuditApiFailure("ruleset-target-invalid");
   }
   const enforcement = item.enforcement;
-  if (
-    enforcement !== "active" &&
-    enforcement !== "evaluate" &&
-    enforcement !== "disabled" &&
-    enforcement !== "enabled"
-  ) {
+  if (enforcement !== "active" && enforcement !== "evaluate" && enforcement !== "disabled") {
+    throw new AuditApiFailure("ruleset-enforcement-invalid");
+  }
+  if (target === "repository" && enforcement === "evaluate") {
     throw new AuditApiFailure("ruleset-enforcement-invalid");
   }
   const conditions = record(item.conditions);
+  const supportedConditionFields =
+    target === "repository"
+      ? ["repository_name"]
+      : target === "push"
+        ? ["repository_name"]
+        : ["ref_name", "repository_name"];
+  for (const field of Object.keys(conditions)) {
+    if (!supportedConditionFields.includes(field)) {
+      throw new AuditApiFailure("ruleset-scope-unsupported");
+    }
+  }
   const includes =
     target === "branch" || target === "tag"
       ? (() => {
           const refName = record(conditions.ref_name);
+          for (const field of Object.keys(refName)) {
+            if (field !== "include" && field !== "exclude") {
+              throw new AuditApiFailure("ruleset-scope-unsupported");
+            }
+          }
           const rawValues = refName.include;
           if (!Array.isArray(rawValues)) {
             throw new AuditApiFailure("ruleset-scope-invalid");
@@ -437,13 +537,33 @@ function mapRuleset(value: unknown, expectedId?: number): AuditRuleset {
             }
             values.push(value);
           }
+          const excluded = refName.exclude;
+          if (excluded !== undefined) {
+            if (!Array.isArray(excluded) || excluded.some((entry) => typeof entry !== "string")) {
+              throw new AuditApiFailure("ruleset-scope-invalid");
+            }
+            if (excluded.length > MAX_NESTED_ITEMS) {
+              throw new AuditApiFailure("ruleset-scope-limit");
+            }
+            if (excluded.length > 0) {
+              throw new AuditApiFailure("ruleset-scope-unsupported");
+            }
+          }
           return values;
         })()
       : [];
   const repositoryName = conditions.repository_name;
   let repositoryPatterns: string[] | undefined;
+  if (target === "repository" && repositoryName === undefined) {
+    throw new AuditApiFailure("ruleset-scope-unsupported");
+  }
   if (repositoryName !== undefined) {
     const repositoryScope = record(repositoryName);
+    for (const field of Object.keys(repositoryScope)) {
+      if (field !== "include" && field !== "exclude") {
+        throw new AuditApiFailure("ruleset-scope-unsupported");
+      }
+    }
     const repositoryIncludes = repositoryScope.include;
     if (
       !Array.isArray(repositoryIncludes) ||
@@ -451,8 +571,26 @@ function mapRuleset(value: unknown, expectedId?: number): AuditRuleset {
     ) {
       throw new AuditApiFailure("ruleset-repository-scope-invalid");
     }
+    if (repositoryIncludes.length === 0) {
+      throw new AuditApiFailure("ruleset-repository-scope-invalid");
+    }
     if (repositoryIncludes.length > MAX_NESTED_ITEMS) {
       throw new AuditApiFailure("ruleset-repository-scope-limit");
+    }
+    const repositoryExcludes = repositoryScope.exclude;
+    if (repositoryExcludes !== undefined) {
+      if (
+        !Array.isArray(repositoryExcludes) ||
+        repositoryExcludes.some((entry) => typeof entry !== "string")
+      ) {
+        throw new AuditApiFailure("ruleset-repository-scope-invalid");
+      }
+      if (repositoryExcludes.length > MAX_NESTED_ITEMS) {
+        throw new AuditApiFailure("ruleset-repository-scope-limit");
+      }
+      if (repositoryExcludes.length > 0) {
+        throw new AuditApiFailure("ruleset-scope-unsupported");
+      }
     }
     repositoryPatterns = repositoryIncludes.map((entry) => stringField(entry));
   }
@@ -502,7 +640,7 @@ function mapRuleset(value: unknown, expectedId?: number): AuditRuleset {
     target,
     refPatterns: includes.map((entry) => stringField(entry)),
     ...(repositoryPatterns === undefined ? {} : { repositoryPatterns }),
-    enforcement: enforcement === "enabled" ? "active" : enforcement,
+    enforcement,
     bypassActors,
     ...(bypassActorsKnown ? {} : { bypassActorsKnown: false }),
     allowForcePushes,
@@ -564,7 +702,19 @@ export function createGitHubAuditClient(
   const octokit = getOctokit(token, {
     request: { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) }
   });
-  const request = octokit.request as unknown as RequestFunction;
+  const rawRequest = octokit.request as unknown as RequestWithDefaults | null | undefined;
+  const configuredFetch = rawRequest?.endpoint?.DEFAULTS?.request?.fetch;
+  const defaultFetch = typeof configuredFetch === "function" ? configuredFetch : globalThis.fetch;
+  const boundedTransport =
+    typeof defaultFetch === "function" ? boundedFetch(defaultFetch) : undefined;
+  const responseBoundaryAvailable = boundedTransport !== undefined;
+  let request = rawRequest as RequestFunction;
+  if (responseBoundaryAvailable && typeof rawRequest?.defaults === "function") {
+    request = rawRequest.defaults({ request: { fetch: boundedTransport } });
+  }
+  if (typeof request !== "function") {
+    throw new AuditApiFailure("request-unavailable");
+  }
   const sleep =
     options.sleep ??
     ((milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
@@ -598,6 +748,9 @@ export function createGitHubAuditClient(
     parameters: Record<string, unknown>,
     raw = false
   ): Promise<RequestResponse> => {
+    if (boundedTransport === undefined) {
+      throw new AuditApiFailure("response-boundary-unavailable");
+    }
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
       const remainingMs = deadlineAt - monotonicNow();
       if (!Number.isSafeInteger(remainingMs) || remainingMs <= 0) {
@@ -610,7 +763,10 @@ export function createGitHubAuditClient(
       try {
         const response = await request(route, {
           ...parameters,
-          request: { signal: AbortSignal.timeout(Math.min(REQUEST_TIMEOUT_MS, remainingMs)) },
+          request: {
+            signal: AbortSignal.timeout(Math.min(REQUEST_TIMEOUT_MS, remainingMs)),
+            fetch: boundedTransport
+          },
           headers: {
             accept: raw ? "application/vnd.github.raw+json" : "application/vnd.github+json",
             "X-GitHub-Api-Version": API_VERSION
@@ -700,7 +856,7 @@ export function createGitHubAuditClient(
             owner,
             repo,
             includes_parents: true,
-            targets: "branch,tag,push",
+            targets: "branch,tag,push,repository",
             per_page: PAGE_SIZE,
             page
           });

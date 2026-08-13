@@ -297,6 +297,15 @@ workflow roots are explicit out-of-band inputs; a check name or ordinary API
 success never establishes a trust root. Each root option is bounded and must
 name an observed workflow, but it remains a caller assertion rather than
 independent GitHub authority. Workflow and policy source are bounded to 256 KiB.
+The live adapter also enforces a 512-attempt total request budget and requires
+the bounded transport for every structured and raw API read. It installs that
+boundary from Octokit's configured fetch or the runtime global fetch, and fails
+closed if neither is available. It collects inherited branch/tag/push/repository
+rulesets. Repository targets require an explicit modeled repository scope;
+unsupported conditions, enforcement states, ruleset exclusions, or
+repository-id/property scopes fail closed; active
+tag-only rulesets are reported as incomplete rather than as branch force-push
+or deletion findings.
 The optional `--ref` value is only a default-branch assertion: it must equal the
 repository API's reported default branch. A non-default branch is rejected as
 incomplete rather than silently audited under default-branch semantics. The

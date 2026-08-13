@@ -11,7 +11,10 @@ export default defineConfig({
         "src/matcher.ts",
         "src/policy.ts",
         "src/github.ts",
-        "src/github-api.ts"
+        "src/github-api.ts",
+        "src/audit.ts",
+        "src/github-audit.ts",
+        "src/github-audit-api.ts"
       ],
       thresholds: {
         perFile: true,

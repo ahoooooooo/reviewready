@@ -1,6 +1,6 @@
 # ADR 0005: Live repository audit collection
 
-- Status: accepted for the v1.0.4 candidate
+- Status: accepted for the hardened v1.0.7 TA-2 collector contract
 - Date: 2026-08-12
 
 ## Context
@@ -18,7 +18,7 @@ into evidence of a trusted merge gate.
 - reads repository metadata and the evaluated default branch twice, and binds
   policy and every workflow source to the first branch SHA;
 - reads policy bytes by immutable base SHA and records their SHA-256 digest;
-- collects branch protection, inherited branch/tag/push rulesets, workflow metadata,
+- collects branch protection, inherited branch/tag/push/repository rulesets, workflow metadata,
   and tag protection without checking out or executing repository code;
 - models push rulesets without a ref_name condition and keeps
   force-push/deletion controls undefined for targets where those controls do not
@@ -26,11 +26,22 @@ into evidence of a trusted merge gate.
 - treats missing branch-review bypass data, missing trusted/protected workflow
   roots, changed base revisions, malformed responses, and unavailable settings as
   incomplete;
+- treats a missing bounded transport as unavailable for every API read, passes
+  the bounded fetch per request, and buffers every response before JSON parsing
+  within the response-byte limit. The boundary uses Octokit's configured fetch
+  or the runtime global fetch; if neither exists, collection fails closed;
+- recognizes GitHub's `repository` target and `~ALL` repository scope, while
+  requiring an explicit modeled repository scope and canonical enforcement,
+  rejecting repository-target ref/unknown conditions, non-empty ref or
+  repository exclusions, and repository-id/property scopes that the normalized
+  contract cannot evaluate;
+- reports active tag-only rulesets as an explicit incomplete finding rather than
+  converting their controls into branch findings;
 - requires protected/trusted workflow paths from an explicit out-of-band root
   configuration. The collector never infers a trusted root from a successful
   API call, a check name, or the fact that a workflow is on the default branch;
 - bounds source size, workflow count, concurrency, retries, response bytes,
-  request count, pagination, and the overall collection deadline.
+  512 total request attempts, pagination, and the overall collection deadline.
 
 The pure `auditRepository` function remains the only classifier. Live collection
 cannot influence PR readiness and has no write API. An installation token may

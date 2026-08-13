@@ -185,11 +185,17 @@ check as advisory; it does not manufacture an authority claim.
 The current TA-2 hardening batch covers bounded root inputs and nested API
 collections, immutable repository identity, default-branch-only ref semantics,
 workflow/ruleset pagination and duplicate identity rejection, exact API status,
-bounded headers and late deadlines, ruleset scope isolation, source-size parity,
-safe audit/SARIF locations, deterministic ordering, and audit-schema/CLI
-regressions. Repeated non-empty unlinked pages remain incomplete rather than
-being treated as complete. It does not yet implement or claim a replayable
-evidence bundle. Canonical serialization, bundle privacy/source retention,
+bounded headers and raw response streams, late deadlines, a 512-attempt total
+request budget, per-request bounded transport for every API read (with a bounded
+Octokit/global-fetch fallback and no unbounded path), inherited
+branch/tag/push/repository ruleset collection, explicit repository-target scope
+and enforcement validation, unsupported conditions and ruleset-scope rejection,
+active tag-ruleset incomplete findings,
+source-size parity, safe audit/SARIF locations,
+deterministic ordering, and audit-schema/CLI regressions. Repeated non-empty
+unlinked pages remain incomplete rather than being treated as complete. It does
+not yet implement or claim a replayable evidence bundle. Canonical serialization,
+bundle privacy/source retention,
 exact caller-supplied revision semantics, atomic settings sampling, and
 independent provider authority remain explicit SOL MAX design gates.
 

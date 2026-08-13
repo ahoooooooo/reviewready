@@ -35,6 +35,17 @@ Unknown, missing, contradictory, stale, over-limit, or malformed input produces 
 
 Findings use stable codes, categories, severity, deterministic paths, and messages. Findings are sorted by code, path, and message before serialization. Paths use structural indices for untrusted collection members rather than interpolating external names into JSON or SARIF locations.
 
+The live adapter collects inherited `repository` target rulesets and recognizes
+GitHub's `~ALL` repository scope. Repository-target rulesets require an explicit
+modeled `repository_name` scope and canonical enforcement state. Repository-target
+`ref_name` or unknown conditions, nested unknown fields, non-empty
+ref/repository exclusions, and repository-id/property conditions that are not
+represented by this versioned snapshot are incomplete, not silently ignored.
+Offline snapshots reject contradictory target-specific facts before evaluation.
+Active tag-only rulesets produce AUDIT_RULESET_SCOPE_UNSUPPORTED and do not
+produce branch force-push or deletion findings. SARIF encodes every URI path
+segment, including structural brackets.
+
 The audit report has its own `auditVersion` and status of `pass`, `fail`, or `incomplete`. It is deliberately separate from the existing readiness report and must not change the existing public readiness JSON schema. Exit codes are 0 for pass, 1 for findings, and 2 for incomplete or invalid input.
 
 The initial checks cover:

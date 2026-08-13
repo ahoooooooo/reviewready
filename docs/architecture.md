@@ -163,8 +163,18 @@ retain the same GitHub immutable numeric repository ID. The optional live
 `--ref` input can only assert the API-reported default branch; a non-default
 branch is rejected rather than being presented as a default-branch audit. API
 response bytes, pages, retries, concurrency, request count, and total deadline
-are bounded. A missing or
-redacted bypass list is unknown. Workflow protection and trusted-root facts are
+are bounded, including a 512-attempt total request budget and a raw response
+stream cap before JSON parsing. Every structured and raw read requires the
+bounded transport, including its per-request fetch binding; the adapter uses
+Octokit's configured fetch or the runtime global fetch and treats both missing
+as incomplete rather than falling back unbounded. A missing or redacted bypass
+list is unknown. Inherited branch/tag/push/repository rulesets are collected.
+Repository targets require an explicit modeled repository scope and canonical
+enforcement. Repository-target ref/unknown conditions, nested unknown fields,
+ruleset ref/repository exclusions and repository-id/property scopes that are not
+represented by the normalized contract fail closed as incomplete. Active
+tag-only rulesets are reported as unsupported by the branch audit rather than
+being rendered as branch controls. Workflow protection and trusted-root facts are
 explicit caller-supplied roots, not conclusions derived from API visibility.
 Each supplied root is bounded and must be present in the observed workflow
 listing, but the caller assertion is not independent provider authority.
@@ -173,8 +183,9 @@ only an audit report; it does not persist a snapshot or evidence bundle, and
 therefore does not claim offline replay parity.
 Push rulesets are valid repository controls without a branch ref scope; they are
 retained in the normalized audit snapshot but cannot satisfy branch checks or
-produce branch force-push/deletion findings. Those controls are evaluated only
-for branch/tag targets where GitHub exposes them.
+produce branch force-push/deletion findings. Tag-only rulesets are not converted
+into branch findings; an active tag ruleset remains an explicit incomplete
+finding until tag-ruleset semantics are covered by the audit contract.
 
 Webhook verification is limited to exact raw-body HMAC-SHA256 validation,
 configured hook identity, a bounded verifier clock, an atomic replay namespace

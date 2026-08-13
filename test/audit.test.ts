@@ -108,6 +108,59 @@ describe("repository audit", () => {
     expect(report).toMatchObject({ auditVersion: 1, status: "pass", findings: [] });
   });
 
+  it("rejects contradictory target-specific ruleset facts", () => {
+    const base = validSnapshot().rulesets[0];
+    if (base === undefined) {
+      throw new Error("fixture ruleset is required");
+    }
+    const cases: Record<string, unknown>[] = [
+      {
+        ...base,
+        target: "repository",
+        enforcement: "evaluate",
+        refPatterns: [],
+        repositoryPatterns: ["~ALL"],
+        allowForcePushes: undefined,
+        allowDeletions: undefined
+      },
+      {
+        ...base,
+        target: "repository",
+        enforcement: "active",
+        refPatterns: ["refs/heads/main"],
+        repositoryPatterns: ["~ALL"],
+        allowForcePushes: undefined,
+        allowDeletions: undefined
+      },
+      {
+        ...base,
+        target: "repository",
+        enforcement: "active",
+        refPatterns: [],
+        repositoryPatterns: undefined,
+        allowForcePushes: undefined,
+        allowDeletions: undefined
+      },
+      {
+        ...base,
+        target: "push",
+        enforcement: "active",
+        refPatterns: ["refs/heads/main"],
+        allowForcePushes: undefined,
+        allowDeletions: undefined
+      }
+    ];
+
+    for (const ruleset of cases) {
+      const snapshot = validSnapshot() as unknown as { rulesets: Record<string, unknown>[] };
+      snapshot.rulesets = [ruleset];
+      const report = auditRepository(snapshot);
+
+      expect(report.status).toBe("incomplete");
+      expect(report.findings.map((finding) => finding.code)).toContain("AUDIT_INPUT_INVALID");
+    }
+  });
+
   it("does not audit a branch ruleset outside the evaluated default branch", () => {
     const snapshot = validSnapshot();
     const ruleset = snapshot.rulesets[0];
@@ -254,7 +307,7 @@ describe("repository audit", () => {
 
     expect(finding?.path).toBe("policy.requiredChecks[0]");
     expect(sarifFinding?.locations?.[0]?.physicalLocation?.artifactLocation?.uri).toBe(
-      "policy.requiredChecks[0]"
+      "policy.requiredChecks%5B0%5D"
     );
     expect(JSON.stringify(report)).not.toContain(hostileName);
   });
@@ -308,6 +361,41 @@ describe("repository audit", () => {
     const report = auditRepository(snapshot);
 
     expect(report.status).toBe("pass");
+  });
+
+  it("applies ~ALL repository scope to branch rulesets", () => {
+    const snapshot = validSnapshot();
+    const ruleset = snapshot.rulesets[0];
+    if (ruleset === undefined) {
+      throw new Error("fixture ruleset is required");
+    }
+    ruleset.repositoryPatterns = ["~ALL"];
+    ruleset.allowForcePushes = true;
+    ruleset.allowDeletions = true;
+
+    const report = auditRepository(snapshot);
+
+    expect(report.findings.map((finding) => finding.code)).toEqual(
+      expect.arrayContaining(["AUDIT_FORCE_PUSH_ALLOWED", "AUDIT_BRANCH_DELETION_ALLOWED"])
+    );
+  });
+
+  it("does not ignore ~ALL repository scope on active tag rulesets", () => {
+    const snapshot = validSnapshot();
+    const ruleset = snapshot.rulesets[0];
+    if (ruleset === undefined) {
+      throw new Error("fixture ruleset is required");
+    }
+    ruleset.target = "tag";
+    ruleset.refPatterns = ["~ALL"];
+    ruleset.repositoryPatterns = ["~ALL"];
+
+    const report = auditRepository(snapshot);
+
+    expect(report.status).toBe("incomplete");
+    expect(report.findings.map((finding) => finding.code)).toContain(
+      "AUDIT_RULESET_SCOPE_UNSUPPORTED"
+    );
   });
 
   it("fails closed when an active ruleset scope cannot be evaluated", () => {
@@ -439,7 +527,9 @@ describe("repository audit", () => {
         id: 4,
         target: "repository",
         refPatterns: [],
-        repositoryPatterns: ["other-owner/*"]
+        repositoryPatterns: ["other-owner/*"],
+        allowForcePushes: undefined,
+        allowDeletions: undefined
       },
       {
         ...baseRuleset,
@@ -676,6 +766,86 @@ describe("repository audit", () => {
     expect(result?.locations?.[0]?.physicalLocation?.artifactLocation?.uri).toBe(
       ".github/workflows/a%23b%3Fc%25.yml"
     );
+  });
+
+  it("URI-encodes hostile single-segment SARIF paths", () => {
+    const report: Parameters<typeof renderAuditSarif>[0] = {
+      auditVersion: 1,
+      status: "fail",
+      repository: { owner: "octocat", name: "demo", baseSha: shaA },
+      findings: [
+        {
+          code: "TEST_HOSTILE_PATH",
+          category: "integrity",
+          severity: "error",
+          path: "a#b?c%",
+          message: "hostile path"
+        }
+      ],
+      checked: []
+    };
+
+    const sarif = JSON.parse(renderAuditSarif(report)) as {
+      runs?: Array<{
+        results?: Array<{
+          locations?: Array<{ physicalLocation?: { artifactLocation?: { uri?: string } } }>;
+        }>;
+      }>;
+    };
+
+    expect(
+      sarif.runs?.[0]?.results?.[0]?.locations?.[0]?.physicalLocation?.artifactLocation?.uri
+    ).toBe("a%23b%3Fc%25");
+  });
+
+  it("does not report branch controls for tag-only rulesets", () => {
+    const snapshot = validSnapshot();
+    const ruleset = snapshot.rulesets[0];
+    if (ruleset === undefined) {
+      throw new Error("fixture ruleset is required");
+    }
+    ruleset.target = "tag";
+    ruleset.refPatterns = ["refs/tags/*"];
+    ruleset.allowForcePushes = true;
+    ruleset.allowDeletions = true;
+
+    const report = auditRepository(snapshot);
+
+    expect(report.findings.map((finding) => finding.code)).not.toEqual(
+      expect.arrayContaining(["AUDIT_FORCE_PUSH_ALLOWED", "AUDIT_BRANCH_DELETION_ALLOWED"])
+    );
+    expect(report.findings.map((finding) => finding.code)).toContain(
+      "AUDIT_RULESET_SCOPE_UNSUPPORTED"
+    );
+  });
+
+  it("URI-encodes structural brackets in SARIF paths", () => {
+    const report: Parameters<typeof renderAuditSarif>[0] = {
+      auditVersion: 1,
+      status: "fail",
+      repository: { owner: "octocat", name: "demo", baseSha: shaA },
+      findings: [
+        {
+          code: "TEST_STRUCTURAL_PATH",
+          category: "integrity",
+          severity: "error",
+          path: "policy.requiredChecks[0]",
+          message: "structural path"
+        }
+      ],
+      checked: []
+    };
+    const sarif = JSON.parse(renderAuditSarif(report)) as {
+      runs?: Array<{
+        results?: Array<{
+          locations?: Array<{ physicalLocation?: { artifactLocation?: { uri?: string } } }>;
+        }>;
+      }>;
+    };
+
+    expect(
+      sarif.runs?.[0]?.results?.[0]?.locations?.[0]?.physicalLocation?.artifactLocation?.uri
+    ).toBe("policy.requiredChecks%5B0%5D");
   });
 
   it("keeps capped findings deterministic when workflow input order changes", () => {

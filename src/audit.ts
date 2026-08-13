@@ -91,6 +91,52 @@ const rulesetSchema = z
         message: "branch and tag rulesets require force-push and deletion facts"
       });
     }
+    if (value.target === "repository") {
+      if (value.enforcement === "evaluate") {
+        context.addIssue({
+          code: "custom",
+          path: ["enforcement"],
+          message: "repository rulesets cannot use evaluate enforcement"
+        });
+      }
+      if (value.refPatterns.length > 0) {
+        context.addIssue({
+          code: "custom",
+          path: ["refPatterns"],
+          message: "repository rulesets cannot contain ref patterns"
+        });
+      }
+      if (value.repositoryPatterns === undefined || value.repositoryPatterns.length === 0) {
+        context.addIssue({
+          code: "custom",
+          path: ["repositoryPatterns"],
+          message: "repository rulesets require an evaluated repository scope"
+        });
+      }
+      if (value.allowForcePushes !== undefined || value.allowDeletions !== undefined) {
+        context.addIssue({
+          code: "custom",
+          path: ["allowForcePushes"],
+          message: "repository rulesets cannot contain branch control facts"
+        });
+      }
+    }
+    if (value.target === "push") {
+      if (value.refPatterns.length > 0) {
+        context.addIssue({
+          code: "custom",
+          path: ["refPatterns"],
+          message: "push rulesets cannot contain ref patterns"
+        });
+      }
+      if (value.allowForcePushes !== undefined || value.allowDeletions !== undefined) {
+        context.addIssue({
+          code: "custom",
+          path: ["allowForcePushes"],
+          message: "push rulesets cannot contain branch control facts"
+        });
+      }
+    }
   });
 
 const auditSnapshotSchema = z
@@ -182,9 +228,6 @@ function compareStrings(left: string, right: string): number {
 }
 
 function sarifUri(path: string): string {
-  if (!path.includes("/")) {
-    return path;
-  }
   return path
     .split("/")
     .map((segment) => encodeURIComponent(segment))
@@ -270,10 +313,12 @@ function evaluateRulesetRepositoryScope(
   const candidates = [`${repository.owner}/${repository.name}`, repository.name];
   try {
     return {
-      applies: ruleset.repositoryPatterns.some((pattern) =>
-        candidates.some((candidate) =>
-          micromatch.isMatch(candidate, pattern, { dot: true, nonegate: true })
-        )
+      applies: ruleset.repositoryPatterns.some(
+        (pattern) =>
+          pattern === "~ALL" ||
+          candidates.some((candidate) =>
+            micromatch.isMatch(candidate, pattern, { dot: true, nonegate: true })
+          )
       ),
       valid: true
     };
@@ -535,6 +580,20 @@ function auditSnapshot(snapshot: AuditSnapshot): AuditReport {
       continue;
     }
     if (ruleset.target === "branch" && !scope.applies) {
+      continue;
+    }
+    if (ruleset.target !== "branch" && ruleset.target !== "repository") {
+      if (ruleset.target === "tag" && ruleset.enforcement === "active") {
+        add(
+          auditFinding(
+            "AUDIT_RULESET_SCOPE_UNSUPPORTED",
+            "completeness",
+            "An active tag ruleset is not evaluated by the branch audit contract.",
+            "rulesets." + String(ruleset.id) + ".target"
+          ),
+          true
+        );
+      }
       continue;
     }
     relevantRulesets.push(ruleset);
