@@ -14,16 +14,12 @@ export const MAX_AUDIT_WORKFLOWS = 100;
 export const MAX_AUDIT_FINDINGS = 500;
 
 const SHA = z.string().regex(/^[0-9a-f]{40}$/iu);
-const TEXT = z.string().min(1).max(512);
-function hasControlCharacter(value: string): boolean {
-  for (const character of value) {
-    const codePoint = character.codePointAt(0) ?? 0;
-    if ((codePoint >= 0 && codePoint <= 31) || (codePoint >= 127 && codePoint <= 159)) {
-      return true;
-    }
-  }
-  return false;
-}
+const UNSAFE_TEXT = /[\p{Control}\p{Format}\p{Surrogate}\u2028\u2029]/u;
+const TEXT = z
+  .string()
+  .min(1)
+  .max(512)
+  .refine((value) => !UNSAFE_TEXT.test(value));
 
 const REPOSITORY_PATH = TEXT.refine(
   (value) =>
@@ -31,7 +27,7 @@ const REPOSITORY_PATH = TEXT.refine(
     !value.startsWith("/") &&
     !/^[a-z]:/iu.test(value) &&
     !value.split("/").some((part) => part === "" || part === "." || part === "..") &&
-    !hasControlCharacter(value),
+    !UNSAFE_TEXT.test(value),
   "must be a bounded repository-relative path"
 );
 
@@ -185,6 +181,16 @@ function compareStrings(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
+function sarifUri(path: string): string {
+  if (!path.includes("/")) {
+    return path;
+  }
+  return path
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+}
+
 function checkIdentity(check: {
   readonly appId?: number | undefined;
   readonly appSlug?: string | undefined;
@@ -213,14 +219,20 @@ function appendCheckFindings(
     identities.add(checkIdentity(check));
     byName.set(check.name, identities);
   }
-  for (const [name, identities] of byName) {
+  const names = [...byName.keys()].sort(compareStrings);
+  for (const [index, name] of names.entries()) {
+    const identities = byName.get(name);
+    if (identities === undefined) {
+      continue;
+    }
+    const findingPath = `${path}[${String(index)}]`;
     if (identities.has("unknown")) {
       findings.push(
         auditFinding(
           "AUDIT_CHECK_PROVENANCE_UNKNOWN",
           "provenance",
           "Required check has no trusted App or provider identity.",
-          `${path}.${name}`
+          findingPath
         )
       );
     }
@@ -230,7 +242,7 @@ function appendCheckFindings(
           "AUDIT_CHECK_NAME_AMBIGUOUS",
           "provenance",
           "The same required check name has multiple producer identities.",
-          `${path}.${name}`
+          findingPath
         )
       );
     }
@@ -300,9 +312,7 @@ function balancedGlobDelimiters(pattern: string): boolean {
 }
 
 function validRefPattern(pattern: string): boolean {
-  return (
-    !pattern.includes("\\") && !hasControlCharacter(pattern) && balancedGlobDelimiters(pattern)
-  );
+  return !pattern.includes("\\") && !UNSAFE_TEXT.test(pattern) && balancedGlobDelimiters(pattern);
 }
 
 function evaluateRulesetScope(
@@ -551,7 +561,7 @@ function auditSnapshot(snapshot: AuditSnapshot): AuditReport {
     );
   }
   appendCheckFindings(effectiveChecks, "requiredChecks", findings);
-  for (const requiredCheck of snapshot.policy.requiredChecks) {
+  for (const [index, requiredCheck] of snapshot.policy.requiredChecks.entries()) {
     const matchingChecks = effectiveChecks.filter((check) => check.name === requiredCheck.name);
     if (matchingChecks.length === 0) {
       add(
@@ -559,7 +569,7 @@ function auditSnapshot(snapshot: AuditSnapshot): AuditReport {
           "AUDIT_REQUIRED_CHECK_MISSING",
           "integrity",
           "A policy-required check is absent from the protected configuration.",
-          `policy.requiredChecks.${requiredCheck.name}`
+          `policy.requiredChecks[${String(index)}]`
         ),
         true
       );
@@ -572,7 +582,7 @@ function auditSnapshot(snapshot: AuditSnapshot): AuditReport {
           "AUDIT_CHECK_PROVENANCE_MISMATCH",
           "provenance",
           "A policy-required check is supplied by a different provider identity.",
-          `policy.requiredChecks.${requiredCheck.name}`
+          `policy.requiredChecks[${String(index)}]`
         )
       );
     }
@@ -827,7 +837,7 @@ export function renderAuditSarif(report: AuditReport): string {
         : [
             {
               physicalLocation: {
-                artifactLocation: { uri: finding.path },
+                artifactLocation: { uri: sarifUri(finding.path) },
                 ...(finding.line === undefined ? {} : { region: { startLine: finding.line } })
               }
             }

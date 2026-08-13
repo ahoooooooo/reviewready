@@ -182,13 +182,16 @@ check as advisory; it does not manufacture an authority claim.
 
 ### TA-2 — reproducible live audit and dogfood evidence
 
-The current TA-2 hardening batch covers bounded root inputs, repository
-identity binding, workflow-directory pagination, API response status, ruleset
-scope isolation, source-size parity, and audit-schema/CLI regressions. It does
-not yet implement or claim a replayable evidence bundle. Canonical
-serialization, bundle privacy/source retention, exact caller-supplied revision
-semantics, atomic settings sampling, and independent provider authority remain
-explicit SOL MAX design gates.
+The current TA-2 hardening batch covers bounded root inputs and nested API
+collections, immutable repository identity, default-branch-only ref semantics,
+workflow/ruleset pagination and duplicate identity rejection, exact API status,
+bounded headers and late deadlines, ruleset scope isolation, source-size parity,
+safe audit/SARIF locations, deterministic ordering, and audit-schema/CLI
+regressions. Repeated non-empty unlinked pages remain incomplete rather than
+being treated as complete. It does not yet implement or claim a replayable
+evidence bundle. Canonical serialization, bundle privacy/source retention,
+exact caller-supplied revision semantics, atomic settings sampling, and
+independent provider authority remain explicit SOL MAX design gates.
 
 Objective: produce a deterministic, read-only, replayable audit of ReviewReady at
 one exact revision. Tracked by #55.

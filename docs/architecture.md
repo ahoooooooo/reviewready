@@ -151,12 +151,19 @@ could emit a required check, and bounded workflow source. Missing or
 contradictory settings are `incomplete`, never `pass`.
 Audit findings have their own `auditVersion` and optional SARIF rendering; they
 must not be interpreted as a readiness result or as proof that code is correct.
+Finding locations use bounded structural indices for untrusted collection
+members; required-check names are never interpolated into public paths or SARIF
+URIs.
 
 The live collector reads repository metadata, branch protection, inherited
 rulesets, tag protection, workflow listings, policy bytes, and workflow source
 at the evaluated base SHA. It performs a bounded second repository/branch read;
-any base revision change is incomplete. API response bytes, pages, retries,
-concurrency, request count, and total deadline are bounded. A missing or
+any base revision change is incomplete. The two repository reads must also
+retain the same GitHub immutable numeric repository ID. The optional live
+`--ref` input can only assert the API-reported default branch; a non-default
+branch is rejected rather than being presented as a default-branch audit. API
+response bytes, pages, retries, concurrency, request count, and total deadline
+are bounded. A missing or
 redacted bypass list is unknown. Workflow protection and trusted-root facts are
 explicit caller-supplied roots, not conclusions derived from API visibility.
 Each supplied root is bounded and must be present in the observed workflow

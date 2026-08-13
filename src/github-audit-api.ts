@@ -19,7 +19,9 @@ const MAX_API_REQUESTS = 64;
 const MAX_RETRIES = 1;
 const MAX_RETRY_DELAY_MS = 2_000;
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
+const MAX_HEADER_VALUE_BYTES = 64 * 1024;
 const MAX_DEADLINE_MS = 120_000;
+const MAX_NESTED_ITEMS = 100;
 const SHA = /^[0-9a-f]{40}$/iu;
 
 type RequestResponse = {
@@ -59,7 +61,7 @@ function stringField(value: unknown, max = 512): string {
     typeof value !== "string" ||
     value.length === 0 ||
     value.length > max ||
-    value.includes("\0")
+    /[\p{Control}\p{Format}\p{Surrogate}\u2028\u2029]/u.test(value)
   ) {
     throw new AuditApiFailure("response-string-invalid");
   }
@@ -99,6 +101,9 @@ function headerValue(headers: unknown, name: string): string | undefined {
     }
     if (typeof value !== "string" || found !== undefined) {
       throw new AuditApiFailure("response-header-invalid");
+    }
+    if (Buffer.byteLength(value, "utf8") > MAX_HEADER_VALUE_BYTES) {
+      throw new AuditApiFailure("response-header-limit");
     }
     found = value;
   }
@@ -280,9 +285,14 @@ function checksFromBranchProtection(value: unknown): AuditBranchProtection["requ
   const strict = booleanField(item.strict);
   const checks: { readonly name: string; readonly appId?: number }[] = [];
   let hasStructuredChecks = false;
+  let hasChecksField = false;
   if (item.checks !== undefined) {
+    hasChecksField = true;
     if (!Array.isArray(item.checks)) {
       throw new AuditApiFailure("required-checks-invalid");
+    }
+    if (item.checks.length > MAX_NESTED_ITEMS) {
+      throw new AuditApiFailure("required-checks-limit");
     }
     if (item.checks.length > 0) {
       hasStructuredChecks = true;
@@ -290,10 +300,19 @@ function checksFromBranchProtection(value: unknown): AuditBranchProtection["requ
     }
   }
   if (!hasStructuredChecks && item.contexts !== undefined) {
-    if (!Array.isArray(item.contexts) || item.contexts.some((entry) => typeof entry !== "string")) {
+    if (!Array.isArray(item.contexts)) {
+      throw new AuditApiFailure("required-contexts-invalid");
+    }
+    if (item.contexts.length > MAX_NESTED_ITEMS) {
+      throw new AuditApiFailure("required-contexts-limit");
+    }
+    if (item.contexts.some((entry) => typeof entry !== "string")) {
       throw new AuditApiFailure("required-contexts-invalid");
     }
     checks.push(...item.contexts.map((entry) => ({ name: stringField(entry) })));
+  }
+  if (!hasChecksField && item.contexts === undefined) {
+    throw new AuditApiFailure("required-checks-invalid");
   }
   return { strict, checks };
 }
@@ -322,10 +341,22 @@ function reviewBypassActors(value: unknown): {
     if (!Array.isArray(values)) {
       throw new AuditApiFailure("review-bypass-invalid");
     }
+    if (values.length > MAX_NESTED_ITEMS) {
+      throw new AuditApiFailure("review-bypass-limit");
+    }
     for (const entry of values) {
       const item = record(entry);
       const id = item.id ?? item.login ?? item.slug;
-      result.push({ id: stringField(id), type });
+      result.push({
+        id:
+          typeof id === "number" && Number.isSafeInteger(id) && id >= 0
+            ? String(id)
+            : stringField(id),
+        type
+      });
+      if (result.length > MAX_NESTED_ITEMS) {
+        throw new AuditApiFailure("review-bypass-limit");
+      }
     }
   }
   return { actors: result, known: true };
@@ -366,6 +397,9 @@ function rulesetChecks(value: unknown): { readonly name: string; readonly appId?
   if (!Array.isArray(values)) {
     throw new AuditApiFailure("ruleset-checks-invalid");
   }
+  if (values.length > MAX_NESTED_ITEMS) {
+    throw new AuditApiFailure("ruleset-checks-limit");
+  }
   return values.map((entry) => check(entry, "integration_id"));
 }
 
@@ -393,6 +427,9 @@ function mapRuleset(value: unknown, expectedId?: number): AuditRuleset {
           if (!Array.isArray(rawValues)) {
             throw new AuditApiFailure("ruleset-scope-invalid");
           }
+          if (rawValues.length > MAX_NESTED_ITEMS) {
+            throw new AuditApiFailure("ruleset-scope-limit");
+          }
           const values: string[] = [];
           for (const value of rawValues) {
             if (typeof value !== "string") {
@@ -414,11 +451,17 @@ function mapRuleset(value: unknown, expectedId?: number): AuditRuleset {
     ) {
       throw new AuditApiFailure("ruleset-repository-scope-invalid");
     }
+    if (repositoryIncludes.length > MAX_NESTED_ITEMS) {
+      throw new AuditApiFailure("ruleset-repository-scope-limit");
+    }
     repositoryPatterns = repositoryIncludes.map((entry) => stringField(entry));
   }
   const rules = item.rules;
   if (!Array.isArray(rules)) {
     throw new AuditApiFailure("ruleset-rules-invalid");
+  }
+  if (rules.length > MAX_NESTED_ITEMS) {
+    throw new AuditApiFailure("ruleset-rules-limit");
   }
   let allowForcePushes: boolean | undefined;
   let allowDeletions: boolean | undefined;
@@ -436,11 +479,18 @@ function mapRuleset(value: unknown, expectedId?: number): AuditRuleset {
       allowDeletions = false;
     }
     if (rule.type === "required_status_checks") {
-      requiredChecks.push(...rulesetChecks(rule.parameters));
+      const checks = rulesetChecks(rule.parameters);
+      if (requiredChecks.length + checks.length > MAX_NESTED_ITEMS) {
+        throw new AuditApiFailure("ruleset-checks-limit");
+      }
+      requiredChecks.push(...checks);
     }
   }
   const rawBypass = item.bypass_actors;
   const bypassActorsKnown = Array.isArray(rawBypass);
+  if (bypassActorsKnown && rawBypass.length > MAX_NESTED_ITEMS) {
+    throw new AuditApiFailure("ruleset-bypass-limit");
+  }
   const bypassActors = bypassActorsKnown ? rawBypass.map(actor) : [];
   const id = integerField(item.id);
   if (expectedId !== undefined && id !== expectedId) {
@@ -466,7 +516,8 @@ async function collectPages(
     page: number
   ) => Promise<{ readonly items: readonly unknown[]; readonly headers?: unknown }>,
   maxItems: number,
-  kind: string
+  kind: string,
+  shortUnlinkedPageComplete = false
 ): Promise<unknown[]> {
   const result: unknown[] = [];
   for (let page = 1; page <= MAX_PAGES; page += 1) {
@@ -482,8 +533,20 @@ async function collectPages(
       }
       continue;
     }
+    if (page === MAX_PAGES) {
+      throw new AuditApiFailure(`${kind}-pagination-limit`);
+    }
     const extra = await requestPage(page + 1);
-    if (extra.items.length > 0 || nextPage(extra.headers) !== undefined) {
+    const extraNext = nextPage(extra.headers);
+    if (
+      shortUnlinkedPageComplete &&
+      pageResult.items.length < PAGE_SIZE &&
+      extraNext === undefined &&
+      extra.items.length === 0
+    ) {
+      return result;
+    }
+    if (extra.items.length > 0 || extraNext !== undefined) {
       throw new AuditApiFailure(`${kind}-pagination-ambiguous`);
     }
     return result;
@@ -519,6 +582,15 @@ export function createGitHubAuditClient(
     throw new AuditApiFailure("clock-invalid");
   }
   const deadlineAt = startedAt + deadlineMs;
+  let latestNow = startedAt;
+  const monotonicNow = (): number => {
+    const observed = now();
+    if (!Number.isSafeInteger(observed) || observed < 0) {
+      throw new AuditApiFailure("clock-invalid");
+    }
+    latestNow = Math.max(latestNow, observed);
+    return latestNow;
+  };
   let requestCount = 0;
 
   const read = async (
@@ -527,7 +599,7 @@ export function createGitHubAuditClient(
     raw = false
   ): Promise<RequestResponse> => {
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
-      const remainingMs = deadlineAt - now();
+      const remainingMs = deadlineAt - monotonicNow();
       if (!Number.isSafeInteger(remainingMs) || remainingMs <= 0) {
         throw new AuditApiFailure("audit-deadline-exceeded");
       }
@@ -544,6 +616,9 @@ export function createGitHubAuditClient(
             "X-GitHub-Api-Version": API_VERSION
           }
         });
+        if (deadlineAt - monotonicNow() <= 0) {
+          throw new AuditApiFailure("audit-deadline-exceeded");
+        }
         if (response.status === undefined) {
           throw new AuditApiFailure("response-status-invalid");
         }
@@ -557,17 +632,20 @@ export function createGitHubAuditClient(
         ) {
           throw new AuditApiFailure("request-failed", response.status);
         }
+        if (response.status !== 200) {
+          throw new AuditApiFailure("response-status-invalid", response.status);
+        }
         validateResponseSize(response);
         return response;
       } catch (error) {
-        const delay = attempt < MAX_RETRIES ? retryDelay(error, now()) : undefined;
+        const delay = attempt < MAX_RETRIES ? retryDelay(error, monotonicNow()) : undefined;
         if (delay === undefined) {
           if (error instanceof AuditApiFailure) {
             throw error;
           }
           throw new AuditApiFailure("request-failed", errorStatus(error));
         }
-        if (delay > deadlineAt - now()) {
+        if (delay > deadlineAt - monotonicNow()) {
           throw new AuditApiFailure("audit-deadline-exceeded");
         }
         await sleep(delay);
@@ -590,7 +668,8 @@ export function createGitHubAuditClient(
       return {
         owner: responseOwner,
         name: responseName,
-        defaultBranch: stringField(data.default_branch)
+        defaultBranch: stringField(data.default_branch),
+        id: integerField(data.id, 1)
       };
     },
     getBranch: async ({ owner, repo, branch }) => {
@@ -633,6 +712,14 @@ export function createGitHubAuditClient(
         MAX_RULESETS,
         "rulesets"
       );
+      const summaryIds = new Set<number>();
+      for (const summary of summaries) {
+        const id = integerField(record(summary).id);
+        if (summaryIds.has(id)) {
+          throw new AuditApiFailure("rulesets-duplicate");
+        }
+        summaryIds.add(id);
+      }
       const details = await mapWithConcurrency(summaries, 4, async (summary) => {
         const id = integerField(record(summary).id);
         return mapRuleset(
@@ -664,7 +751,8 @@ export function createGitHubAuditClient(
           return { items: response.data, headers: response.headers };
         },
         MAX_AUDIT_WORKFLOW_SOURCES,
-        "workflows"
+        "workflows",
+        true
       );
       return entries.flatMap((entry): AuditWorkflowFile[] => {
         const item = record(entry);
@@ -694,15 +782,25 @@ export function createGitHubAuditClient(
       return response.data;
     },
     getTagProtection: async ({ owner, repo }): Promise<AuditTagProtection> => {
-      const response = await read("GET /repos/{owner}/{repo}/tags/protection", { owner, repo });
-      if (!Array.isArray(response.data)) {
-        throw new AuditApiFailure("tag-protection-invalid");
+      try {
+        const response = await read("GET /repos/{owner}/{repo}/tags/protection", { owner, repo });
+        if (!Array.isArray(response.data)) {
+          throw new AuditApiFailure("tag-protection-invalid");
+        }
+        if (response.data.length > MAX_NESTED_ITEMS) {
+          throw new AuditApiFailure("tag-protection-limit");
+        }
+        const patterns = response.data.map((entry) => stringField(record(entry).pattern));
+        const protectsAll = patterns.some(
+          (pattern) => pattern === "*" || pattern === "~ALL" || pattern === "refs/tags/*"
+        );
+        return { known: true, allowsDeletion: !protectsAll, allowsUpdate: !protectsAll };
+      } catch (error) {
+        if (errorStatus(error) === 404) {
+          return { known: false, allowsDeletion: true, allowsUpdate: true };
+        }
+        throw error;
       }
-      const patterns = response.data.map((entry) => stringField(record(entry).pattern));
-      const protectsAll = patterns.some(
-        (pattern) => pattern === "*" || pattern === "~ALL" || pattern === "refs/tags/*"
-      );
-      return { known: true, allowsDeletion: !protectsAll, allowsUpdate: !protectsAll };
     }
   };
 }

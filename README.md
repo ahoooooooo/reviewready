@@ -246,7 +246,7 @@ reviewready explain --policy fixtures/basic/.reviewready.yml
 reviewready check --policy fixtures/basic/.reviewready.yml --input fixtures/basic/ready.json
 ```
 
-Stable exit codes:
+Readiness CLI exit codes:
 
 - `0`: policy valid or contribution ready;
 - `1`: contribution not ready;
@@ -273,8 +273,10 @@ reviewready audit --input fixtures/audit/reviewready.json --json
 reviewready audit --input fixtures/audit/reviewready.json --sarif
 ```
 
-Audit exit codes are 0 for `pass`, 1 for findings, and 2 for incomplete or
-invalid input. The audit report has its own contract, described by
+The checked-in `fixtures/audit/reviewready.json` is a synthetic, offline-only
+normalized snapshot for deterministic dogfooding; it is not a live GitHub
+capture or replayable evidence bundle. Audit exit codes are 0 for `pass`, 1 for
+findings, and 2 for incomplete or invalid input. The audit report has its own contract, described by
 [reviewready.audit.schema.json](reviewready.audit.schema.json); it is not the
 readiness result. The readiness JSON contract is separately documented by
 [reviewready.result.schema.json](reviewready.result.schema.json).
@@ -295,6 +297,11 @@ workflow roots are explicit out-of-band inputs; a check name or ordinary API
 success never establishes a trust root. Each root option is bounded and must
 name an observed workflow, but it remains a caller assertion rather than
 independent GitHub authority. Workflow and policy source are bounded to 256 KiB.
+The optional `--ref` value is only a default-branch assertion: it must equal the
+repository API's reported default branch. A non-default branch is rejected as
+incomplete rather than silently audited under default-branch semantics. The
+collector also binds its two repository reads to GitHub's immutable numeric
+repository ID internally; that identity is not added to the public snapshot.
 The current live command prints a report only; it does not write an evidence
 bundle or claim that a later offline replay is byte-identical. The collector
 never checks out or executes repository code.

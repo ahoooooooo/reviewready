@@ -19,7 +19,8 @@ function response(data: unknown, headers: Record<string, string> = {}) {
       ? {
           ...(data as Record<string, unknown>),
           owner: { login: "octocat" },
-          name: "demo"
+          name: "demo",
+          id: 123
         }
       : data;
   return { data: normalizedData, headers, status: 200 };
@@ -144,7 +145,8 @@ describe("GitHub repository audit API adapter", () => {
     await expect(client.getRepository({ owner: "octocat", repo: "demo" })).resolves.toEqual({
       owner: "octocat",
       name: "demo",
-      defaultBranch: "main"
+      defaultBranch: "main",
+      id: 123
     });
     await expect(
       client.getBranch({ owner: "octocat", repo: "demo", branch: "main" })
@@ -251,6 +253,24 @@ describe("GitHub repository audit API adapter", () => {
     );
   });
 
+  it("rejects successful responses with a non-canonical status", async () => {
+    for (const status of [202, 203, 206]) {
+      const request = vi.fn(() =>
+        Promise.resolve({
+          data: { default_branch: "main" },
+          headers: {},
+          status
+        })
+      );
+      vi.mocked(getOctokit).mockReturnValue({ request } as never);
+      const client = createGitHubAuditClient("secret", { sleep: () => Promise.resolve() });
+
+      await expect(client.getRepository({ owner: "octocat", repo: "demo" })).rejects.toThrow(
+        "response-status-invalid"
+      );
+    }
+  });
+
   it("rejects a response without an explicit HTTP status", async () => {
     const request = vi.fn(() => Promise.resolve({ data: { default_branch: "main" }, headers: {} }));
     vi.mocked(getOctokit).mockReturnValue({ request } as never);
@@ -291,6 +311,49 @@ describe("GitHub repository audit API adapter", () => {
       "GET /repos/{owner}/{repo}/contents/.github/workflows",
       expect.objectContaining({ page: 1, per_page: 100, ref: sha })
     );
+  });
+
+  it("fails closed when a short unlinked workflow directory page repeats", async () => {
+    const request = vi.fn((route: string, params: Record<string, unknown>) => {
+      void params;
+      if (route !== "GET /repos/{owner}/{repo}/contents/.github/workflows") {
+        return Promise.reject(new Error("unexpected route"));
+      }
+      return Promise.resolve(
+        response([
+          { path: ".github/workflows/one.yml", type: "file" },
+          { path: ".github/workflows/two.yml", type: "file" }
+        ])
+      );
+    });
+    vi.mocked(getOctokit).mockReturnValue({ request } as never);
+    const client = createGitHubAuditClient("secret", { sleep: () => Promise.resolve() });
+
+    await expect(
+      client.listWorkflowFiles({ owner: "octocat", repo: "demo", ref: sha })
+    ).rejects.toThrow("workflows-pagination-ambiguous");
+    expect(request).toHaveBeenCalledTimes(2);
+  });
+
+  it("fails closed when a short unlinked workflow page is followed by distinct data", async () => {
+    const request = vi.fn((route: string, params: Record<string, unknown>) => {
+      if (route !== "GET /repos/{owner}/{repo}/contents/.github/workflows") {
+        return Promise.reject(new Error("unexpected route"));
+      }
+      return Promise.resolve(
+        response(
+          params.page === 1
+            ? [{ path: ".github/workflows/one.yml", type: "file" }]
+            : [{ path: ".github/workflows/two.yml", type: "file" }]
+        )
+      );
+    });
+    vi.mocked(getOctokit).mockReturnValue({ request } as never);
+    const client = createGitHubAuditClient("secret", { sleep: () => Promise.resolve() });
+
+    await expect(
+      client.listWorkflowFiles({ owner: "octocat", repo: "demo", ref: sha })
+    ).rejects.toThrow("workflows-pagination-ambiguous");
   });
 
   it("rejects a ruleset detail whose identity changes from the listed summary", async () => {
@@ -336,6 +399,23 @@ describe("GitHub repository audit API adapter", () => {
     await expect(
       client.getBranchProtection({ owner: "octocat", repo: "demo", branch: "main" })
     ).resolves.toBeNull();
+  });
+
+  it("normalizes a confirmed tag-protection 404 as unknown", async () => {
+    const request = vi.fn((route: string) => {
+      if (route === "GET /repos/{owner}/{repo}/tags/protection") {
+        return Promise.reject(Object.assign(new Error("unavailable"), { status: 404 }));
+      }
+      return Promise.resolve(response({ default_branch: "main" }));
+    });
+    vi.mocked(getOctokit).mockReturnValue({ request } as never);
+    const client = createGitHubAuditClient("secret", { sleep: () => Promise.resolve() });
+
+    await expect(client.getTagProtection({ owner: "octocat", repo: "demo" })).resolves.toEqual({
+      known: false,
+      allowsDeletion: true,
+      allowsUpdate: true
+    });
   });
 
   it("rejects an oversized response before mapping untrusted API data", async () => {
@@ -386,6 +466,38 @@ describe("GitHub repository audit API adapter", () => {
     );
     expect(request).toHaveBeenCalledTimes(1);
     expect(sleep).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not extend a deadline when the clock moves backward", async () => {
+    const observations = [0, 0, 1_500, 100, 100];
+    const request = vi.fn(() => Promise.reject(Object.assign(new Error("busy"), { status: 503 })));
+    vi.mocked(getOctokit).mockReturnValue({ request } as never);
+
+    await expect(
+      createGitHubAuditClient("secret", {
+        now: () => observations.shift() ?? -1_000,
+        sleep: () => Promise.resolve(),
+        deadlineMs: 1_000
+      }).getRepository({ owner: "octocat", repo: "demo" })
+    ).rejects.toThrow("audit-deadline-exceeded");
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a response that arrives after the overall deadline", async () => {
+    let currentTime = 0;
+    const request = vi.fn(() => {
+      currentTime = 1_500;
+      return response({ default_branch: "main" });
+    });
+    vi.mocked(getOctokit).mockReturnValue({ request } as never);
+
+    await expect(
+      createGitHubAuditClient("secret", {
+        now: () => currentTime,
+        sleep: () => Promise.resolve(),
+        deadlineMs: 1_000
+      }).getRepository({ owner: "octocat", repo: "demo" })
+    ).rejects.toThrow("audit-deadline-exceeded");
   });
 
   it("marks missing branch-review bypass data as unknown", async () => {
@@ -505,6 +617,15 @@ describe("GitHub repository audit API adapter", () => {
       );
     }
 
+    const unsafeText = vi.fn(() => Promise.resolve(response({ default_branch: "main\u0007" })));
+    vi.mocked(getOctokit).mockReturnValue({ request: unsafeText } as never);
+    await expect(
+      createGitHubAuditClient("secret", { sleep: () => Promise.resolve() }).getRepository({
+        owner: "octocat",
+        repo: "demo"
+      })
+    ).rejects.toThrow("response-string-invalid");
+
     const invalidBranch = vi.fn(() =>
       Promise.resolve(response({ name: "main", commit: { sha: "not-a-sha" } }))
     );
@@ -577,6 +698,23 @@ describe("GitHub repository audit API adapter", () => {
         repo: "demo"
       })
     ).rejects.toThrow("request-failed");
+  });
+
+  it("bounds untrusted pagination and retry header values", async () => {
+    const request = vi.fn((route: string) => {
+      if (route === "GET /repos/{owner}/{repo}/rulesets") {
+        return Promise.resolve(response([{ id: 1 }], { link: "x".repeat(64 * 1024 + 1) }));
+      }
+      return Promise.reject(Object.assign(new Error("unexpected"), { status: 500 }));
+    });
+    vi.mocked(getOctokit).mockReturnValue({ request } as never);
+
+    await expect(
+      createGitHubAuditClient("secret", { sleep: () => Promise.resolve() }).listRulesets({
+        owner: "octocat",
+        repo: "demo"
+      })
+    ).rejects.toThrow("response-header-limit");
   });
 
   it("uses only bounded retry delays from retry-after and rate-limit headers", async () => {
@@ -652,7 +790,7 @@ describe("GitHub repository audit API adapter", () => {
             required_pull_request_reviews: {
               required_approving_review_count: 2,
               bypass_pull_request_allowances: {
-                users: [{ id: "1" }],
+                users: [{ id: 1 }],
                 teams: [{ slug: "team-a" }],
                 apps: [{ slug: "app-a" }]
               }
@@ -710,6 +848,7 @@ describe("GitHub repository audit API adapter", () => {
   it("rejects malformed branch protection, ruleset, workflow, file, and tag data", async () => {
     const protectionCases = [
       { required_status_checks: { strict: true, checks: "bad" } },
+      { required_status_checks: { strict: true } },
       { required_status_checks: { strict: true, checks: [], contexts: [1] } },
       {
         required_status_checks: { strict: true, checks: [] },
@@ -804,6 +943,161 @@ describe("GitHub repository audit API adapter", () => {
     ).rejects.toThrow("tag-protection-invalid");
   });
 
+  it("bounds nested API collections before mapping them", async () => {
+    const oversizedChecks = vi.fn((route: string) =>
+      route.endsWith("/protection")
+        ? Promise.resolve(
+            response({
+              required_status_checks: {
+                strict: true,
+                checks: Array.from({ length: 101 }, () => ({ context: "ReviewReady" }))
+              },
+              enforce_admins: { enabled: true },
+              allow_force_pushes: { enabled: false },
+              allow_deletions: { enabled: false },
+              required_pull_request_reviews: null
+            })
+          )
+        : Promise.reject(Object.assign(new Error("unexpected"), { status: 500 }))
+    );
+    vi.mocked(getOctokit).mockReturnValue({ request: oversizedChecks } as never);
+    await expect(
+      createGitHubAuditClient("secret", { sleep: () => Promise.resolve() }).getBranchProtection({
+        owner: "octocat",
+        repo: "demo",
+        branch: "main"
+      })
+    ).rejects.toThrow("required-checks-limit");
+
+    const oversizedBypassActors = vi.fn((route: string) =>
+      route.endsWith("/protection")
+        ? Promise.resolve(
+            response({
+              required_status_checks: null,
+              enforce_admins: { enabled: true },
+              allow_force_pushes: { enabled: false },
+              allow_deletions: { enabled: false },
+              required_pull_request_reviews: {
+                required_approving_review_count: 1,
+                bypass_pull_request_allowances: {
+                  users: Array.from({ length: 101 }, (_, index) => ({ id: index + 1 }))
+                }
+              }
+            })
+          )
+        : Promise.reject(Object.assign(new Error("unexpected"), { status: 500 }))
+    );
+    vi.mocked(getOctokit).mockReturnValue({ request: oversizedBypassActors } as never);
+    await expect(
+      createGitHubAuditClient("secret", { sleep: () => Promise.resolve() }).getBranchProtection({
+        owner: "octocat",
+        repo: "demo",
+        branch: "main"
+      })
+    ).rejects.toThrow("review-bypass-limit");
+
+    const oversizedTagPatterns = vi.fn((route: string) =>
+      route === "GET /repos/{owner}/{repo}/tags/protection"
+        ? Promise.resolve(response(Array.from({ length: 101 }, () => ({ pattern: "v*" }))))
+        : Promise.reject(Object.assign(new Error("unexpected"), { status: 500 }))
+    );
+    vi.mocked(getOctokit).mockReturnValue({ request: oversizedTagPatterns } as never);
+    await expect(
+      createGitHubAuditClient("secret", { sleep: () => Promise.resolve() }).getTagProtection({
+        owner: "octocat",
+        repo: "demo"
+      })
+    ).rejects.toThrow("tag-protection-limit");
+
+    const rulesetCases = [
+      {
+        code: "ruleset-scope-limit",
+        detail: {
+          conditions: { ref_name: { include: Array.from({ length: 101 }, () => "~ALL") } },
+          rules: []
+        }
+      },
+      {
+        code: "ruleset-rules-limit",
+        detail: {
+          conditions: { ref_name: { include: ["~ALL"] } },
+          rules: Array.from({ length: 101 }, () => ({ type: "deletion" }))
+        }
+      },
+      {
+        code: "ruleset-bypass-limit",
+        detail: {
+          conditions: { ref_name: { include: ["~ALL"] } },
+          rules: [],
+          bypass_actors: Array.from({ length: 101 }, () => ({ actor_type: "User", actor_id: 1 }))
+        }
+      },
+      {
+        code: "ruleset-checks-limit",
+        detail: {
+          conditions: { ref_name: { include: ["~ALL"] } },
+          rules: [
+            {
+              type: "required_status_checks",
+              parameters: {
+                required_status_checks: Array.from({ length: 101 }, () => ({ context: "check" }))
+              }
+            }
+          ],
+          bypass_actors: []
+        }
+      },
+      {
+        code: "ruleset-checks-limit",
+        detail: {
+          conditions: { ref_name: { include: ["~ALL"] } },
+          rules: [
+            {
+              type: "required_status_checks",
+              parameters: {
+                required_status_checks: Array.from({ length: 100 }, () => ({ context: "check" }))
+              }
+            },
+            {
+              type: "required_status_checks",
+              parameters: {
+                required_status_checks: Array.from({ length: 100 }, () => ({ context: "check" }))
+              }
+            }
+          ],
+          bypass_actors: []
+        }
+      }
+    ] as const;
+
+    for (const testCase of rulesetCases) {
+      const request = vi.fn((route: string, params: Record<string, unknown>) => {
+        if (route === "GET /repos/{owner}/{repo}/rulesets") {
+          return Promise.resolve(params.page === 1 ? response([{ id: 1 }]) : response([]));
+        }
+        if (route === "GET /repos/{owner}/{repo}/rulesets/{ruleset_id}") {
+          return Promise.resolve(
+            response({
+              id: 1,
+              name: "main",
+              target: "branch",
+              enforcement: "active",
+              ...testCase.detail
+            })
+          );
+        }
+        return Promise.reject(Object.assign(new Error("unexpected"), { status: 500 }));
+      });
+      vi.mocked(getOctokit).mockReturnValue({ request } as never);
+      await expect(
+        createGitHubAuditClient("secret", { sleep: () => Promise.resolve() }).listRulesets({
+          owner: "octocat",
+          repo: "demo"
+        })
+      ).rejects.toThrow(testCase.code);
+    }
+  });
+
   it("rejects ambiguous pagination and full-page continuation anomalies", async () => {
     const ambiguousLink = vi.fn((route: string, params: Record<string, unknown>) => {
       if (route === "GET /repos/{owner}/{repo}/rulesets") {
@@ -857,6 +1151,75 @@ describe("GitHub repository audit API adapter", () => {
         repo: "demo"
       })
     ).rejects.toThrow("rulesets-pagination-ambiguous");
+  });
+
+  it("rejects duplicate ruleset identities across linked pages", async () => {
+    const request = vi.fn((route: string, params: Record<string, unknown>) => {
+      if (route === "GET /repos/{owner}/{repo}/rulesets") {
+        if (params.page === 1) {
+          return Promise.resolve(
+            response([{ id: 7 }], {
+              link: '<https://api.github.com/repos/octocat/demo/rulesets?page=2>; rel="next"'
+            })
+          );
+        }
+        return Promise.resolve(params.page === 2 ? response([{ id: 7 }]) : response([]));
+      }
+      if (route === "GET /repos/{owner}/{repo}/rulesets/{ruleset_id}") {
+        return Promise.resolve(
+          response({
+            id: 7,
+            name: "main",
+            target: "branch",
+            enforcement: "active",
+            conditions: { ref_name: { include: ["~DEFAULT_BRANCH"] } },
+            bypass_actors: [],
+            rules: []
+          })
+        );
+      }
+      return Promise.reject(new Error("unexpected route"));
+    });
+    vi.mocked(getOctokit).mockReturnValue({ request } as never);
+
+    await expect(
+      createGitHubAuditClient("secret", { sleep: () => Promise.resolve() }).listRulesets({
+        owner: "octocat",
+        repo: "demo"
+      })
+    ).rejects.toThrow("rulesets-duplicate");
+  });
+
+  it("does not request beyond the bounded pagination page budget", async () => {
+    const pages: number[] = [];
+    const request = vi.fn((route: string, params: Record<string, unknown>) => {
+      if (route === "GET /repos/{owner}/{repo}/rulesets") {
+        pages.push(params.page as number);
+        const page = params.page as number;
+        return Promise.resolve(
+          response(
+            [{ id: page }],
+            page < 10
+              ? {
+                  link: `<https://api.github.com/repos/octocat/demo/rulesets?page=${String(
+                    page + 1
+                  )}>; rel="next"`
+                }
+              : {}
+          )
+        );
+      }
+      return Promise.reject(new Error("unexpected detail request"));
+    });
+    vi.mocked(getOctokit).mockReturnValue({ request } as never);
+
+    await expect(
+      createGitHubAuditClient("secret", { sleep: () => Promise.resolve() }).listRulesets({
+        owner: "octocat",
+        repo: "demo"
+      })
+    ).rejects.toThrow("rulesets-pagination-limit");
+    expect(pages).toEqual(Array.from({ length: 10 }, (_, index) => index + 1));
   });
 
   it("normalizes workflow extensions and tag protection patterns", async () => {

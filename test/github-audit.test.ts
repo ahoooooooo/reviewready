@@ -26,7 +26,7 @@ const policySource = [
 ].join("\n");
 
 function client(overrides: Partial<AuditGitHubClient> = {}): AuditGitHubClient {
-  const repository = { owner: "octocat", name: "demo", defaultBranch: "main" };
+  const repository = { owner: "octocat", name: "demo", defaultBranch: "main", id: 123 };
   const branch = { name: "main", sha: baseSha };
   return {
     getRepository: vi.fn(() => Promise.resolve(repository)),
@@ -117,6 +117,21 @@ describe("GitHub repository audit collector", () => {
     expect(auditRepository(snapshot)).toMatchObject({ auditVersion: 1, status: "pass" });
   });
 
+  it("fails closed when an audit requests a non-default branch", async () => {
+    const api = client({
+      getBranch: vi.fn(({ branch }: AuditRepositoryArguments & { branch: string }) =>
+        Promise.resolve({ name: branch, sha: baseSha })
+      )
+    });
+
+    const snapshot = await collectRepositoryAuditSnapshot("octocat", "demo", api, {
+      branch: "feature"
+    });
+
+    expect(snapshot.completeness.missing).toContain("non-default-branch");
+    expect(snapshot.repository.defaultBranch).toBe("main");
+  });
+
   it("fails closed when the evaluated branch changes during collection", async () => {
     const api = client({
       getBranch: vi
@@ -189,12 +204,106 @@ describe("GitHub repository audit collector", () => {
       "demo",
       client({
         getRepository: vi.fn(() =>
-          Promise.resolve({ owner: "attacker", name: "demo", defaultBranch: "main" })
+          Promise.resolve({ owner: "attacker", name: "demo", defaultBranch: "main", id: 123 })
         )
       })
     );
 
     expect(snapshot.completeness.missing).toContain("repository-identity-mismatch");
+  });
+
+  it("fails closed when the immutable repository ID changes during collection", async () => {
+    const api = client({
+      getRepository: vi
+        .fn()
+        .mockResolvedValueOnce({ owner: "octocat", name: "demo", defaultBranch: "main", id: 123 })
+        .mockResolvedValueOnce({ owner: "octocat", name: "demo", defaultBranch: "main", id: 456 })
+    });
+
+    const snapshot = await collectRepositoryAuditSnapshot("octocat", "demo", api, {
+      protectedWorkflowPaths: [workflowPath],
+      trustedWorkflowPaths: [workflowPath]
+    });
+
+    expect(snapshot.completeness.missing).toContain("repository-identity-changed");
+  });
+
+  it("fails closed when the collector receives duplicate ruleset identities", async () => {
+    const api = client({
+      listRulesets: vi.fn(() =>
+        Promise.resolve([
+          {
+            id: 7,
+            name: "main",
+            target: "branch" as const,
+            refPatterns: ["~DEFAULT_BRANCH"],
+            enforcement: "active" as const,
+            bypassActors: [],
+            allowForcePushes: false,
+            allowDeletions: false,
+            requiredChecks: []
+          },
+          {
+            id: 7,
+            name: "main-copy",
+            target: "branch" as const,
+            refPatterns: ["~DEFAULT_BRANCH"],
+            enforcement: "active" as const,
+            bypassActors: [],
+            allowForcePushes: false,
+            allowDeletions: false,
+            requiredChecks: []
+          }
+        ])
+      )
+    });
+
+    const snapshot = await collectRepositoryAuditSnapshot("octocat", "demo", api);
+
+    expect(snapshot.completeness.missing).toContain("ruleset-duplicate");
+  });
+
+  it("sorts canonically equivalent workflow paths without locale collation", async () => {
+    const composed = ".github/workflows/ä.yml";
+    const decomposed = ".github/workflows/a\u0308.yml";
+    const collect = (paths: readonly string[]) =>
+      collectRepositoryAuditSnapshot(
+        "octocat",
+        "demo",
+        client({
+          listWorkflowFiles: vi.fn(() =>
+            Promise.resolve(paths.map((path) => ({ path, type: "file" as const })))
+          )
+        })
+      );
+
+    const first = await collect([decomposed, composed]);
+    const second = await collect([composed, decomposed]);
+
+    expect(first.policy.workflowPaths).toEqual(second.policy.workflowPaths);
+  });
+
+  it("bounds the number of rulesets accepted by the collector", async () => {
+    const ruleset = {
+      id: 1,
+      name: "main",
+      target: "branch" as const,
+      refPatterns: ["~DEFAULT_BRANCH"],
+      enforcement: "active" as const,
+      bypassActors: [],
+      allowForcePushes: false,
+      allowDeletions: false,
+      requiredChecks: []
+    };
+    const snapshot = await collectRepositoryAuditSnapshot(
+      "octocat",
+      "demo",
+      client({
+        listRulesets: vi.fn(() => Promise.resolve(Array.from({ length: 101 }, () => ruleset)))
+      })
+    );
+
+    expect(snapshot.completeness.missing).toContain("ruleset-count-limit");
   });
 
   it("rejects workflow source beyond the static analyzer limit", async () => {
@@ -221,7 +330,7 @@ describe("GitHub repository audit collector", () => {
         "demo",
         client({
           getRepository: vi.fn(() =>
-            Promise.resolve({ owner: "octocat", name: "demo", defaultBranch: "" })
+            Promise.resolve({ owner: "octocat", name: "demo", defaultBranch: "", id: 123 })
           )
         })
       ),
@@ -254,6 +363,20 @@ describe("GitHub repository audit collector", () => {
     );
     expect(invalidWorkflowEntry.completeness.missing).toContain("workflow-entry-not-file");
 
+    const duplicateWorkflowEntry = await collectRepositoryAuditSnapshot(
+      "octocat",
+      "demo",
+      client({
+        listWorkflowFiles: vi.fn(() =>
+          Promise.resolve([
+            { path: workflowPath, type: "file" as const },
+            { path: workflowPath, type: "file" as const }
+          ])
+        )
+      })
+    );
+    expect(duplicateWorkflowEntry.completeness.missing).toContain("workflow-entry-duplicate");
+
     const invalidWorkflowPath = await collectRepositoryAuditSnapshot(
       "octocat",
       "demo",
@@ -264,6 +387,25 @@ describe("GitHub repository audit collector", () => {
       })
     );
     expect(invalidWorkflowPath.completeness.missing).toContain("workflow-path-invalid");
+
+    const invalidWorkflowFormatPath = await collectRepositoryAuditSnapshot(
+      "octocat",
+      "demo",
+      client({
+        listWorkflowFiles: vi.fn(() =>
+          Promise.resolve([{ path: ".github/workflows/bad\u2028.yml", type: "file" as const }])
+        )
+      })
+    );
+    expect(invalidWorkflowFormatPath.completeness.missing).toContain("workflow-path-invalid");
+
+    const invalidPolicyFormatPath = await collectRepositoryAuditSnapshot(
+      "octocat",
+      "demo",
+      client(),
+      { policyPath: ".reviewready\u2028.yml" }
+    );
+    expect(invalidPolicyFormatPath.completeness.missing).toContain("policy-path-invalid");
 
     const invalidProtectedRoot = await collectRepositoryAuditSnapshot("octocat", "demo", client(), {
       protectedWorkflowPaths: ["../root.yml"]
@@ -331,8 +473,8 @@ describe("GitHub repository audit collector", () => {
     const api = client({
       getRepository: vi
         .fn()
-        .mockResolvedValueOnce({ owner: "octocat", name: "demo", defaultBranch: "main" })
-        .mockResolvedValueOnce({ owner: "octocat", name: "demo", defaultBranch: "trunk" })
+        .mockResolvedValueOnce({ owner: "octocat", name: "demo", defaultBranch: "main", id: 123 })
+        .mockResolvedValueOnce({ owner: "octocat", name: "demo", defaultBranch: "trunk", id: 123 })
     });
 
     const snapshot = await collectRepositoryAuditSnapshot("octocat", "demo", api, {

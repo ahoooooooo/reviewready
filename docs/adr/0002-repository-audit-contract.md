@@ -22,6 +22,8 @@ The command does not contact GitHub, check out a revision, load repository workf
 The versioned snapshot contract must explicitly bind:
 
 - repository owner, name, and default branch;
+- the GitHub immutable repository identity used to detect a repository swap
+  during a live consistency reread (kept internal to the public v1 snapshot);
 - base revision SHA, policy path, and the fact that the policy was loaded from that base revision;
 - branch-protection and active-ruleset facts, including required checks, bypass actors, and exact branch/ref scope;
 - branch, tag, force-push, deletion, review, and administration controls;
@@ -31,7 +33,7 @@ The versioned snapshot contract must explicitly bind:
 
 Unknown, missing, contradictory, stale, over-limit, or malformed input produces `incomplete` or `fail`; it must never be upgraded to `pass` because a field looks plausible.
 
-Findings use stable codes, categories, severity, deterministic paths, and messages. Findings are sorted by code, path, and message before serialization.
+Findings use stable codes, categories, severity, deterministic paths, and messages. Findings are sorted by code, path, and message before serialization. Paths use structural indices for untrusted collection members rather than interpolating external names into JSON or SARIF locations.
 
 The audit report has its own `auditVersion` and status of `pass`, `fail`, or `incomplete`. It is deliberately separate from the existing readiness report and must not change the existing public readiness JSON schema. Exit codes are 0 for pass, 1 for findings, and 2 for incomplete or invalid input.
 
@@ -44,12 +46,14 @@ The initial checks cover:
 - workflow protection, immutable action references, `pull_request_target`, and checkout or execution of PR content;
 - deterministic AI workflow source, prompt, and sink hazards, reported as security findings rather than readiness decisions.
 
-The pure engine remains the authority for classification. The v1.0.4 candidate
-also provides a separate, read-only live collector (`github-audit` plus
+The pure engine remains the authority for classification. The historical v1.0.4
+implementation, retained and hardened through the current v1.0.7 line, also
+provides a separate, read-only live collector (`github-audit` plus
 `github-audit-api`) that produces this normalized snapshot from bounded GitHub
 REST reads. It binds policy/workflow bytes to one immutable base SHA, performs
-a second repository/branch consistency read, preserves unknown bypass data, and
-requires explicit protected/trusted workflow roots. It does not execute code,
+a second repository/branch consistency read, preserves unknown bypass data,
+requires explicit protected/trusted workflow roots, and accepts `--ref` only as
+an assertion of the API-reported default branch. It does not execute code,
 infer a trust root from API visibility, or turn missing permissions into pass.
 
 The collector is not a server or merge gate. GitHub App credentials, HTTP

@@ -226,6 +226,39 @@ describe("repository audit", () => {
     );
   });
 
+  it("keeps hostile required-check names out of finding paths and SARIF URIs", () => {
+    const snapshot = validSnapshot();
+    const branchProtection = snapshot.branchProtection;
+    if (branchProtection === null) {
+      throw new Error("fixture protection is required");
+    }
+    const hostileName = "../required\\check?%";
+    snapshot.policy.requiredChecks = [{ name: hostileName }];
+    branchProtection.requiredStatusChecks = { strict: true, checks: [] };
+
+    const report = auditRepository(snapshot);
+    const finding = report.findings.find(
+      (candidate) => candidate.code === "AUDIT_REQUIRED_CHECK_MISSING"
+    );
+    const sarif = JSON.parse(renderAuditSarif(report)) as {
+      runs?: Array<{
+        results?: Array<{
+          ruleId?: string;
+          locations?: Array<{ physicalLocation?: { artifactLocation?: { uri?: string } } }>;
+        }>;
+      }>;
+    };
+    const sarifFinding = sarif.runs?.[0]?.results?.find(
+      (candidate) => candidate.ruleId === "AUDIT_REQUIRED_CHECK_MISSING"
+    );
+
+    expect(finding?.path).toBe("policy.requiredChecks[0]");
+    expect(sarifFinding?.locations?.[0]?.physicalLocation?.artifactLocation?.uri).toBe(
+      "policy.requiredChecks[0]"
+    );
+    expect(JSON.stringify(report)).not.toContain(hostileName);
+  });
+
   it("does not use an active tag ruleset as default-branch protection", () => {
     const snapshot = validSnapshot();
     const branchProtection = snapshot.branchProtection;
@@ -531,6 +564,17 @@ describe("repository audit", () => {
     expect(sarif.runs).toHaveLength(1);
   });
 
+  it("rejects control and format characters in public repository identity fields", () => {
+    const snapshot = validSnapshot();
+    snapshot.repository.owner = "octocat\u2028";
+
+    const report = auditRepository(snapshot);
+
+    expect(report.status).toBe("incomplete");
+    expect(report.findings[0]?.code).toBe("AUDIT_INPUT_INVALID");
+    expect(report.repository.owner).toBe("unknown");
+  });
+
   it("keeps every audit status inside the published Draft 2020-12 schema", async () => {
     const schema = JSON.parse(await readFile("reviewready.audit.schema.json", "utf8")) as object;
     const validate = new Ajv2020({ allErrors: true }).compile(schema);
@@ -549,6 +593,17 @@ describe("repository audit", () => {
     ]) {
       expect(validate(JSON.parse(renderAuditJson(report)))).toBe(true);
     }
+  });
+
+  it("keeps the published schema aligned with runtime unsafe-text rejection", async () => {
+    const schema = JSON.parse(await readFile("reviewready.audit.schema.json", "utf8")) as object;
+    const validate = new Ajv2020({ allErrors: true }).compile(schema);
+    const report = JSON.parse(renderAuditJson(auditRepository(validSnapshot()))) as {
+      repository: { owner: string };
+    };
+    report.repository.owner = "octocat\u200b";
+
+    expect(validate(report)).toBe(false);
   });
 
   it("keeps malformed audit JSON inside the public schema shape", () => {
@@ -592,6 +647,35 @@ describe("repository audit", () => {
 
     expect(location?.artifactLocation?.uri).toBe(".github/workflows/reviewready.yml");
     expect(location?.region?.startLine).toBe(12);
+  });
+
+  it("URI-encodes untrusted workflow path segments in SARIF", () => {
+    const snapshot = validSnapshot();
+    const path = ".github/workflows/a#b?c%.yml";
+    const workflow = snapshot.workflows[0];
+    if (workflow === undefined) {
+      throw new Error("fixture workflow is required");
+    }
+    workflow.path = path;
+    snapshot.policy.workflowPaths = [path];
+    workflow.source = "on: pull_request_target";
+
+    const report = auditRepository(snapshot);
+    const sarif = JSON.parse(renderAuditSarif(report)) as {
+      runs?: Array<{
+        results?: Array<{
+          ruleId?: string;
+          locations?: Array<{ physicalLocation?: { artifactLocation?: { uri?: string } } }>;
+        }>;
+      }>;
+    };
+    const result = sarif.runs?.[0]?.results?.find(
+      (candidate) => candidate.ruleId === "PULL_REQUEST_TARGET_WORKFLOW"
+    );
+
+    expect(result?.locations?.[0]?.physicalLocation?.artifactLocation?.uri).toBe(
+      ".github/workflows/a%23b%3Fc%25.yml"
+    );
   });
 
   it("keeps capped findings deterministic when workflow input order changes", () => {

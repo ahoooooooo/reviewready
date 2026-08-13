@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import type { AuditSnapshot } from "./audit.js";
+import { MAX_AUDIT_RULESETS, type AuditSnapshot } from "./audit.js";
 import { parsePolicy } from "./policy.js";
 import { normalizeRepositoryPath } from "./input.js";
 import { MAX_WORKFLOW_SOURCE_BYTES } from "./workflow-security.js";
@@ -10,6 +10,7 @@ export const MAX_AUDIT_SOURCE_BYTES = MAX_WORKFLOW_SOURCE_BYTES;
 export const MAX_AUDIT_REPOSITORY_TEXT = 512;
 export const MAX_AUDIT_COLLECTION_CONCURRENCY = 4;
 export const MAX_AUDIT_WORKFLOW_ROOTS = 100;
+const UNSAFE_TEXT = /[\p{Control}\p{Format}\p{Surrogate}\u2028\u2029]/u;
 
 export interface AuditRepositoryArguments {
   readonly owner: string;
@@ -20,6 +21,7 @@ export interface AuditRepositoryMetadata {
   readonly owner: string;
   readonly name: string;
   readonly defaultBranch: string;
+  readonly id: number;
 }
 
 export interface AuditBranchMetadata {
@@ -100,6 +102,10 @@ function validSha(value: string): boolean {
   return SHA.test(value);
 }
 
+function compareText(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
 function sha256Hex(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
 }
@@ -108,7 +114,7 @@ function safePolicyPath(value: string | undefined): string {
   const candidate = value ?? ".reviewready.yml";
   try {
     const normalized = normalizeRepositoryPath(candidate);
-    if (normalized.length > MAX_AUDIT_REPOSITORY_TEXT) {
+    if (normalized.length > MAX_AUDIT_REPOSITORY_TEXT || UNSAFE_TEXT.test(normalized)) {
       throw failure("policy-path-too-long");
     }
     return normalized;
@@ -120,7 +126,11 @@ function safePolicyPath(value: string | undefined): string {
 function safeWorkflowPath(value: string): string {
   try {
     const normalized = normalizeRepositoryPath(value);
-    if (!WORKFLOW_PATH.test(normalized) || normalized.length > MAX_AUDIT_REPOSITORY_TEXT) {
+    if (
+      !WORKFLOW_PATH.test(normalized) ||
+      normalized.length > MAX_AUDIT_REPOSITORY_TEXT ||
+      UNSAFE_TEXT.test(normalized)
+    ) {
       throw failure("workflow-path-invalid");
     }
     return normalized;
@@ -146,12 +156,15 @@ function validateRepositoryMetadata(
   const owner = (value as { readonly owner: string }).owner;
   const name = (value as { readonly name: string }).name;
   const defaultBranch = (value as { readonly defaultBranch: string }).defaultBranch;
+  const id = (value as { readonly id?: unknown }).id;
   if (
     !REPOSITORY_NAME.test(owner) ||
     !REPOSITORY_NAME.test(name) ||
     defaultBranch.length === 0 ||
     defaultBranch.length > MAX_AUDIT_REPOSITORY_TEXT ||
-    defaultBranch.includes("\0")
+    /[\p{Control}\p{Format}\u2028\u2029]/u.test(defaultBranch) ||
+    !Number.isSafeInteger(id) ||
+    (id as number) < 1
   ) {
     throw failure("repository-metadata-invalid");
   }
@@ -161,7 +174,7 @@ function validateRepositoryMetadata(
   ) {
     throw failure("repository-identity-mismatch");
   }
-  return { owner, name, defaultBranch };
+  return { owner, name, defaultBranch, id: id as number };
 }
 
 function validateBranch(value: unknown, expectedBranch: string): AuditBranchMetadata {
@@ -175,7 +188,13 @@ function validateBranch(value: unknown, expectedBranch: string): AuditBranchMeta
   }
   const name = (value as { readonly name: string }).name;
   const sha = (value as { readonly sha: string }).sha;
-  if (name !== expectedBranch || !validSha(sha)) {
+  if (
+    name !== expectedBranch ||
+    name.length === 0 ||
+    name.length > MAX_AUDIT_REPOSITORY_TEXT ||
+    /[\p{Control}\p{Format}\u2028\u2029]/u.test(name) ||
+    !validSha(sha)
+  ) {
     throw failure("base-revision-invalid");
   }
   return { name, sha };
@@ -186,7 +205,7 @@ function uniqueSorted<T>(values: readonly T[], key: (value: T) => string): T[] {
   for (const value of values) {
     seen.set(key(value), value);
   }
-  return [...seen.values()].sort((left, right) => key(left).localeCompare(key(right), "en-US"));
+  return [...seen.values()].sort((left, right) => compareText(key(left), key(right)));
 }
 
 function policyFacts(source: string): {
@@ -295,13 +314,25 @@ export async function collectRepositoryAuditSnapshot(
       normalizedOwner,
       normalizedRepo
     );
-    defaultBranch = options.branch ?? repository.defaultBranch;
+    const requestedBranch = options.branch;
+    if (
+      requestedBranch !== undefined &&
+      (requestedBranch.length === 0 ||
+        requestedBranch.length > MAX_AUDIT_REPOSITORY_TEXT ||
+        /[\p{Control}\p{Format}\u2028\u2029]/u.test(requestedBranch))
+    ) {
+      throw failure("default-branch-invalid");
+    }
+    defaultBranch = repository.defaultBranch;
     if (
       defaultBranch.length === 0 ||
       defaultBranch.length > MAX_AUDIT_REPOSITORY_TEXT ||
-      defaultBranch.includes("\0")
+      /[\p{Control}\p{Format}\u2028\u2029]/u.test(defaultBranch)
     ) {
       throw failure("default-branch-invalid");
+    }
+    if (requestedBranch !== undefined && requestedBranch !== repository.defaultBranch) {
+      throw failure("non-default-branch");
     }
 
     const initialBranch = validateBranch(
@@ -327,12 +358,28 @@ export async function collectRepositoryAuditSnapshot(
     if (workflowEntries.length > MAX_AUDIT_WORKFLOW_SOURCES) {
       throw failure("workflow-count-limit");
     }
+    if (rulesets.length > MAX_AUDIT_RULESETS) {
+      throw failure("ruleset-count-limit");
+    }
+    const rulesetIds = new Set<number>();
+    for (const ruleset of rulesets) {
+      if (!Number.isSafeInteger(ruleset.id) || ruleset.id < 0 || rulesetIds.has(ruleset.id)) {
+        throw failure("ruleset-duplicate");
+      }
+      rulesetIds.add(ruleset.id);
+    }
+    const workflowEntryPaths = new Set<string>();
     const workflowPaths = uniqueSorted(
       workflowEntries.map((entry) => {
         if (entry.type !== "file") {
           throw failure("workflow-entry-not-file");
         }
-        return safeWorkflowPath(entry.path);
+        const path = safeWorkflowPath(entry.path);
+        if (workflowEntryPaths.has(path)) {
+          throw failure("workflow-entry-duplicate");
+        }
+        workflowEntryPaths.add(path);
+        return path;
       }),
       (path) => path
     );
@@ -388,6 +435,9 @@ export async function collectRepositoryAuditSnapshot(
     ) {
       missing.add("base-revision-changed");
     }
+    if (endingRepository.id !== repository.id) {
+      missing.add("repository-identity-changed");
+    }
     return {
       version: 1,
       repository: {
@@ -407,7 +457,7 @@ export async function collectRepositoryAuditSnapshot(
       branchProtection,
       rulesets: [...rulesets].sort((left, right) => left.id - right.id),
       tagProtection,
-      workflows: sources.sort((left, right) => left.path.localeCompare(right.path, "en-US"))
+      workflows: sources.sort((left, right) => compareText(left.path, right.path))
     };
   } catch (error) {
     return incompleteSnapshot(normalizedOwner, normalizedRepo, defaultBranch, baseSha, policyPath, [

@@ -547,7 +547,8 @@ describe("audit command", () => {
     expect(await runCli(["audit", "--input", "audit.json"], io)).toBe(2);
     const output = io.stdoutLines.join("\n");
     expect(output).not.toContain("\u001b");
-    expect(output).toContain("\\u001b");
+    expect(output).not.toContain("\\u001b");
+    expect(output).toContain("AUDIT_INPUT_INVALID");
   });
 
   it("rejects readiness-only and conflicting audit options", async () => {

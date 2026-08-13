@@ -37,7 +37,7 @@ interface ParsedArguments {
 }
 
 const usage =
-  "Usage: reviewready <validate|check|explain> --policy <path> [--input <path>] [--json]; reviewready audit --input <snapshot> [--json|--sarif]; reviewready audit --github <owner/repo> [--ref <branch>] [--policy-path <path>] [--token-env <name>] [--protected-workflow <path>] [--trusted-workflow <path>] [--json|--sarif]";
+  "Usage: reviewready <validate|check|explain> --policy <path> [--input <path>] [--json]; reviewready audit --input <snapshot> [--json|--sarif]; reviewready audit --github <owner/repo> [--ref <default-branch>] [--policy-path <path>] [--token-env <name>] [--protected-workflow <path>] [--trusted-workflow <path>] [--json|--sarif]";
 
 const defaultIo: CliIo = {
   readFile: (path) => readBoundedFile(path),
