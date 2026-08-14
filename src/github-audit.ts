@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 
 import { MAX_AUDIT_RULESETS, type AuditSnapshot } from "./audit.js";
+import { canonicalizeJsonValue } from "./audit-evidence.js";
+import { AuditApiFailure } from "./github-audit-api.js";
 import { parsePolicy } from "./policy.js";
 import { normalizeRepositoryPath } from "./input.js";
 import { MAX_WORKFLOW_SOURCE_BYTES } from "./workflow-security.js";
@@ -22,6 +24,17 @@ export interface AuditRepositoryMetadata {
   readonly name: string;
   readonly defaultBranch: string;
   readonly id: number;
+  readonly ownerType: "organization" | "user";
+  readonly visibility: "public" | "private" | "internal";
+}
+
+interface SnapshotCollectionContext {
+  repository?: AuditRepositoryMetadata;
+}
+
+export interface AuditRequestMetrics {
+  readonly requestAttempts: number;
+  readonly retryAttempts: number;
 }
 
 export interface AuditBranchMetadata {
@@ -46,7 +59,11 @@ export interface AuditGitHubClient {
   getBranchProtection: (
     arguments_: AuditRepositoryArguments & { readonly branch: string }
   ) => Promise<AuditBranchProtection | null>;
-  listRulesets: (arguments_: AuditRepositoryArguments) => Promise<readonly AuditRuleset[]>;
+  listRulesets: (
+    arguments_: AuditRepositoryArguments & {
+      readonly ownerType?: "organization" | "user" | undefined;
+    }
+  ) => Promise<readonly AuditRuleset[]>;
   listWorkflowFiles: (
     arguments_: AuditRepositoryArguments & { readonly ref: string }
   ) => Promise<readonly AuditWorkflowFile[]>;
@@ -54,10 +71,12 @@ export interface AuditGitHubClient {
     arguments_: AuditRepositoryArguments & { readonly path: string; readonly ref: string }
   ) => Promise<unknown>;
   getTagProtection: (arguments_: AuditRepositoryArguments) => Promise<AuditTagProtection>;
+  readonly getRequestMetrics?: (() => AuditRequestMetrics) | undefined;
 }
 
 export interface GitHubAuditCollectorOptions {
   readonly branch?: string | undefined;
+  readonly revision?: string | undefined;
   readonly policyPath?: string | undefined;
   readonly protectedWorkflowPaths?: readonly string[] | undefined;
   readonly trustedWorkflowPaths?: readonly string[] | undefined;
@@ -67,23 +86,44 @@ interface CollectionFailure {
   readonly code: string;
 }
 
-class CollectionFailureError extends Error implements CollectionFailure {
+export class AuditCollectionFailure extends Error implements CollectionFailure {
   public constructor(public readonly code: string) {
     super(code);
-    this.name = "CollectionFailureError";
+    this.name = "AuditCollectionFailure";
   }
 }
 
 const SHA = /^[0-9a-f]{40}$/iu;
 const REPOSITORY_NAME = /^[A-Za-z0-9._-]{1,100}$/u;
-const WORKFLOW_PATH = /^\.github\/workflows\/[^/]+\.(?:yml|yaml)$/iu;
+const WORKFLOW_PATH =
+  /^[.][gG][iI][tT][hH][uU][bB]\/[wW][oO][rR][kK][fF][lL][oO][wW][sS]\/[^/]+\.(?:[yY][mM][lL]|[yY][aA][mM][lL])$/u;
 
-function failure(code: string): CollectionFailureError {
-  return new CollectionFailureError(code);
+function failure(code: string): AuditCollectionFailure {
+  return new AuditCollectionFailure(code);
 }
 
 function isCollectionFailure(value: unknown): value is CollectionFailure {
-  return value instanceof CollectionFailureError;
+  return value instanceof AuditCollectionFailure || value instanceof AuditApiFailure;
+}
+
+function evidenceFailureCode(snapshot: AuditSnapshot): string {
+  const missing = new Set(snapshot.completeness.missing);
+  if (
+    [
+      "base-revision-changed",
+      "repository-identity-changed",
+      "requested-revision-mismatch",
+      "non-default-branch",
+      "default-branch-invalid",
+      "base-revision-invalid"
+    ].some((code) => missing.has(code))
+  ) {
+    return "evidence-revision-not-stable";
+  }
+  if ([...missing].some((code) => code.includes("unsupported"))) {
+    return "evidence-unsupported-semantics";
+  }
+  return "evidence-collection-failed";
 }
 
 function safeRepositoryName(value: string, fallback: string): string {
@@ -149,13 +189,17 @@ function validateRepositoryMetadata(
     value === null ||
     typeof (value as { readonly owner?: unknown }).owner !== "string" ||
     typeof (value as { readonly name?: unknown }).name !== "string" ||
-    typeof (value as { readonly defaultBranch?: unknown }).defaultBranch !== "string"
+    typeof (value as { readonly defaultBranch?: unknown }).defaultBranch !== "string" ||
+    ((value as { readonly ownerType?: unknown }).ownerType !== "organization" &&
+      (value as { readonly ownerType?: unknown }).ownerType !== "user")
   ) {
     throw failure("repository-metadata-invalid");
   }
   const owner = (value as { readonly owner: string }).owner;
   const name = (value as { readonly name: string }).name;
   const defaultBranch = (value as { readonly defaultBranch: string }).defaultBranch;
+  const ownerType = (value as { readonly ownerType: "organization" | "user" }).ownerType;
+  const visibility = (value as { readonly visibility?: unknown }).visibility;
   const id = (value as { readonly id?: unknown }).id;
   if (
     !REPOSITORY_NAME.test(owner) ||
@@ -164,7 +208,8 @@ function validateRepositoryMetadata(
     defaultBranch.length > MAX_AUDIT_REPOSITORY_TEXT ||
     /[\p{Control}\p{Format}\u2028\u2029]/u.test(defaultBranch) ||
     !Number.isSafeInteger(id) ||
-    (id as number) < 1
+    (id as number) < 1 ||
+    (visibility !== "public" && visibility !== "private" && visibility !== "internal")
   ) {
     throw failure("repository-metadata-invalid");
   }
@@ -174,7 +219,7 @@ function validateRepositoryMetadata(
   ) {
     throw failure("repository-identity-mismatch");
   }
-  return { owner, name, defaultBranch, id: id as number };
+  return { owner, name, defaultBranch, id: id as number, ownerType, visibility };
 }
 
 function validateBranch(value: unknown, expectedBranch: string): AuditBranchMetadata {
@@ -197,7 +242,7 @@ function validateBranch(value: unknown, expectedBranch: string): AuditBranchMeta
   ) {
     throw failure("base-revision-invalid");
   }
-  return { name, sha };
+  return { name, sha: sha.toLowerCase() };
 }
 
 function uniqueSorted<T>(values: readonly T[], key: (value: T) => string): T[] {
@@ -227,6 +272,106 @@ function policyFacts(source: string): {
   return {
     requiredChecks: uniqueSorted(checks, (check) => JSON.stringify(check))
   };
+}
+
+interface MutableAuditSettings {
+  readonly branchProtection: AuditBranchProtection | null;
+  readonly rulesets: readonly AuditRuleset[];
+  readonly tagProtection: AuditTagProtection;
+}
+
+async function collectMutableSettings(
+  client: AuditGitHubClient,
+  arguments_: AuditRepositoryArguments,
+  branch: string,
+  ownerType: "organization" | "user"
+): Promise<MutableAuditSettings> {
+  const [branchProtection, tagProtection] = await Promise.all([
+    client.getBranchProtection({ ...arguments_, branch }),
+    client.getTagProtection(arguments_)
+  ]);
+  const rulesets = await client.listRulesets({ ...arguments_, ownerType });
+  return { branchProtection, rulesets, tagProtection };
+}
+
+function canonicalMutableSettings(value: MutableAuditSettings): string {
+  const stable = (item: unknown): string => {
+    return canonicalizeJsonValue(item);
+  };
+  const sortJson = <T>(values: readonly T[]): T[] =>
+    [...values].sort((left, right) => compareText(stable(left), stable(right)));
+  const sortText = (values: readonly string[]): string[] => [...values].sort(compareText);
+  const branchProtection =
+    value.branchProtection === null
+      ? null
+      : {
+          branch: value.branchProtection.branch,
+          exists: value.branchProtection.exists,
+          enforceAdmins: value.branchProtection.enforceAdmins,
+          allowForcePushes: value.branchProtection.allowForcePushes,
+          allowDeletions: value.branchProtection.allowDeletions,
+          requiredStatusChecks:
+            value.branchProtection.requiredStatusChecks === null
+              ? null
+              : {
+                  strict: value.branchProtection.requiredStatusChecks.strict,
+                  checks: sortJson(value.branchProtection.requiredStatusChecks.checks)
+                },
+          requiredPullRequestReviews:
+            value.branchProtection.requiredPullRequestReviews === null
+              ? null
+              : {
+                  requiredApprovingReviewCount:
+                    value.branchProtection.requiredPullRequestReviews.requiredApprovingReviewCount,
+                  ...(value.branchProtection.requiredPullRequestReviews.bypassActorsKnown ===
+                  undefined
+                    ? {}
+                    : {
+                        bypassActorsKnown:
+                          value.branchProtection.requiredPullRequestReviews.bypassActorsKnown
+                      }),
+                  bypassActors: sortJson(
+                    value.branchProtection.requiredPullRequestReviews.bypassActors
+                  )
+                }
+        };
+  const rulesets = [...value.rulesets]
+    .map((ruleset) => ({
+      id: ruleset.id,
+      name: ruleset.name,
+      target: ruleset.target,
+      refPatterns: sortText(ruleset.refPatterns),
+      ...(ruleset.repositoryPatterns === undefined
+        ? {}
+        : { repositoryPatterns: sortText(ruleset.repositoryPatterns) }),
+      enforcement: ruleset.enforcement,
+      ...(ruleset.bypassActorsKnown === undefined
+        ? {}
+        : { bypassActorsKnown: ruleset.bypassActorsKnown }),
+      bypassActors: sortJson(ruleset.bypassActors),
+      ...(ruleset.allowForcePushes === undefined
+        ? {}
+        : { allowForcePushes: ruleset.allowForcePushes }),
+      ...(ruleset.allowDeletions === undefined ? {} : { allowDeletions: ruleset.allowDeletions }),
+      requiredChecks: sortJson(ruleset.requiredChecks)
+    }))
+    .sort((left, right) => left.id - right.id);
+  const tagProtection = {
+    known: value.tagProtection.known,
+    allowsDeletion: value.tagProtection.allowsDeletion,
+    allowsUpdate: value.tagProtection.allowsUpdate
+  };
+  return stable({ branchProtection, rulesets, tagProtection });
+}
+
+function hasUnknownMutableAuthority(value: MutableAuditSettings): boolean {
+  return (
+    !value.tagProtection.known ||
+    value.branchProtection === null ||
+    value.branchProtection.requiredPullRequestReviews === null ||
+    value.branchProtection.requiredPullRequestReviews.bypassActorsKnown !== true ||
+    value.rulesets.some((ruleset) => ruleset.bypassActorsKnown !== true)
+  );
 }
 
 async function mapWithConcurrency<T, R>(
@@ -283,11 +428,124 @@ function incompleteSnapshot(
   };
 }
 
+export interface AuditCollectionResult {
+  readonly snapshot: AuditSnapshot;
+  readonly repository: AuditRepositoryMetadata;
+  readonly policySource: string;
+  readonly initialBranchSha: string;
+  readonly endingBranchSha: string;
+}
+
+export interface AuditEvidenceCollectionResult extends AuditCollectionResult {
+  readonly requestAttempts: number;
+  readonly retryAttempts: number;
+}
+
+export async function collectRepositoryAuditEvidenceData(
+  owner: string,
+  repo: string,
+  client: AuditGitHubClient,
+  options: GitHubAuditCollectorOptions = {}
+): Promise<AuditEvidenceCollectionResult> {
+  const context: SnapshotCollectionContext = {};
+  const snapshot = await collectRepositoryAuditSnapshotInternal(
+    owner,
+    repo,
+    client,
+    options,
+    context
+  );
+  const requestedBaseSha = snapshot.baseRevision.sha;
+  if (
+    !validSha(requestedBaseSha) ||
+    !snapshot.baseRevision.policyLoadedFromBase ||
+    snapshot.baseRevision.policyRevisionSha !== requestedBaseSha ||
+    snapshot.completeness.missing.some(
+      (code) => code === "base-revision-changed" || code === "repository-identity-changed"
+    )
+  ) {
+    throw failure(evidenceFailureCode(snapshot));
+  }
+  const arguments_ = { owner, repo };
+  const repository = validateRepositoryMetadata(
+    await client.getRepository(arguments_),
+    owner,
+    repo
+  );
+  const initialRepository = context.repository;
+  if (
+    initialRepository === undefined ||
+    repository.owner.toLowerCase() !== snapshot.repository.owner.toLowerCase() ||
+    repository.name.toLowerCase() !== snapshot.repository.name.toLowerCase() ||
+    repository.defaultBranch !== snapshot.repository.defaultBranch ||
+    repository.id !== initialRepository.id ||
+    repository.ownerType !== initialRepository.ownerType ||
+    repository.visibility !== initialRepository.visibility
+  ) {
+    throw failure("evidence-repository-mismatch");
+  }
+  const policySource = await client.getFileAtRevision({
+    ...arguments_,
+    path: snapshot.baseRevision.policyPath,
+    ref: requestedBaseSha
+  });
+  if (
+    typeof policySource !== "string" ||
+    Buffer.byteLength(policySource, "utf8") > MAX_AUDIT_SOURCE_BYTES ||
+    sha256Hex(policySource) !== snapshot.baseRevision.policySha256
+  ) {
+    throw failure("evidence-policy-mismatch");
+  }
+  const policy = policyFacts(policySource);
+  if (JSON.stringify(policy.requiredChecks) !== JSON.stringify(snapshot.policy.requiredChecks)) {
+    throw failure("evidence-policy-mismatch");
+  }
+  const endingBranch = validateBranch(
+    await client.getBranch({ ...arguments_, branch: repository.defaultBranch }),
+    repository.defaultBranch
+  );
+  if (endingBranch.sha !== requestedBaseSha) {
+    throw failure("evidence-revision-not-stable");
+  }
+  const metrics = client.getRequestMetrics?.();
+  if (metrics === undefined) {
+    throw failure("request-metrics-unavailable");
+  }
+  if (
+    !Number.isSafeInteger(metrics.requestAttempts) ||
+    metrics.requestAttempts < 1 ||
+    metrics.requestAttempts > 768 ||
+    !Number.isSafeInteger(metrics.retryAttempts) ||
+    metrics.retryAttempts < 0 ||
+    metrics.retryAttempts > metrics.requestAttempts
+  ) {
+    throw failure("request-metrics-invalid");
+  }
+  return {
+    snapshot,
+    repository,
+    policySource,
+    initialBranchSha: requestedBaseSha,
+    endingBranchSha: endingBranch.sha,
+    ...metrics
+  };
+}
+
 export async function collectRepositoryAuditSnapshot(
   owner: string,
   repo: string,
   client: AuditGitHubClient,
   options: GitHubAuditCollectorOptions = {}
+): Promise<AuditSnapshot> {
+  return collectRepositoryAuditSnapshotInternal(owner, repo, client, options);
+}
+
+async function collectRepositoryAuditSnapshotInternal(
+  owner: string,
+  repo: string,
+  client: AuditGitHubClient,
+  options: GitHubAuditCollectorOptions = {},
+  context?: SnapshotCollectionContext
 ): Promise<AuditSnapshot> {
   const normalizedOwner = safeRepositoryName(owner, "unknown");
   const normalizedRepo = safeRepositoryName(repo, "unknown");
@@ -314,6 +572,9 @@ export async function collectRepositoryAuditSnapshot(
       normalizedOwner,
       normalizedRepo
     );
+    if (context !== undefined) {
+      context.repository = repository;
+    }
     const requestedBranch = options.branch;
     if (
       requestedBranch !== undefined &&
@@ -340,14 +601,22 @@ export async function collectRepositoryAuditSnapshot(
       defaultBranch
     );
     baseSha = initialBranch.sha;
-    const [branchProtection, rulesets, workflowEntries, tagProtection, policySource] =
-      await Promise.all([
-        client.getBranchProtection({ ...arguments_, branch: defaultBranch }),
-        client.listRulesets(arguments_),
-        client.listWorkflowFiles({ ...arguments_, ref: baseSha }),
-        client.getTagProtection(arguments_),
-        client.getFileAtRevision({ ...arguments_, path: policyPath, ref: baseSha })
-      ]);
+    if (
+      options.revision !== undefined &&
+      (!validSha(options.revision) || options.revision.toLowerCase() !== baseSha)
+    ) {
+      throw failure("requested-revision-mismatch");
+    }
+    const firstSettings = await collectMutableSettings(
+      client,
+      arguments_,
+      defaultBranch,
+      repository.ownerType
+    );
+    const [workflowEntries, policySource] = await Promise.all([
+      client.listWorkflowFiles({ ...arguments_, ref: baseSha }),
+      client.getFileAtRevision({ ...arguments_, path: policyPath, ref: baseSha })
+    ]);
 
     if (
       typeof policySource !== "string" ||
@@ -358,12 +627,12 @@ export async function collectRepositoryAuditSnapshot(
     if (workflowEntries.length > MAX_AUDIT_WORKFLOW_SOURCES) {
       throw failure("workflow-count-limit");
     }
-    if (rulesets.length > MAX_AUDIT_RULESETS) {
+    if (firstSettings.rulesets.length > MAX_AUDIT_RULESETS) {
       throw failure("ruleset-count-limit");
     }
     const rulesetIds = new Set<number>();
-    for (const ruleset of rulesets) {
-      if (!Number.isSafeInteger(ruleset.id) || ruleset.id < 0 || rulesetIds.has(ruleset.id)) {
+    for (const ruleset of firstSettings.rulesets) {
+      if (!Number.isSafeInteger(ruleset.id) || ruleset.id < 1 || rulesetIds.has(ruleset.id)) {
         throw failure("ruleset-duplicate");
       }
       rulesetIds.add(ruleset.id);
@@ -399,13 +668,21 @@ export async function collectRepositoryAuditSnapshot(
         return {
           path,
           revisionSha: baseSha,
-          protectedFromPullRequest: protectedPaths.has(path),
-          trustedRoot: trustedPaths.has(path),
+          protectedFromPullRequest: false,
+          trustedRoot: false,
           source
         };
       }
     );
     const policy = policyFacts(policySource);
+    const secondSettings = await collectMutableSettings(
+      client,
+      arguments_,
+      defaultBranch,
+      repository.ownerType
+    );
+    const settingsMismatch =
+      canonicalMutableSettings(firstSettings) !== canonicalMutableSettings(secondSettings);
     const missing = new Set<string>();
     const observedWorkflowPaths = new Set(workflowPaths);
     for (const root of [...protectedPaths, ...trustedPaths]) {
@@ -419,6 +696,11 @@ export async function collectRepositoryAuditSnapshot(
     if (workflowPaths.length > 0 && trustedPaths.size === 0) {
       missing.add("trusted-workflow-root");
     }
+    if (settingsMismatch) {
+      missing.add("settings-observation-mismatch");
+    } else if (hasUnknownMutableAuthority(firstSettings)) {
+      missing.add("settings-authority-incomplete");
+    }
 
     const endingRepository = validateRepositoryMetadata(
       await client.getRepository(arguments_),
@@ -430,8 +712,12 @@ export async function collectRepositoryAuditSnapshot(
       defaultBranch
     );
     if (
+      endingRepository.owner.toLowerCase() !== repository.owner.toLowerCase() ||
+      endingRepository.name.toLowerCase() !== repository.name.toLowerCase() ||
       endingRepository.defaultBranch !== repository.defaultBranch ||
-      endingBranch.sha !== baseSha
+      endingBranch.sha !== baseSha ||
+      endingRepository.ownerType !== repository.ownerType ||
+      endingRepository.visibility !== repository.visibility
     ) {
       missing.add("base-revision-changed");
     }
@@ -454,9 +740,13 @@ export async function collectRepositoryAuditSnapshot(
       },
       policy: { requiredChecks: policy.requiredChecks, workflowPaths },
       completeness: { complete: missing.size === 0, missing: [...missing].sort() },
-      branchProtection,
-      rulesets: [...rulesets].sort((left, right) => left.id - right.id),
-      tagProtection,
+      branchProtection: settingsMismatch ? null : firstSettings.branchProtection,
+      rulesets: settingsMismatch
+        ? []
+        : [...firstSettings.rulesets].sort((left, right) => left.id - right.id),
+      tagProtection: settingsMismatch
+        ? { known: false, allowsDeletion: true, allowsUpdate: true }
+        : firstSettings.tagProtection,
       workflows: sources.sort((left, right) => compareText(left.path, right.path))
     };
   } catch (error) {

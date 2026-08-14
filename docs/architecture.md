@@ -27,7 +27,9 @@
 Dependencies point inward: entry points -> adapters/report -> engine -> domain.
 The engine must never import GitHub, filesystem, process, or Actions modules.
 The audit engine may consume only its versioned normalized snapshot contract;
-the readiness engine and its public JSON schema remain unchanged.
+the readiness engine and its public JSON schema remain unchanged. That audit
+contract rejects non-positive App IDs and simultaneous App ID/App slug
+provenance; invalid or contradictory provider identity is incomplete.
 
 ## Trust model
 
@@ -97,12 +99,16 @@ checks do not count as evidence.
 
 The GitHub adapter combines completed check runs with terminal commit statuses,
 reducing each Check Run identity by name and App slug and each legacy status
-context independently, then adding a conservative aggregate for same-name
-cross-provider evidence. A newer failure or pending result cannot fall back to
-an older success.
+context independently. For a name present across providers, it suppresses all
+provider-specific records and emits only one conservative aggregate, so a
+newer failure or pending result cannot be bypassed by an older provider success.
 It fails closed when GitHub pagination reports evidence beyond the safe v1
-limits, or when a Link header contains a malformed or non-contiguous next
-page, instead of evaluating a silently truncated list. `merge_group` is
+limits, or when a Link header is malformed, non-string, duplicated under
+case-insensitive header names, contains a non-contiguous next page, or claims
+a different last page than the current response, instead of evaluating a
+silently truncated list. Malformed retry/rate-limit headers do not trigger an
+implicit retry; valid header names are matched case-insensitively.
+`merge_group` is
 intentionally unsupported because its payload does not contain enough
 per-pull-request evidence to evaluate the v1 policy safely.
 
@@ -163,12 +169,15 @@ retain the same GitHub immutable numeric repository ID. The optional live
 `--ref` input can only assert the API-reported default branch; a non-default
 branch is rejected rather than being presented as a default-branch audit. API
 response bytes, pages, retries, concurrency, request count, and total deadline
-are bounded, including a 512-attempt total request budget and a raw response
+are bounded, including a 768-attempt total request budget and a raw response
 stream cap before JSON parsing. Every structured and raw read requires the
 bounded transport, including its per-request fetch binding; the adapter uses
 Octokit's configured fetch or the runtime global fetch and treats both missing
 as incomplete rather than falling back unbounded. A missing or redacted bypass
 list is unknown. Inherited branch/tag/push/repository rulesets are collected.
+Branch-protection responses with unmodeled security semantics or contradictory
+structured/legacy required-check fields fail closed rather than being silently
+reduced.
 Repository targets require an explicit modeled repository scope and canonical
 enforcement. Repository-target ref/unknown conditions, nested unknown fields,
 ruleset ref/repository exclusions and repository-id/property scopes that are not
@@ -178,9 +187,25 @@ being rendered as branch controls. Workflow protection and trusted-root facts ar
 explicit caller-supplied roots, not conclusions derived from API visibility.
 Each supplied root is bounded and must be present in the observed workflow
 listing, but the caller assertion is not independent provider authority.
-Workflow and policy source are bounded to 256 KiB. The current live CLI emits
-only an audit report; it does not persist a snapshot or evidence bundle, and
-therefore does not claim offline replay parity.
+Workflow and policy source are bounded to 256 KiB. The legacy live audit CLI
+emits only an audit report for compatibility; the separate audit collect mode
+emits a canonical evidence bundle and audit replay reconstructs its report
+offline.
+
+[ADR 0009](adr/0009-replayable-audit-evidence-bundle.md) and the
+[normative audit-evidence-bundle v1 contract](audit-evidence-bundle-v1.md)
+now have an executable schema, bounded exact-revision collector, canonical
+projection/hydration, and offline replay implementation. The evidence
+collector requires an explicit full default-branch SHA, reads policy/workflow
+bytes at that immutable ref, and surrounds those reads with two complete
+normalized observations of mutable settings plus a final repository identity
+observation. Equal settings observations establish bounded stability, not a
+GitHub transaction; a possible change-and-revert remains an explicit residual.
+The bundle uses strict I-JSON, RFC 8785 canonical JSON, domain-separated
+SHA-256 integrity digests, exact base64url source bytes, and report
+reconstruction during offline replay. Caller workflow-root paths remain
+assertions and cannot set authoritative provenance. The evidence-bundle,
+audit-report, and readiness-result schemas remain separate.
 Push rulesets are valid repository controls without a branch ref scope; they are
 retained in the normalized audit snapshot but cannot satisfy branch checks or
 produce branch force-push/deletion findings. Tag-only rulesets are not converted

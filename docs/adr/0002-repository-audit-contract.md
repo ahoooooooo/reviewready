@@ -33,7 +33,13 @@ The versioned snapshot contract must explicitly bind:
 
 Unknown, missing, contradictory, stale, over-limit, or malformed input produces `incomplete` or `fail`; it must never be upgraded to `pass` because a field looks plausible.
 
-Findings use stable codes, categories, severity, deterministic paths, and messages. Findings are sorted by code, path, and message before serialization. Paths use structural indices for untrusted collection members rather than interpolating external names into JSON or SARIF locations.
+Findings use stable codes, categories, severity, deterministic paths, and
+messages. The normative total order is code, path-or-empty, line-or-zero,
+severity, message, then category, using raw UTF-16 string comparison and numeric
+line comparison. Category is the final tie-break and therefore refines rather
+than reorders the existing non-tied report order. Paths use structural indices
+for untrusted collection members rather than interpolating external names into
+JSON or SARIF locations.
 
 The live adapter collects inherited `repository` target rulesets and recognizes
 GitHub's `~ALL` repository scope. Repository-target rulesets require an explicit

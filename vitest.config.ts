@@ -14,7 +14,12 @@ export default defineConfig({
         "src/github-api.ts",
         "src/audit.ts",
         "src/github-audit.ts",
-        "src/github-audit-api.ts"
+        "src/github-audit-api.ts",
+        "src/audit-evidence.ts",
+        "src/audit-evidence-bundle.ts",
+        "src/audit-evidence-collection.ts",
+        "src/cli.ts",
+        "src/file-reader.ts"
       ],
       thresholds: {
         perFile: true,

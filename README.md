@@ -28,6 +28,12 @@ ref and can be modified by the contribution it evaluates. Loading policy
 contents from the base SHA does not by itself protect the caller workflow,
 Action pin, or `policy-path`.
 
+The `audit collect` and `audit replay` evidence-bundle commands described below
+are on the current development branch. The published 1.0.7 package does not
+contain these commands or the TA-2 bundle surface; they must not be treated as
+available from npm until a separately authorized release updates the package,
+dist, Action, schemas, and release evidence together.
+
 Issue [#54](https://github.com/ahoooooooo/reviewready/issues/54) tracks live
 repository governance. The current required check selects the GitHub Actions
 App, which does not uniquely bind one workflow definition or event; the
@@ -285,8 +291,8 @@ The CLI can also collect a live, read-only snapshot from GitHub:
 
 ```console
 reviewready audit --github owner/repository --token-env GITHUB_TOKEN \
-  --protected-workflow .github/workflows/reviewready.yml \
-  --trusted-workflow .github/workflows/reviewready.yml --json
+  --protected-workflow .github/workflows/reviewready-trusted.yml \
+  --trusted-workflow .github/workflows/reviewready-trusted.yml --json
 ```
 
 The token is read only from the named environment variable. Live collection
@@ -297,7 +303,7 @@ workflow roots are explicit out-of-band inputs; a check name or ordinary API
 success never establishes a trust root. Each root option is bounded and must
 name an observed workflow, but it remains a caller assertion rather than
 independent GitHub authority. Workflow and policy source are bounded to 256 KiB.
-The live adapter also enforces a 512-attempt total request budget and requires
+The live adapter also enforces a 768-attempt total request budget and requires
 the bounded transport for every structured and raw API read. It installs that
 boundary from Octokit's configured fetch or the runtime global fetch, and fails
 closed if neither is available. It collects inherited branch/tag/push/repository
@@ -311,8 +317,34 @@ repository API's reported default branch. A non-default branch is rejected as
 incomplete rather than silently audited under default-branch semantics. The
 collector also binds its two repository reads to GitHub's immutable numeric
 repository ID internally; that identity is not added to the public snapshot.
-The current live command prints a report only; it does not write an evidence
-bundle or claim that a later offline replay is byte-identical. The collector
+For an exact-revision, replayable audit, use the separate evidence modes:
+
+```console
+reviewready audit collect --github owner/repository --revision FULL_COMMIT_SHA \
+  --token-env GITHUB_TOKEN \
+  --protected-workflow .github/workflows/reviewready-trusted.yml \
+  --trusted-workflow .github/workflows/reviewready-trusted.yml > audit.bundle.json
+reviewready audit replay --bundle audit.bundle.json --json
+```
+
+`audit collect` requires the full default-branch commit SHA, reads the token only
+from the named environment variable, and writes one canonical bundle to a raw
+stdout sink without a trailing newline. It never writes a repository file,
+contacts GitHub with the bundle, checks out code, or executes workflow source.
+The bundle retains exact policy/workflow bytes, so review private or internal
+repository bundles as sensitive artifacts. `audit replay` is offline, bounded
+to an 8 MiB regular file, re-derives the report, and returns the same 0/1/2
+status class without contacting GitHub. The evidence contract is described by
+[reviewready.audit-evidence.schema.json](reviewready.audit-evidence.schema.json)
+and is separate from both the audit report and readiness result.
+
+The live adapter reads the `.github/workflows` directory with only the requested
+immutable `ref`. It accepts one bounded Contents response, rejects any response
+that advertises a `Link` header, and fails closed when the directory exceeds the
+workflow bound; it does not fabricate pagination for that endpoint.
+
+The legacy live command above remains report-only and is retained for
+compatibility; it does not produce a replayable bundle. The collector
 never checks out or executes repository code.
 
 The GitHub App JWT/token and webhook HMAC/replay modules are library contracts

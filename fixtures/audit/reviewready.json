@@ -32,7 +32,8 @@
     },
     "requiredPullRequestReviews": {
       "requiredApprovingReviewCount": 1,
-      "bypassActors": []
+      "bypassActors": [],
+      "bypassActorsKnown": true
     }
   },
   "rulesets": [
@@ -43,6 +44,7 @@
       "refPatterns": ["~DEFAULT_BRANCH"],
       "enforcement": "active",
       "bypassActors": [],
+      "bypassActorsKnown": true,
       "allowForcePushes": false,
       "allowDeletions": false,
       "requiredChecks": [{ "name": "check", "appSlug": "github-actions" }]

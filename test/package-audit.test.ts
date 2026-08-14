@@ -7,6 +7,8 @@ import {
   extractPackResult,
   loadPlannedPackageEntries
 } from "../scripts/verify-package.mjs";
+import { hydrateAuditEvidenceBundle } from "../src/audit-evidence-bundle.js";
+import { parseCanonicalJsonBytes } from "../src/audit-evidence.js";
 
 interface PackageAuditEntry {
   path: string;
@@ -29,6 +31,7 @@ const requiredEntries = (): PackageAuditEntry[] => [
   },
   { path: "reviewready.schema.json", content: "{}" },
   { path: "reviewready.audit.schema.json", content: "{}" },
+  { path: "reviewready.audit-evidence.schema.json", content: "{}" },
   { path: "reviewready.result.schema.json", content: "{}" },
   { path: "dist/cli.js", content: "console.log('safe');" },
   { path: "dist/cli.d.ts", content: "export {};" }
@@ -73,6 +76,20 @@ describe("auditPackageEntries", () => {
     expect(buildStep).toBeLessThan(packageAuditStep);
   });
 
+  it("includes every TA-2 runtime module in the coverage gate", async () => {
+    const config = await readFile("vitest.config.ts", "utf8");
+
+    for (const module of [
+      "src/audit-evidence.ts",
+      "src/audit-evidence-bundle.ts",
+      "src/audit-evidence-collection.ts",
+      "src/cli.ts",
+      "src/file-reader.ts"
+    ]) {
+      expect(config).toContain(`"${module}"`);
+    }
+  });
+
   it("defines a narrow CLI package surface and pins runtime dependencies", async () => {
     const packageJson = JSON.parse(await readFile("package.json", "utf8")) as {
       dependencies?: Record<string, string>;
@@ -87,11 +104,55 @@ describe("auditPackageEntries", () => {
       "./package.json": "./package.json",
       "./reviewready.schema.json": "./reviewready.schema.json",
       "./reviewready.audit.schema.json": "./reviewready.audit.schema.json",
+      "./reviewready.audit-evidence.schema.json": "./reviewready.audit-evidence.schema.json",
       "./reviewready.result.schema.json": "./reviewready.result.schema.json"
     });
     expect(
       Object.values(packageJson.dependencies ?? {}).every((value) => /^\d+\.\d+\.\d+$/u.test(value))
     ).toBe(true);
+  });
+
+  it("labels the TA-2 evidence commands as unreleased while package version is 1.0.7", async () => {
+    const packageJson = JSON.parse(await readFile("package.json", "utf8")) as {
+      version?: unknown;
+    };
+    const readme = await readFile("README.md", "utf8");
+
+    expect(packageJson.version).toBe("1.0.7");
+    expect(readme).toContain("current development branch");
+    expect(readme).toMatch(/published 1\.0\.7 package does not\s+contain/u);
+  });
+
+  it("keeps a canonical TA-2 evidence fixture replayable", async () => {
+    const bytes = await readFile("fixtures/audit/evidence-bundle-v1.json");
+    const bundle = parseCanonicalJsonBytes(bytes);
+    expect(hydrateAuditEvidenceBundle(bundle).report.status).toBe("pass");
+  });
+
+  it("exercises the TA-2 public surface in clean-room smoke scripts", async () => {
+    const packageSmoke = await readFile("scripts/package-smoke.mjs", "utf8");
+    const releasePreflight = await readFile("scripts/release-preflight.mjs", "utf8");
+
+    expect(packageSmoke).toContain("audit");
+    expect(packageSmoke).toContain("reviewready.audit-evidence.schema.json");
+    expect(releasePreflight).toContain("audit");
+    expect(releasePreflight).toContain("reviewready.audit-evidence.schema.json");
+  });
+
+  it("describes TA-2 settings sampling as stable observation rather than atomic", async () => {
+    const plan = await readFile("docs/exec-plans/active/post-v1.md", "utf8");
+
+    expect(plan).toContain("stable double observation");
+    expect(plan).not.toContain("atomic settings sampling");
+  });
+
+  it("uses the checked-in trusted workflow in live audit examples", async () => {
+    const readme = await readFile("README.md", "utf8");
+
+    expect(readme).toContain("--protected-workflow .github/workflows/reviewready-trusted.yml");
+    expect(readme).toContain("--trusted-workflow .github/workflows/reviewready-trusted.yml");
+    expect(readme).not.toContain("--protected-workflow .github/workflows/reviewready.yml");
+    expect(readme).not.toContain("--trusted-workflow .github/workflows/reviewready.yml");
   });
 
   it("accepts the documented package surface without private metadata", () => {

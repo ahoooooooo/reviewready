@@ -1,23 +1,49 @@
 import { mkdtemp, readFile, rm, symlink, writeFile, type FileHandle } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { runCli, type CliIo } from "../src/cli.js";
+import * as auditEvidenceBundleModule from "../src/audit-evidence-bundle.js";
+import {
+  AuditEvidenceCollectionError,
+  createAuditEvidenceSnapshot,
+  buildAuditEvidenceBundle,
+  serializeAuditEvidenceBundle
+} from "../src/audit-evidence-collection.js";
+import { hydrateAuditEvidenceBundle } from "../src/audit-evidence-bundle.js";
 import { createGitHubAuditClient } from "../src/github-audit-api.js";
-import { collectRepositoryAuditSnapshot } from "../src/github-audit.js";
+import {
+  collectRepositoryAuditEvidenceData,
+  collectRepositoryAuditSnapshot,
+  AuditCollectionFailure,
+  type AuditEvidenceCollectionResult
+} from "../src/github-audit.js";
+import { decodeAuditEvidenceBase64url } from "../src/audit-evidence-bundle.js";
+import { parseCanonicalJsonBytes, type JsonValue } from "../src/audit-evidence.js";
 import {
   CliFileError,
   MAX_CLI_FILE_BYTES,
   classifyFileReadFailure,
   classifyFileSystemError,
+  readBoundedBytes,
   readBoundedFile
 } from "../src/file-reader.js";
 
 vi.mock("../src/github-audit-api.js", () => ({ createGitHubAuditClient: vi.fn() }));
 vi.mock("../src/github-audit.js", () => ({
   MAX_AUDIT_WORKFLOW_ROOTS: 100,
+  AuditCollectionFailure: class AuditCollectionFailure extends Error {
+    public readonly code: string;
+
+    public constructor(code: string) {
+      super(code);
+      this.code = code;
+    }
+  },
+  collectRepositoryAuditEvidenceData: vi.fn(),
   collectRepositoryAuditSnapshot: vi.fn()
 }));
 
@@ -44,16 +70,105 @@ function systemError(code: string): NodeJS.ErrnoException {
   return error;
 }
 
-function capture(): CliIo & { stdoutLines: string[]; stderrLines: string[] } {
+function capture(): CliIo & {
+  stdoutLines: string[];
+  stdoutByteChunks: Uint8Array[];
+  stderrLines: string[];
+} {
   const stdoutLines: string[] = [];
+  const stdoutByteChunks: Uint8Array[] = [];
   const stderrLines: string[] = [];
   return {
     stdoutLines,
+    stdoutByteChunks,
     stderrLines,
     readFile,
     stdout: (value) => stdoutLines.push(value),
+    stdoutBytes: (value) => stdoutByteChunks.push(value),
     stderr: (value) => stderrLines.push(value)
   };
+}
+
+function evidenceCollectionResult(): AuditEvidenceCollectionResult {
+  const bundle = parseCanonicalJsonBytes(replayBundle()) as Record<string, JsonValue>;
+  const artifacts = bundle.artifacts as Record<string, JsonValue>;
+  const policy = artifacts.policy as Record<string, JsonValue>;
+  const policySource = new TextDecoder().decode(
+    decodeAuditEvidenceBase64url(policy.contentBase64url)
+  );
+  return {
+    snapshot: hydrateAuditEvidenceBundle(bundle).snapshot,
+    repository: {
+      id: 1,
+      owner: "ahoooooooo",
+      name: "reviewready",
+      ownerType: "organization",
+      visibility: "public",
+      defaultBranch: "main"
+    },
+    policySource,
+    initialBranchSha: "a".repeat(40),
+    endingBranchSha: "a".repeat(40),
+    requestAttempts: 1,
+    retryAttempts: 0
+  };
+}
+
+function replayBundle(): Uint8Array {
+  const sha = "a".repeat(40);
+  const source =
+    'version: 1\nrules:\n  - id: attestation\n    when:\n      paths:\n        any: ["**"]\n    require:\n      - type: human_attestation\n        text: I understand and take responsibility for this change.\n';
+  const policySha256 = createHash("sha256").update(source, "utf8").digest("hex");
+  const bundle = buildAuditEvidenceBundle({
+    repository: {
+      id: 1,
+      owner: "ahoooooooo",
+      name: "reviewready",
+      ownerType: "organization",
+      visibility: "public",
+      defaultBranch: "main"
+    },
+    initialBranchSha: sha,
+    endingBranchSha: sha,
+    snapshot: createAuditEvidenceSnapshot({
+      version: 1,
+      repository: { owner: "ahoooooooo", name: "reviewready", defaultBranch: "main" },
+      baseRevision: {
+        sha,
+        policyPath: ".reviewready.yml",
+        policyRevisionSha: sha,
+        policySha256,
+        policyLoadedFromBase: true
+      },
+      policy: { requiredChecks: [], workflowPaths: [] },
+      completeness: { complete: true, missing: [] },
+      branchProtection: {
+        branch: "main",
+        exists: true,
+        enforceAdmins: true,
+        allowForcePushes: false,
+        allowDeletions: false,
+        requiredStatusChecks: { strict: true, checks: [] },
+        requiredPullRequestReviews: {
+          requiredApprovingReviewCount: 1,
+          bypassActors: [],
+          bypassActorsKnown: true
+        }
+      },
+      rulesets: [],
+      tagProtection: { known: true, allowsDeletion: false, allowsUpdate: false },
+      workflows: []
+    }),
+    policySource: source,
+    workflowSources: [],
+    protectedWorkflowPaths: [],
+    trustedWorkflowPaths: [],
+    observedAt: "2026-08-13T10:20:30.000Z",
+    durationMs: 1,
+    requestAttempts: 1,
+    retryAttempts: 0
+  });
+  return serializeAuditEvidenceBundle(bundle);
 }
 
 describe("bounded file reader", () => {
@@ -172,6 +287,89 @@ describe("bounded file reader", () => {
       name: "CliFileError",
       reason: "read_failed"
     });
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  type StatsMutation = {
+    readonly opened?: Record<string, unknown>;
+    readonly current?: Record<string, unknown>;
+    readonly final?: Record<string, unknown>;
+  };
+  const statsMutations: readonly [string, StatsMutation, string][] = [
+    ["opened non-file", { opened: { isFile: () => false } }, "not_regular"],
+    ["opened identity change", { opened: { dev: 2, ino: 2 } }, "not_regular"],
+    ["opened growth", { opened: { size: 2 } }, "too_large"],
+    ["path becomes non-file", { current: { isFile: () => false } }, "not_regular"],
+    ["path identity change", { current: { dev: 2, ino: 2 } }, "not_regular"],
+    ["path grows", { current: { size: 2 } }, "too_large"],
+    ["final handle becomes non-file", { final: { isFile: () => false } }, "not_regular"],
+    ["final handle identity changes", { final: { dev: 2, ino: 2 } }, "not_regular"]
+  ];
+  it.each(statsMutations)("fails closed when %s", async (_label, mutation, reason) => {
+    const makeStats = (overrides: Record<string, unknown> = {}) =>
+      ({ dev: 1, ino: 1, size: 1, isFile: () => true, ...overrides }) as never;
+    const opened = makeStats(mutation.opened);
+    const current = makeStats(mutation.current);
+    const final = makeStats(mutation.final);
+    const close = vi.fn().mockResolvedValue(undefined);
+    const handle = {
+      stat: vi.fn().mockResolvedValueOnce(opened).mockResolvedValueOnce(final),
+      read: vi.fn().mockResolvedValueOnce({ bytesRead: 1 }).mockResolvedValueOnce({ bytesRead: 0 }),
+      close
+    } as unknown as FileHandle;
+    const fileSystem = {
+      lstat: vi.fn().mockResolvedValueOnce(makeStats()).mockResolvedValueOnce(current),
+      open: vi.fn().mockResolvedValue(handle)
+    };
+
+    await expect(readBoundedBytes("boundary.bin", 1, fileSystem)).rejects.toMatchObject({
+      name: "CliFileError",
+      reason
+    });
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("rejects a read that returns more bytes than the caller allowed", async () => {
+    const stats = () => ({ dev: 1, ino: 1, size: 1, isFile: () => true }) as never;
+    const close = vi.fn().mockResolvedValue(undefined);
+    const handle = {
+      stat: vi.fn().mockResolvedValueOnce(stats()),
+      read: vi.fn().mockResolvedValueOnce({ bytesRead: 2 }),
+      close
+    } as unknown as FileHandle;
+    const fileSystem = {
+      lstat: vi.fn().mockResolvedValueOnce(stats()).mockResolvedValueOnce(stats()),
+      open: vi.fn().mockResolvedValue(handle)
+    };
+
+    await expect(readBoundedBytes("overread.bin", 1, fileSystem)).rejects.toMatchObject({
+      name: "CliFileError",
+      reason: "too_large"
+    });
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("still closes a handle when close itself fails", async () => {
+    const stats = () => ({ dev: 1, ino: 1, size: 1, isFile: () => true }) as never;
+    const close = vi.fn().mockRejectedValue(new Error("close failed"));
+    const handle = {
+      stat: vi.fn().mockResolvedValueOnce(stats()).mockResolvedValueOnce(stats()),
+      read: vi
+        .fn()
+        .mockImplementationOnce((buffer: Buffer, offset: number) => {
+          buffer[offset] = 0;
+          return Promise.resolve({ bytesRead: 1 });
+        })
+        .mockResolvedValueOnce({ bytesRead: 0 }),
+      close
+    } as unknown as FileHandle;
+    const fileSystem = {
+      lstat: vi.fn().mockResolvedValueOnce(stats()).mockResolvedValueOnce(stats()),
+      open: vi.fn().mockResolvedValue(handle)
+    };
+
+    const result = await readBoundedBytes("close-error.bin", 1, fileSystem);
+    expect(Array.from(result)).toEqual([0]);
     expect(close).toHaveBeenCalledOnce();
   });
 });
@@ -441,7 +639,11 @@ describe("audit command", () => {
       allowForcePushes: false,
       allowDeletions: false,
       requiredStatusChecks: { strict: true, checks: [] },
-      requiredPullRequestReviews: { requiredApprovingReviewCount: 1, bypassActors: [] }
+      requiredPullRequestReviews: {
+        requiredApprovingReviewCount: 1,
+        bypassActors: [],
+        bypassActorsKnown: true
+      }
     },
     rulesets: [],
     tagProtection: { known: true, allowsDeletion: false, allowsUpdate: false },
@@ -517,6 +719,145 @@ describe("audit command", () => {
     );
   });
 
+  it("maps an oversized environment token to a stable CLI input error", async () => {
+    const io = capture();
+    vi.mocked(createGitHubAuditClient).mockClear();
+    process.env.REVIEWREADY_TEST_TOKEN = "x".repeat(16_385);
+
+    try {
+      expect(
+        await runCli(
+          [
+            "audit",
+            "collect",
+            "--github",
+            "ahoooooooo/reviewready",
+            "--revision",
+            "a".repeat(40),
+            "--token-env",
+            "REVIEWREADY_TEST_TOKEN"
+          ],
+          io
+        )
+      ).toBe(2);
+    } finally {
+      delete process.env.REVIEWREADY_TEST_TOKEN;
+    }
+
+    expect(io.stderrLines.join("\n")).toContain("CLI_GITHUB_TOKEN_INVALID");
+    expect(createGitHubAuditClient).not.toHaveBeenCalled();
+  });
+
+  it("collects an evidence bundle through the raw stdout sink", async () => {
+    const io = capture();
+    vi.mocked(createGitHubAuditClient).mockReturnValue({} as never);
+    vi.mocked(collectRepositoryAuditEvidenceData).mockResolvedValue(evidenceCollectionResult());
+    process.env.REVIEWREADY_TEST_TOKEN = "secret-token";
+
+    try {
+      expect(
+        await runCli(
+          [
+            "audit",
+            "collect",
+            "--github",
+            "ahoooooooo/reviewready",
+            "--revision",
+            "a".repeat(40),
+            "--token-env",
+            "REVIEWREADY_TEST_TOKEN"
+          ],
+          io
+        )
+      ).toBe(0);
+    } finally {
+      delete process.env.REVIEWREADY_TEST_TOKEN;
+    }
+
+    expect(io.stdoutLines).toEqual([]);
+    expect(io.stdoutByteChunks).toHaveLength(1);
+    const emitted = io.stdoutByteChunks[0];
+    if (emitted === undefined) {
+      throw new Error("evidence bytes were not emitted");
+    }
+    expect(() => parseCanonicalJsonBytes(emitted)).not.toThrow();
+    expect(collectRepositoryAuditEvidenceData).toHaveBeenCalledWith(
+      "ahoooooooo",
+      "reviewready",
+      expect.anything(),
+      expect.objectContaining({ revision: "a".repeat(40) })
+    );
+  });
+
+  it("does not write a bundle before final replay validation succeeds", async () => {
+    const io = capture();
+    vi.mocked(createGitHubAuditClient).mockReturnValue({} as never);
+    vi.mocked(collectRepositoryAuditEvidenceData).mockResolvedValue(evidenceCollectionResult());
+    const hydrateSpy = vi
+      .spyOn(auditEvidenceBundleModule, "hydrateAuditEvidenceBundle")
+      .mockImplementation(() => {
+        throw new Error("replay mismatch");
+      });
+    process.env.REVIEWREADY_TEST_TOKEN = "secret-token";
+
+    try {
+      expect(
+        await runCli(
+          [
+            "audit",
+            "collect",
+            "--github",
+            "ahoooooooo/reviewready",
+            "--revision",
+            "a".repeat(40),
+            "--token-env",
+            "REVIEWREADY_TEST_TOKEN"
+          ],
+          io
+        )
+      ).toBe(2);
+    } finally {
+      delete process.env.REVIEWREADY_TEST_TOKEN;
+      hydrateSpy.mockRestore();
+    }
+
+    expect(io.stdoutByteChunks).toEqual([]);
+    expect(io.stderrLines.join("\n")).toContain("AUDIT_EVIDENCE_COLLECTION_FAILED");
+  });
+
+  it("maps unsupported remote audit semantics to a stable redacted CLI error", async () => {
+    const io = capture();
+    vi.mocked(createGitHubAuditClient).mockReturnValue({} as never);
+    vi.mocked(collectRepositoryAuditEvidenceData).mockRejectedValue(
+      new AuditCollectionFailure("evidence-unsupported-semantics")
+    );
+    process.env.REVIEWREADY_TEST_TOKEN = "secret-token";
+
+    try {
+      expect(
+        await runCli(
+          [
+            "audit",
+            "collect",
+            "--github",
+            "ahoooooooo/reviewready",
+            "--revision",
+            "a".repeat(40),
+            "--token-env",
+            "REVIEWREADY_TEST_TOKEN"
+          ],
+          io
+        )
+      ).toBe(2);
+    } finally {
+      delete process.env.REVIEWREADY_TEST_TOKEN;
+    }
+
+    expect(io.stderrLines.join("\n")).toContain("AUDIT_EVIDENCE_UNSUPPORTED_SEMANTICS");
+    expect(io.stderrLines.join("\n")).not.toContain("evidence-unsupported-semantics");
+    expect(io.stderrLines.join("\n")).not.toContain("secret-token");
+  });
+
   it("uses audit-specific wording for invalid snapshot JSON", async () => {
     const io = capture();
     io.readFile = () => Promise.resolve("{");
@@ -563,5 +904,204 @@ describe("audit command", () => {
     );
     expect(policyIo.stderrLines.join("\n")).toContain("--policy");
     expect(conflictIo.stderrLines.join("\n")).toContain("mutually exclusive");
+  });
+
+  it("replays a canonical evidence bundle without contacting GitHub", async () => {
+    const io = capture();
+    const bytes = replayBundle();
+    io.readBytes = () => Promise.resolve(bytes);
+
+    expect(await runCli(["audit", "replay", "--bundle", "audit.bundle", "--json"], io)).toBe(0);
+    expect(JSON.parse(io.stdoutLines.join(""))).toMatchObject({
+      auditVersion: 1,
+      status: "pass"
+    });
+    expect(io.stderrLines).toEqual([]);
+  });
+
+  it("rejects missing values and invalid option combinations before file access", async () => {
+    const cases: readonly (readonly [string[], string])[] = [
+      [["validate", "--policy"], "requires a path"],
+      [["validate", "--policy", "--json"], "requires a path"],
+      [["check", "--policy", "one", "--input"], "requires a path"],
+      [["check", "--policy", "one", "--input", "two", "--input", "three"], "only once"],
+      [["audit", "--github", "one", "--github", "two"], "only once"],
+      [["audit", "replay", "--bundle", "one", "--bundle", "two"], "only once"],
+      [
+        ["audit", "collect", "--revision", "a".repeat(40), "--revision", "b".repeat(40)],
+        "only once"
+      ],
+      [["audit", "--ref", "main", "--ref", "develop"], "only once"],
+      [["audit", "--policy-path", "one", "--policy-path", "two"], "only once"],
+      [["audit", "--token-env", "ONE", "--token-env", "TWO"], "only once"],
+      [["validate", "--bundle", "bundle"], "only valid"],
+      [["audit", "replay"], "requires"],
+      [["audit", "replay", "--bundle", "bundle", "--input", "input"], "only --bundle"],
+      [["audit", "collect"], "requires"],
+      [["audit", "collect", "--github", "owner/repo", "--revision", "short"], "40-character"],
+      [
+        ["audit", "collect", "--github", "owner/repo", "--revision", "a".repeat(40), "--json"],
+        "without a renderer"
+      ],
+      [["audit", "--bundle", "bundle"], "collect or audit replay"],
+      [["validate", "--github", "owner/repo"], "only valid with"],
+      [["audit", "--github", "owner/repo", "--input", "input"], "mutually exclusive"],
+      [["audit", "--ref", "main"], "require --github"],
+      [["audit"], "either"],
+      [["explain", "--policy", "policy", "--sarif"], "only valid with"],
+      [["audit", "--input", "input", "--json", "--sarif"], "mutually exclusive"]
+    ];
+
+    for (const [argv, message] of cases) {
+      const io = capture();
+      expect(await runCli(argv, io)).toBe(2);
+      expect(io.stderrLines.join("\n")).toContain(message);
+    }
+  });
+
+  it("validates live targets, token environment names, and all file failure mappings", async () => {
+    const invalidTarget = capture();
+    expect(await runCli(["audit", "--github", "not a target"], invalidTarget)).toBe(2);
+    expect(invalidTarget.stderrLines.join("\n")).toContain("owner/repo");
+
+    const invalidTokenEnv = capture();
+    expect(
+      await runCli(["audit", "--github", "owner/repo", "--token-env", "not-valid"], invalidTokenEnv)
+    ).toBe(2);
+    expect(invalidTokenEnv.stderrLines.join("\n")).toContain("token environment name");
+
+    const readFailed = capture();
+    readFailed.readFile = () => Promise.reject(new CliFileError("read_failed"));
+    expect(await runCli(["validate", "--policy", "private.yml"], readFailed)).toBe(2);
+    expect(readFailed.stderrLines.join("\n")).toContain("POLICY_FILE_READ_FAILED");
+
+    const missingBundle = capture();
+    expect(await runCli(["audit", "replay", "--bundle", "private.bundle"], missingBundle)).toBe(2);
+    expect(missingBundle.stderrLines.join("\n")).toContain("AUDIT_BUNDLE_FILE_NOT_FOUND");
+
+    const invalidBundle = capture();
+    invalidBundle.readBytes = () => Promise.resolve(new TextEncoder().encode("{}"));
+    expect(await runCli(["audit", "replay", "--bundle", "bundle"], invalidBundle)).toBe(2);
+    expect(invalidBundle.stderrLines.join("\n")).toContain("AUDIT_BUNDLE_INVALID");
+  });
+
+  it("maps revision instability, unknown collection failures, and missing raw sinks", async () => {
+    const revisionIo = capture();
+    vi.mocked(createGitHubAuditClient).mockReturnValue({} as never);
+    vi.mocked(collectRepositoryAuditEvidenceData).mockRejectedValue(
+      new AuditCollectionFailure("evidence-revision-not-stable")
+    );
+    process.env.REVIEWREADY_TEST_TOKEN = "secret-token";
+    try {
+      expect(
+        await runCli(
+          [
+            "audit",
+            "collect",
+            "--github",
+            "owner/repo",
+            "--revision",
+            "a".repeat(40),
+            "--token-env",
+            "REVIEWREADY_TEST_TOKEN"
+          ],
+          revisionIo
+        )
+      ).toBe(2);
+    } finally {
+      delete process.env.REVIEWREADY_TEST_TOKEN;
+    }
+    expect(revisionIo.stderrLines.join("\n")).toContain("AUDIT_EVIDENCE_REVISION_UNSTABLE");
+
+    const unknownIo = capture();
+    vi.mocked(collectRepositoryAuditEvidenceData).mockRejectedValue(
+      new AuditEvidenceCollectionError("unexpected")
+    );
+    process.env.REVIEWREADY_TEST_TOKEN = "secret-token";
+    try {
+      expect(
+        await runCli(
+          [
+            "audit",
+            "collect",
+            "--github",
+            "owner/repo",
+            "--revision",
+            "a".repeat(40),
+            "--token-env",
+            "REVIEWREADY_TEST_TOKEN"
+          ],
+          unknownIo
+        )
+      ).toBe(2);
+    } finally {
+      delete process.env.REVIEWREADY_TEST_TOKEN;
+    }
+    expect(unknownIo.stderrLines.join("\n")).toContain("AUDIT_EVIDENCE_COLLECTION_FAILED");
+
+    const noRawSink = capture();
+    Object.defineProperty(noRawSink, "stdoutBytes", {
+      configurable: true,
+      value: undefined,
+      writable: true
+    });
+    vi.mocked(collectRepositoryAuditEvidenceData).mockResolvedValue(evidenceCollectionResult());
+    process.env.REVIEWREADY_TEST_TOKEN = "secret-token";
+    try {
+      expect(
+        await runCli(
+          [
+            "audit",
+            "collect",
+            "--github",
+            "owner/repo",
+            "--revision",
+            "a".repeat(40),
+            "--token-env",
+            "REVIEWREADY_TEST_TOKEN"
+          ],
+          noRawSink
+        )
+      ).toBe(2);
+    } finally {
+      delete process.env.REVIEWREADY_TEST_TOKEN;
+    }
+    expect(noRawSink.stderrLines.join("\n")).toContain("AUDIT_RAW_OUTPUT_UNAVAILABLE");
+  });
+
+  it("exercises the bounded default CLI I/O sinks", async () => {
+    const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      expect(await runCli(["validate", "--policy", fixture(".reviewready.yml")])).toBe(0);
+      const directory = await temporaryDirectory();
+      const bundlePath = join(directory, "audit.bundle");
+      await writeFile(bundlePath, replayBundle());
+      expect(await runCli(["audit", "replay", "--bundle", bundlePath])).toBe(0);
+
+      vi.mocked(createGitHubAuditClient).mockReturnValue({} as never);
+      vi.mocked(collectRepositoryAuditEvidenceData).mockResolvedValue(evidenceCollectionResult());
+      process.env.REVIEWREADY_TEST_TOKEN = "secret-token";
+      try {
+        expect(
+          await runCli([
+            "audit",
+            "collect",
+            "--github",
+            "owner/repo",
+            "--revision",
+            "a".repeat(40),
+            "--token-env",
+            "REVIEWREADY_TEST_TOKEN"
+          ])
+        ).toBe(0);
+      } finally {
+        delete process.env.REVIEWREADY_TEST_TOKEN;
+      }
+      expect(await runCli(["unknown"])).toBe(2);
+    } finally {
+      stdout.mockRestore();
+      stderr.mockRestore();
+    }
   });
 });

@@ -197,6 +197,19 @@ function runSmoke(projectRoot) {
       ) {
         throw new Error("installed package contains development-only files");
       }
+      const evidenceSchemaPath = join(packageRoot, "reviewready.audit-evidence.schema.json");
+      if (!existsSync(evidenceSchemaPath)) {
+        throw new Error("packaged evidence schema is missing");
+      }
+      const evidenceSchema = /** @type {unknown} */ (
+        JSON.parse(readFileSync(evidenceSchemaPath, "utf8"))
+      );
+      if (
+        !isRecord(evidenceSchema) ||
+        evidenceSchema.$schema !== "https://json-schema.org/draft/2020-12/schema"
+      ) {
+        throw new Error("packaged evidence schema is not Draft 2020-12");
+      }
 
       const fixtureRoot = join(projectRoot, "fixtures", "basic");
       const smokeRoot = mkdtempSync(join(tmpdir(), "reviewready-package-fixtures-"));
@@ -241,6 +254,16 @@ function runSmoke(projectRoot) {
         );
         if (!invalidRun.stderr.includes("[INPUT_SCHEMA_INVALID]")) {
           throw new Error("packaged CLI invalid-input diagnostic was not stable");
+        }
+        const evidenceFixture = join(projectRoot, "fixtures", "audit", "evidence-bundle-v1.json");
+        const replayRun = runCli(
+          cli,
+          ["audit", "replay", "--bundle", evidenceFixture, "--json"],
+          projectRoot,
+          0
+        );
+        if (cliStatus(replayRun.stdout) !== "pass") {
+          throw new Error("packaged CLI evidence replay was not pass");
         }
       } finally {
         rmSync(smokeRoot, { recursive: true, force: true });

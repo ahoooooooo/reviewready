@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { auditRepository, type AuditSnapshot } from "../src/audit.js";
 import {
+  collectRepositoryAuditEvidenceData,
   collectRepositoryAuditSnapshot,
   type AuditGitHubClient,
   type AuditRepositoryArguments
@@ -26,7 +27,14 @@ const policySource = [
 ].join("\n");
 
 function client(overrides: Partial<AuditGitHubClient> = {}): AuditGitHubClient {
-  const repository = { owner: "octocat", name: "demo", defaultBranch: "main", id: 123 };
+  const repository = {
+    owner: "octocat",
+    name: "demo",
+    defaultBranch: "main",
+    id: 123,
+    ownerType: "organization" as const,
+    visibility: "public" as const
+  };
   const branch = { name: "main", sha: baseSha };
   return {
     getRepository: vi.fn(() => Promise.resolve(repository)),
@@ -44,7 +52,8 @@ function client(overrides: Partial<AuditGitHubClient> = {}): AuditGitHubClient {
         },
         requiredPullRequestReviews: {
           requiredApprovingReviewCount: 1,
-          bypassActors: []
+          bypassActors: [],
+          bypassActorsKnown: true
         }
       })
     ),
@@ -57,6 +66,7 @@ function client(overrides: Partial<AuditGitHubClient> = {}): AuditGitHubClient {
           refPatterns: ["~DEFAULT_BRANCH"],
           enforcement: "active" as const,
           bypassActors: [],
+          bypassActorsKnown: true,
           allowForcePushes: false,
           allowDeletions: false,
           requiredChecks: [{ name: "ReviewReady", appSlug: "github-actions" }]
@@ -77,6 +87,209 @@ function client(overrides: Partial<AuditGitHubClient> = {}): AuditGitHubClient {
 }
 
 describe("GitHub repository audit collector", () => {
+  it("returns exact-revision evidence inputs and bounded request metrics", async () => {
+    const api = client({
+      getRequestMetrics: () => ({ requestAttempts: 12, retryAttempts: 1 })
+    });
+
+    const result = await collectRepositoryAuditEvidenceData("octocat", "demo", api, {
+      revision: baseSha,
+      protectedWorkflowPaths: [workflowPath],
+      trustedWorkflowPaths: [workflowPath]
+    });
+
+    expect(result.repository).toMatchObject({
+      id: 123,
+      owner: "octocat",
+      name: "demo",
+      visibility: "public"
+    });
+    expect(result.policySource).toBe(policySource);
+    expect(result.initialBranchSha).toBe(baseSha);
+    expect(result.endingBranchSha).toBe(baseSha);
+    expect(result.requestAttempts).toBe(12);
+    expect(result.retryAttempts).toBe(1);
+  });
+
+  it("waits for the first settings observation before collecting immutable artifacts", async () => {
+    let activeRequests = 0;
+    let peakRequests = 0;
+    let settingsCompletions = 0;
+    let firstSettingsComplete = false;
+    let artifactStartedEarly = false;
+
+    const observed = async <T>(value: T): Promise<T> => {
+      activeRequests += 1;
+      peakRequests = Math.max(peakRequests, activeRequests);
+      await Promise.resolve();
+      activeRequests -= 1;
+      return value;
+    };
+    const observedSetting = async <T>(value: T): Promise<T> => {
+      const result = await observed(value);
+      settingsCompletions += 1;
+      if (settingsCompletions === 3) {
+        firstSettingsComplete = true;
+      }
+      return result;
+    };
+    const settings = {
+      branchProtection: {
+        branch: "main",
+        exists: true,
+        enforceAdmins: true,
+        allowForcePushes: false,
+        allowDeletions: false,
+        requiredStatusChecks: {
+          strict: true,
+          checks: [{ name: "ReviewReady", appSlug: "github-actions" }]
+        },
+        requiredPullRequestReviews: {
+          requiredApprovingReviewCount: 1,
+          bypassActors: [],
+          bypassActorsKnown: true
+        }
+      },
+      rulesets: [
+        {
+          id: 1,
+          name: "main",
+          target: "branch" as const,
+          refPatterns: ["~DEFAULT_BRANCH"],
+          enforcement: "active" as const,
+          bypassActors: [],
+          bypassActorsKnown: true,
+          allowForcePushes: false,
+          allowDeletions: false,
+          requiredChecks: [{ name: "ReviewReady", appSlug: "github-actions" }]
+        }
+      ],
+      tagProtection: { known: true, allowsDeletion: false, allowsUpdate: false }
+    };
+    const api = client({
+      getBranchProtection: vi.fn(() => observedSetting(settings.branchProtection)),
+      listRulesets: vi.fn(() => observedSetting(settings.rulesets)),
+      getTagProtection: vi.fn(() => observedSetting(settings.tagProtection)),
+      listWorkflowFiles: vi.fn(() => {
+        if (!firstSettingsComplete) {
+          artifactStartedEarly = true;
+        }
+        return observed([{ path: workflowPath, type: "file" as const }]);
+      }),
+      getFileAtRevision: vi.fn(({ path }: AuditRepositoryArguments & { path: string }) => {
+        if (!firstSettingsComplete) {
+          artifactStartedEarly = true;
+        }
+        return observed(path === ".reviewready.yml" ? policySource : "on: pull_request\njobs: {}");
+      }),
+      getRequestMetrics: () => ({ requestAttempts: 1, retryAttempts: 0 })
+    });
+
+    await collectRepositoryAuditEvidenceData("octocat", "demo", api, {
+      revision: baseSha,
+      protectedWorkflowPaths: [workflowPath],
+      trustedWorkflowPaths: [workflowPath]
+    });
+
+    expect(artifactStartedEarly).toBe(false);
+    expect(peakRequests).toBeLessThanOrEqual(4);
+  });
+
+  it("never exceeds four concurrent mutable reads when ruleset details fan out", async () => {
+    let activeRequests = 0;
+    let peakRequests = 0;
+    const observed = async <T>(value: T): Promise<T> => {
+      activeRequests += 1;
+      peakRequests = Math.max(peakRequests, activeRequests);
+      await Promise.resolve();
+      activeRequests -= 1;
+      return value;
+    };
+    const branchProtection = {
+      branch: "main",
+      exists: true,
+      enforceAdmins: true,
+      allowForcePushes: false,
+      allowDeletions: false,
+      requiredStatusChecks: {
+        strict: true,
+        checks: [{ name: "ReviewReady", appSlug: "github-actions" }]
+      },
+      requiredPullRequestReviews: {
+        requiredApprovingReviewCount: 1,
+        bypassActors: [],
+        bypassActorsKnown: true
+      }
+    };
+    const rulesets = Array.from({ length: 4 }, (_, index) => ({
+      id: index + 1,
+      name: `ruleset-${String(index + 1)}`,
+      target: "branch" as const,
+      refPatterns: ["~DEFAULT_BRANCH"],
+      enforcement: "active" as const,
+      bypassActors: [],
+      bypassActorsKnown: true,
+      allowForcePushes: false,
+      allowDeletions: false,
+      requiredChecks: []
+    }));
+    const api = client({
+      getBranchProtection: vi.fn(() => observed(branchProtection)),
+      listRulesets: vi.fn(() => Promise.all(rulesets.map((ruleset) => observed(ruleset)))),
+      getTagProtection: vi.fn(() =>
+        observed({ known: true, allowsDeletion: false, allowsUpdate: false })
+      ),
+      getRequestMetrics: () => ({ requestAttempts: 1, retryAttempts: 0 })
+    });
+
+    await collectRepositoryAuditEvidenceData("octocat", "demo", api, {
+      revision: baseSha,
+      protectedWorkflowPaths: [workflowPath],
+      trustedWorkflowPaths: [workflowPath]
+    });
+
+    expect(peakRequests).toBeLessThanOrEqual(4);
+  });
+
+  it("rejects evidence when the final repository observation changes immutable metadata", async () => {
+    const repository = {
+      owner: "octocat",
+      name: "demo",
+      defaultBranch: "main",
+      id: 123,
+      ownerType: "organization" as const,
+      visibility: "public" as const
+    };
+    const api = client({
+      getRepository: vi
+        .fn()
+        .mockResolvedValueOnce(repository)
+        .mockResolvedValueOnce(repository)
+        .mockResolvedValueOnce({ ...repository, visibility: "private" as const }),
+      getRequestMetrics: () => ({ requestAttempts: 1, retryAttempts: 0 })
+    });
+
+    await expect(
+      collectRepositoryAuditEvidenceData("octocat", "demo", api, { revision: baseSha })
+    ).rejects.toThrow("evidence-repository-mismatch");
+  });
+
+  it("rejects evidence when the requested revision is not the default-branch head", async () => {
+    const api = client({
+      getRequestMetrics: () => ({ requestAttempts: 1, retryAttempts: 0 })
+    });
+
+    await expect(
+      collectRepositoryAuditEvidenceData("octocat", "demo", api, { revision: nextSha })
+    ).rejects.toThrow("evidence-revision-not-stable");
+  });
+
+  it("requires real API request metrics before evidence output", async () => {
+    await expect(
+      collectRepositoryAuditEvidenceData("octocat", "demo", client(), { revision: baseSha })
+    ).rejects.toThrow("request-metrics-unavailable");
+  });
+
   it("collects policy and every workflow at one immutable base revision", async () => {
     const api = client();
 
@@ -95,10 +308,10 @@ describe("GitHub repository audit collector", () => {
     expect(snapshot.workflows[0]).toMatchObject({
       path: workflowPath,
       revisionSha: baseSha,
-      protectedFromPullRequest: true,
-      trustedRoot: true
+      protectedFromPullRequest: false,
+      trustedRoot: false
     });
-    expect(auditRepository(snapshot)).toMatchObject({ auditVersion: 1, status: "pass" });
+    expect(auditRepository(snapshot)).toMatchObject({ auditVersion: 1, status: "fail" });
     expect(api.getFileAtRevision).toHaveBeenCalledWith(
       expect.objectContaining({ path: ".reviewready.yml", ref: baseSha })
     );
@@ -114,7 +327,53 @@ describe("GitHub repository audit collector", () => {
     });
 
     expect(snapshot.completeness.complete).toBe(true);
-    expect(auditRepository(snapshot)).toMatchObject({ auditVersion: 1, status: "pass" });
+    expect(auditRepository(snapshot)).toMatchObject({ auditVersion: 1, status: "fail" });
+  });
+
+  it("fails closed with a conservative projection when mutable settings change between rounds", async () => {
+    const initialBranchProtection = {
+      branch: "main",
+      exists: true,
+      enforceAdmins: true,
+      allowForcePushes: false,
+      allowDeletions: false,
+      requiredStatusChecks: {
+        strict: true,
+        checks: [{ name: "ReviewReady", appSlug: "github-actions" }]
+      },
+      requiredPullRequestReviews: {
+        requiredApprovingReviewCount: 1,
+        bypassActors: []
+      }
+    };
+    const changedBranchProtection = {
+      ...initialBranchProtection,
+      allowDeletions: true
+    };
+    const api = client({
+      getBranchProtection: vi
+        .fn()
+        .mockResolvedValueOnce(initialBranchProtection)
+        .mockResolvedValueOnce(changedBranchProtection)
+    });
+
+    const snapshot = await collectRepositoryAuditSnapshot("octocat", "demo", api, {
+      protectedWorkflowPaths: [workflowPath],
+      trustedWorkflowPaths: [workflowPath]
+    });
+
+    expect(snapshot.completeness).toEqual({
+      complete: false,
+      missing: ["settings-observation-mismatch"]
+    });
+    expect(snapshot.branchProtection).toBeNull();
+    expect(snapshot.rulesets).toEqual([]);
+    expect(snapshot.tagProtection).toEqual({
+      known: false,
+      allowsDeletion: true,
+      allowsUpdate: true
+    });
+    expect(auditRepository(snapshot).status).toBe("incomplete");
   });
 
   it("fails closed when an audit requests a non-default branch", async () => {
@@ -157,6 +416,25 @@ describe("GitHub repository audit collector", () => {
     expect(snapshot.completeness.complete).toBe(false);
     expect(snapshot.completeness.missing).toEqual(
       expect.arrayContaining(["trusted-workflow-root", "workflow-protection-root"])
+    );
+  });
+
+  it("does not turn caller workflow-root assertions into authoritative facts", async () => {
+    const snapshot = await collectRepositoryAuditSnapshot("octocat", "demo", client(), {
+      protectedWorkflowPaths: [workflowPath],
+      trustedWorkflowPaths: [workflowPath]
+    });
+
+    expect(snapshot.workflows[0]).toMatchObject({
+      path: workflowPath,
+      protectedFromPullRequest: false,
+      trustedRoot: false
+    });
+    expect(auditRepository(snapshot).findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "AUDIT_WORKFLOW_NOT_PROTECTED" }),
+        expect.objectContaining({ code: "AUDIT_TRUSTED_ROOT_MISSING" })
+      ])
     );
   });
 
@@ -204,7 +482,14 @@ describe("GitHub repository audit collector", () => {
       "demo",
       client({
         getRepository: vi.fn(() =>
-          Promise.resolve({ owner: "attacker", name: "demo", defaultBranch: "main", id: 123 })
+          Promise.resolve({
+            owner: "attacker",
+            name: "demo",
+            defaultBranch: "main",
+            id: 123,
+            ownerType: "organization" as const,
+            visibility: "public" as const
+          })
         )
       })
     );
@@ -216,8 +501,22 @@ describe("GitHub repository audit collector", () => {
     const api = client({
       getRepository: vi
         .fn()
-        .mockResolvedValueOnce({ owner: "octocat", name: "demo", defaultBranch: "main", id: 123 })
-        .mockResolvedValueOnce({ owner: "octocat", name: "demo", defaultBranch: "main", id: 456 })
+        .mockResolvedValueOnce({
+          owner: "octocat",
+          name: "demo",
+          defaultBranch: "main",
+          id: 123,
+          ownerType: "organization" as const,
+          visibility: "public" as const
+        })
+        .mockResolvedValueOnce({
+          owner: "octocat",
+          name: "demo",
+          defaultBranch: "main",
+          id: 456,
+          ownerType: "organization" as const,
+          visibility: "public" as const
+        })
     });
 
     const snapshot = await collectRepositoryAuditSnapshot("octocat", "demo", api, {
@@ -283,6 +582,70 @@ describe("GitHub repository audit collector", () => {
     expect(first.policy.workflowPaths).toEqual(second.policy.workflowPaths);
   });
 
+  it("does not treat equivalent ruleset pattern order as a settings change", async () => {
+    const firstRuleset = {
+      id: 1,
+      name: "main",
+      target: "branch" as const,
+      refPatterns: ["b", "a"],
+      enforcement: "active" as const,
+      bypassActors: [],
+      allowForcePushes: false,
+      allowDeletions: false,
+      requiredChecks: []
+    };
+    const secondRuleset = { ...firstRuleset, refPatterns: ["a", "b"] };
+    const api = client({
+      listRulesets: vi
+        .fn()
+        .mockResolvedValueOnce([firstRuleset])
+        .mockResolvedValueOnce([secondRuleset])
+    });
+
+    const snapshot = await collectRepositoryAuditSnapshot("octocat", "demo", api, {
+      protectedWorkflowPaths: [workflowPath],
+      trustedWorkflowPaths: [workflowPath]
+    });
+
+    expect(snapshot.completeness.missing).not.toContain("settings-observation-mismatch");
+  });
+
+  it("does not treat equivalent nested object key order as a settings change", async () => {
+    const firstProtection = {
+      branch: "main",
+      exists: true,
+      enforceAdmins: true,
+      allowForcePushes: false,
+      allowDeletions: false,
+      requiredStatusChecks: {
+        strict: true,
+        checks: [{ appSlug: "github-actions", name: "ReviewReady" }]
+      },
+      requiredPullRequestReviews: {
+        requiredApprovingReviewCount: 1,
+        bypassActors: [],
+        bypassActorsKnown: true
+      }
+    } as const;
+    const secondProtection = {
+      ...firstProtection,
+      requiredStatusChecks: {
+        strict: true,
+        checks: [{ name: "ReviewReady", appSlug: "github-actions" }]
+      }
+    } as const;
+    const api = client({
+      getBranchProtection: vi
+        .fn()
+        .mockResolvedValueOnce(firstProtection)
+        .mockResolvedValueOnce(secondProtection)
+    });
+
+    const snapshot = await collectRepositoryAuditSnapshot("octocat", "demo", api);
+
+    expect(snapshot.completeness.missing).not.toContain("settings-observation-mismatch");
+  });
+
   it("bounds the number of rulesets accepted by the collector", async () => {
     const ruleset = {
       id: 1,
@@ -330,7 +693,14 @@ describe("GitHub repository audit collector", () => {
         "demo",
         client({
           getRepository: vi.fn(() =>
-            Promise.resolve({ owner: "octocat", name: "demo", defaultBranch: "", id: 123 })
+            Promise.resolve({
+              owner: "octocat",
+              name: "demo",
+              defaultBranch: "",
+              id: 123,
+              ownerType: "organization" as const,
+              visibility: "public" as const
+            })
           )
         })
       ),
@@ -398,6 +768,28 @@ describe("GitHub repository audit collector", () => {
       })
     );
     expect(invalidWorkflowFormatPath.completeness.missing).toContain("workflow-path-invalid");
+
+    const unicodeFoldedWorkflowPath = await collectRepositoryAuditSnapshot(
+      "octocat",
+      "demo",
+      client({
+        listWorkflowFiles: vi.fn(() =>
+          Promise.resolve([{ path: ".github/wor\u212Aflows/ci.yml", type: "file" as const }])
+        )
+      })
+    );
+    expect(unicodeFoldedWorkflowPath.completeness.missing).toContain("workflow-path-invalid");
+
+    const uppercaseWorkflowPath = await collectRepositoryAuditSnapshot(
+      "octocat",
+      "demo",
+      client({
+        listWorkflowFiles: vi.fn(() =>
+          Promise.resolve([{ path: ".GITHUB/WORKFLOWS/ci.YML", type: "file" as const }])
+        )
+      })
+    );
+    expect(uppercaseWorkflowPath.completeness.missing).not.toContain("workflow-path-invalid");
 
     const invalidPolicyFormatPath = await collectRepositoryAuditSnapshot(
       "octocat",
@@ -473,8 +865,22 @@ describe("GitHub repository audit collector", () => {
     const api = client({
       getRepository: vi
         .fn()
-        .mockResolvedValueOnce({ owner: "octocat", name: "demo", defaultBranch: "main", id: 123 })
-        .mockResolvedValueOnce({ owner: "octocat", name: "demo", defaultBranch: "trunk", id: 123 })
+        .mockResolvedValueOnce({
+          owner: "octocat",
+          name: "demo",
+          defaultBranch: "main",
+          id: 123,
+          ownerType: "organization" as const,
+          visibility: "public" as const
+        })
+        .mockResolvedValueOnce({
+          owner: "octocat",
+          name: "demo",
+          defaultBranch: "trunk",
+          id: 123,
+          ownerType: "organization" as const,
+          visibility: "public" as const
+        })
     });
 
     const snapshot = await collectRepositoryAuditSnapshot("octocat", "demo", api, {

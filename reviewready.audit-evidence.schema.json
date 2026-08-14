@@ -1,0 +1,1086 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ahoooooooo/reviewready/blob/main/reviewready.audit-evidence.schema.json",
+  "title": "ReviewReady audit evidence bundle v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "bundleVersion",
+    "canonicalization",
+    "subject",
+    "collection",
+    "assertions",
+    "snapshot",
+    "artifacts",
+    "report",
+    "integrity"
+  ],
+  "properties": {
+    "bundleVersion": { "const": 1 },
+    "canonicalization": { "const": "RFC8785" },
+    "subject": { "$ref": "#/$defs/subject" },
+    "collection": { "$ref": "#/$defs/collection" },
+    "assertions": { "$ref": "#/$defs/assertions" },
+    "snapshot": { "$ref": "#/$defs/snapshot" },
+    "artifacts": { "$ref": "#/$defs/artifacts" },
+    "report": { "$ref": "#/$defs/auditReport" },
+    "integrity": { "$ref": "#/$defs/integrity" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "type": "object",
+        "required": ["collection"],
+        "properties": {
+          "collection": {
+            "type": "object",
+            "required": ["status"],
+            "properties": { "status": { "const": "complete" } }
+          }
+        }
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "snapshot": {
+            "type": "object",
+            "properties": {
+              "completeness": {
+                "type": "object",
+                "required": ["complete", "missing"],
+                "properties": {
+                  "complete": { "const": true },
+                  "missing": { "type": "array", "maxItems": 0 }
+                }
+              },
+              "tagProtection": {
+                "type": "object",
+                "required": ["known"],
+                "properties": { "known": { "const": true } }
+              },
+              "branchProtection": {
+                "allOf": [
+                  { "$ref": "#/$defs/branchProtection" },
+                  {
+                    "type": "object",
+                    "required": ["exists", "requiredPullRequestReviews"],
+                    "properties": {
+                      "exists": { "const": true },
+                      "requiredPullRequestReviews": {
+                        "type": "object",
+                        "required": ["bypassActorsKnown"],
+                        "properties": { "bypassActorsKnown": { "const": true } }
+                      }
+                    }
+                  }
+                ]
+              },
+              "rulesets": {
+                "not": {
+                  "type": "array",
+                  "contains": {
+                    "type": "object",
+                    "required": ["bypassActorsKnown"],
+                    "properties": { "bypassActorsKnown": { "const": false } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "required": ["collection", "snapshot"],
+        "properties": {
+          "collection": {
+            "type": "object",
+            "required": ["status", "missing"],
+            "properties": {
+              "status": { "const": "incomplete" },
+              "missing": {
+                "type": "array",
+                "contains": { "const": "settings-observation-mismatch" }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "snapshot": {
+            "type": "object",
+            "properties": {
+              "branchProtection": { "const": null },
+              "rulesets": { "type": "array", "maxItems": 0 },
+              "tagProtection": {
+                "type": "object",
+                "required": ["known", "allowsDeletion", "allowsUpdate"],
+                "properties": {
+                  "known": { "const": false },
+                  "allowsDeletion": { "const": true },
+                  "allowsUpdate": { "const": true }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "required": ["collection"],
+        "properties": {
+          "collection": {
+            "type": "object",
+            "required": ["status"],
+            "properties": { "status": { "const": "complete" } }
+          }
+        }
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "report": {
+            "type": "object",
+            "required": ["status"],
+            "properties": { "status": { "enum": ["pass", "fail"] } }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "required": ["collection", "snapshot"],
+        "properties": {
+          "collection": {
+            "type": "object",
+            "required": ["status", "missing"],
+            "properties": {
+              "status": { "const": "incomplete" },
+              "missing": {
+                "type": "array",
+                "contains": { "const": "settings-authority-incomplete" }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "snapshot": {
+            "type": "object",
+            "anyOf": [
+              {
+                "required": ["branchProtection"],
+                "properties": { "branchProtection": { "const": null } }
+              },
+              {
+                "required": ["branchProtection"],
+                "properties": {
+                  "branchProtection": {
+                    "type": "object",
+                    "required": ["requiredPullRequestReviews"],
+                    "properties": { "requiredPullRequestReviews": { "const": null } }
+                  }
+                }
+              },
+              {
+                "required": ["branchProtection"],
+                "properties": {
+                  "branchProtection": {
+                    "type": "object",
+                    "required": ["requiredPullRequestReviews"],
+                    "properties": {
+                      "requiredPullRequestReviews": {
+                        "type": "object",
+                        "required": ["bypassActorsKnown"],
+                        "properties": { "bypassActorsKnown": { "const": false } }
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "required": ["tagProtection"],
+                "properties": {
+                  "tagProtection": {
+                    "type": "object",
+                    "required": ["known"],
+                    "properties": { "known": { "const": false } }
+                  }
+                }
+              },
+              {
+                "required": ["rulesets"],
+                "properties": {
+                  "rulesets": {
+                    "type": "array",
+                    "contains": {
+                      "type": "object",
+                      "required": ["bypassActorsKnown"],
+                      "properties": { "bypassActorsKnown": { "const": false } }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "required": ["collection"],
+        "properties": {
+          "collection": {
+            "type": "object",
+            "required": ["status"],
+            "properties": { "status": { "const": "incomplete" } }
+          }
+        }
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "report": {
+            "type": "object",
+            "required": ["status"],
+            "properties": { "status": { "const": "incomplete" } }
+          },
+          "snapshot": {
+            "type": "object",
+            "properties": {
+              "completeness": {
+                "type": "object",
+                "required": ["complete", "missing"],
+                "properties": {
+                  "complete": { "const": false },
+                  "missing": { "type": "array", "minItems": 1 }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "required": ["subject", "snapshot"],
+        "properties": {
+          "subject": {
+            "type": "object",
+            "required": ["ownerType"],
+            "properties": { "ownerType": { "const": "user" } }
+          }
+        }
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "snapshot": {
+            "type": "object",
+            "properties": {
+              "rulesets": {
+                "not": {
+                  "type": "array",
+                  "contains": {
+                    "type": "object",
+                    "properties": {
+                      "bypassActorSummaries": {
+                        "type": "array",
+                        "contains": {
+                          "type": "object",
+                          "required": ["actorType"],
+                          "properties": { "actorType": { "const": "organization_admin" } }
+                        }
+                      }
+                    },
+                    "required": ["bypassActorSummaries"]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha1": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "snapshotVersion",
+        "repository",
+        "baseRevision",
+        "policy",
+        "completeness",
+        "branchProtection",
+        "rulesets",
+        "tagProtection",
+        "workflows"
+      ],
+      "properties": {
+        "snapshotVersion": { "const": 1 },
+        "repository": { "$ref": "#/$defs/snapshotRepository" },
+        "baseRevision": { "$ref": "#/$defs/baseRevision" },
+        "policy": { "$ref": "#/$defs/policyProjection" },
+        "completeness": { "$ref": "#/$defs/completeness" },
+        "branchProtection": {
+          "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/branchProtection" }]
+        },
+        "rulesets": {
+          "type": "array",
+          "$comment": "Runtime validation additionally requires ruleset IDs to be strictly increasing and unique; Draft 2020-12 cannot express property-key uniqueness or inter-item ordering.",
+          "uniqueItems": true,
+          "maxItems": 100,
+          "items": { "$ref": "#/$defs/ruleset" }
+        },
+        "tagProtection": { "$ref": "#/$defs/tagProtection" },
+        "workflows": {
+          "type": "array",
+          "$comment": "Runtime validation additionally requires workflow paths to be a sorted unique path set; Draft 2020-12 cannot express property-key uniqueness or inter-item ordering.",
+          "uniqueItems": true,
+          "maxItems": 100,
+          "items": { "$ref": "#/$defs/workflow" }
+        }
+      }
+    },
+    "snapshotRepository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["owner", "name", "defaultBranch"],
+      "properties": {
+        "owner": { "$ref": "#/$defs/boundedText" },
+        "name": { "$ref": "#/$defs/boundedText" },
+        "defaultBranch": { "$ref": "#/$defs/boundedText" }
+      }
+    },
+    "baseRevision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sha",
+        "policyPath",
+        "policyRevisionSha",
+        "policySha256",
+        "policyLoadedFromBase"
+      ],
+      "properties": {
+        "sha": { "$ref": "#/$defs/sha1" },
+        "policyPath": { "$ref": "#/$defs/repositoryPath" },
+        "policyRevisionSha": { "$ref": "#/$defs/sha1" },
+        "policySha256": { "$ref": "#/$defs/sha256" },
+        "policyLoadedFromBase": { "const": true }
+      }
+    },
+    "policyProjection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requiredChecks", "workflowPaths"],
+      "properties": {
+        "requiredChecks": {
+          "type": "array",
+          "$comment": "Runtime validation additionally requires semantically unique checks in canonical order; Draft 2020-12 cannot express inter-item identity or ordering.",
+          "uniqueItems": true,
+          "maxItems": 100,
+          "items": { "$ref": "#/$defs/checkEvidence" }
+        },
+        "workflowPaths": {
+          "type": "array",
+          "$comment": "Runtime validation additionally requires a sorted unique workflow-path set; Draft 2020-12 cannot express inter-item ordering.",
+          "uniqueItems": true,
+          "maxItems": 100,
+          "items": { "$ref": "#/$defs/workflowPath" }
+        }
+      }
+    },
+    "completeness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["complete", "missing"],
+      "properties": {
+        "complete": { "type": "boolean" },
+        "missing": {
+          "type": "array",
+          "$comment": "Runtime validation additionally requires missing codes in canonical UTF-16 order; Draft 2020-12 cannot express inter-item ordering.",
+          "uniqueItems": true,
+          "maxItems": 1,
+          "items": { "$ref": "#/$defs/missingCode" }
+        }
+      },
+      "not": {
+        "type": "object",
+        "required": ["missing"],
+        "properties": {
+          "missing": {
+            "type": "array",
+            "allOf": [
+              { "contains": { "const": "settings-authority-incomplete" } },
+              { "contains": { "const": "settings-observation-mismatch" } }
+            ]
+          }
+        }
+      }
+    },
+    "branchProtection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "branch",
+        "exists",
+        "enforceAdmins",
+        "allowForcePushes",
+        "allowDeletions",
+        "requiredStatusChecks",
+        "requiredPullRequestReviews"
+      ],
+      "properties": {
+        "branch": { "$ref": "#/$defs/boundedText" },
+        "exists": { "type": "boolean" },
+        "enforceAdmins": { "type": "boolean" },
+        "allowForcePushes": { "type": "boolean" },
+        "allowDeletions": { "type": "boolean" },
+        "requiredStatusChecks": {
+          "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/requiredStatusChecks" }]
+        },
+        "requiredPullRequestReviews": {
+          "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/requiredPullRequestReviews" }]
+        }
+      }
+    },
+    "requiredStatusChecks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["strict", "checks"],
+      "properties": {
+        "strict": { "type": "boolean" },
+        "checks": {
+          "type": "array",
+          "$comment": "Runtime validation additionally requires semantically unique checks in canonical order; Draft 2020-12 cannot express inter-item identity or ordering.",
+          "uniqueItems": true,
+          "maxItems": 100,
+          "items": { "$ref": "#/$defs/checkEvidence" }
+        }
+      }
+    },
+    "requiredPullRequestReviews": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requiredApprovingReviewCount", "bypassActorsKnown", "bypassActorSummaries"],
+      "properties": {
+        "requiredApprovingReviewCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "bypassActorsKnown": { "type": "boolean" },
+        "bypassActorSummaries": {
+          "type": "array",
+          "$comment": "Runtime validation additionally requires sorted unique actor types and an aggregate count no greater than 100; Draft 2020-12 has no general inter-item or numeric-sum keyword.",
+          "uniqueItems": true,
+          "maxItems": 100,
+          "items": { "$ref": "#/$defs/branchBypassSummary" }
+        }
+      }
+    },
+    "ruleset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "target",
+        "refPatterns",
+        "enforcement",
+        "bypassActorsKnown",
+        "bypassActorSummaries",
+        "requiredChecks"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/safeId" },
+        "name": { "$ref": "#/$defs/boundedText" },
+        "target": { "enum": ["branch", "tag", "push", "repository"] },
+        "refPatterns": {
+          "type": "array",
+          "$comment": "Runtime validation additionally requires sorted unique patterns; Draft 2020-12 cannot express inter-item ordering.",
+          "uniqueItems": true,
+          "maxItems": 100,
+          "items": { "$ref": "#/$defs/boundedText" }
+        },
+        "repositoryPatterns": {
+          "type": "array",
+          "minItems": 1,
+          "$comment": "Runtime validation additionally requires sorted unique patterns; Draft 2020-12 cannot express inter-item ordering.",
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/boundedText" }
+        },
+        "enforcement": { "enum": ["active", "disabled", "evaluate"] },
+        "bypassActorsKnown": { "type": "boolean" },
+        "bypassActorSummaries": {
+          "type": "array",
+          "$comment": "Runtime validation additionally requires sorted unique actor-type/mode identities and an aggregate count no greater than 100; Draft 2020-12 has no general inter-item or numeric-sum keyword.",
+          "uniqueItems": true,
+          "maxItems": 100,
+          "items": { "$ref": "#/$defs/rulesetBypassSummary" }
+        },
+        "allowForcePushes": { "type": "boolean" },
+        "allowDeletions": { "type": "boolean" },
+        "requiredChecks": {
+          "type": "array",
+          "$comment": "Runtime validation additionally requires semantically unique checks in canonical order; Draft 2020-12 cannot express inter-item identity or ordering.",
+          "uniqueItems": true,
+          "maxItems": 100,
+          "items": { "$ref": "#/$defs/checkEvidence" }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "type": "object",
+            "required": ["target"],
+            "properties": { "target": { "enum": ["branch", "tag"] } }
+          },
+          "then": {
+            "type": "object",
+            "required": ["allowForcePushes", "allowDeletions"],
+            "properties": {
+              "refPatterns": { "type": "array", "minItems": 1 },
+              "allowForcePushes": {},
+              "allowDeletions": {}
+            }
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "required": ["target"],
+            "properties": { "target": { "enum": ["push", "repository"] } }
+          },
+          "then": {
+            "type": "object",
+            "properties": { "refPatterns": { "type": "array", "maxItems": 0 } },
+            "not": {
+              "type": "object",
+              "anyOf": [
+                {
+                  "required": ["allowForcePushes"],
+                  "properties": { "allowForcePushes": {} }
+                },
+                {
+                  "required": ["allowDeletions"],
+                  "properties": { "allowDeletions": {} }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "required": ["target"],
+            "properties": { "target": { "const": "repository" } }
+          },
+          "then": {
+            "type": "object",
+            "required": ["repositoryPatterns"],
+            "properties": {
+              "repositoryPatterns": {},
+              "enforcement": { "not": { "const": "evaluate" } }
+            }
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "required": ["target"],
+            "properties": { "target": { "enum": ["tag", "push", "repository"] } }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "bypassActorSummaries": {
+                "not": {
+                  "type": "array",
+                  "contains": {
+                    "type": "object",
+                    "required": ["bypassMode"],
+                    "properties": { "bypassMode": { "const": "pull_request" } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "tagProtection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["known", "allowsDeletion", "allowsUpdate"],
+      "properties": {
+        "known": { "type": "boolean" },
+        "allowsDeletion": { "type": "boolean" },
+        "allowsUpdate": { "type": "boolean" }
+      }
+    },
+    "workflow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "revisionSha",
+        "artifactSha256",
+        "protectedFromPullRequest",
+        "trustedRoot"
+      ],
+      "properties": {
+        "path": { "$ref": "#/$defs/workflowPath" },
+        "revisionSha": { "$ref": "#/$defs/sha1" },
+        "artifactSha256": { "$ref": "#/$defs/sha256" },
+        "protectedFromPullRequest": { "const": false },
+        "trustedRoot": { "const": false }
+      }
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "safeId": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "boundedText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?=.{1,512}$)(?![\\s\\S]*[\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029\\p{Cf}\\p{Cs}])[\\s\\S]+$"
+    },
+    "asciiName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "pattern": "^[\\u0021-\\u007e]+$"
+    },
+    "repositoryPath": {
+      "allOf": [
+        { "$ref": "#/$defs/boundedText" },
+        {
+          "type": "string",
+          "pattern": "^(?!/)(?![A-Za-z]:)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.{1,2}(?:/|$))[^/]+(?:/[^/]+)*$"
+        }
+      ]
+    },
+    "workflowPath": {
+      "allOf": [
+        { "$ref": "#/$defs/repositoryPath" },
+        {
+          "type": "string",
+          "pattern": "^[.][gG][iI][tT][hH][uU][bB]/[wW][oO][rR][kK][fF][lL][oO][wW][sS]/[^/]+(?:\\.[yY][mM][lL]|\\.[yY][aA][mM][lL])$"
+        }
+      ]
+    },
+    "base64url": {
+      "type": "string",
+      "maxLength": 349526,
+      "pattern": "^(?:[A-Za-z0-9_-]{4})*(?:(?:[A-Za-z0-9_-][AQgw])|(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]))?$"
+    },
+    "observedAt": {
+      "type": "string",
+      "anyOf": [
+        {
+          "pattern": "^\\d{4}-(?:01|03|05|07|08|10|12)-(?:0[1-9]|[12]\\d|3[01])T(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d\\.\\d{3}Z$"
+        },
+        {
+          "pattern": "^\\d{4}-(?:04|06|09|11)-(?:0[1-9]|[12]\\d|30)T(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d\\.\\d{3}Z$"
+        },
+        {
+          "pattern": "^\\d{4}-02-(?:0[1-9]|1\\d|2[0-8])T(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d\\.\\d{3}Z$"
+        },
+        {
+          "pattern": "^(?:\\d{2}(?:0[48]|[2468][048]|[13579][26])|(?:[02468][048]|[13579][26])00)-02-29T(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d\\.\\d{3}Z$"
+        }
+      ]
+    },
+    "missingCode": {
+      "enum": ["settings-authority-incomplete", "settings-observation-mismatch"]
+    },
+    "checkEvidence": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name"],
+          "properties": {
+            "name": { "$ref": "#/$defs/boundedText" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "appId"],
+          "properties": {
+            "name": { "$ref": "#/$defs/boundedText" },
+            "appId": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "appSlug"],
+          "properties": {
+            "name": { "$ref": "#/$defs/boundedText" },
+            "appSlug": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512,
+              "pattern": "^[a-z0-9][a-z0-9-]*$"
+            }
+          }
+        }
+      ]
+    },
+    "branchBypassSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actorType", "count"],
+      "properties": {
+        "actorType": { "enum": ["app", "team", "user"] },
+        "count": { "type": "integer", "minimum": 1, "maximum": 100 }
+      }
+    },
+    "rulesetBypassSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actorType", "bypassMode", "count"],
+      "properties": {
+        "actorType": {
+          "enum": [
+            "deploy_key",
+            "integration",
+            "organization_admin",
+            "repository_role",
+            "team",
+            "user"
+          ]
+        },
+        "bypassMode": { "enum": ["always", "exempt", "pull_request"] },
+        "count": { "type": "integer", "minimum": 1, "maximum": 100 }
+      },
+      "not": {
+        "type": "object",
+        "required": ["actorType", "bypassMode"],
+        "properties": {
+          "actorType": { "const": "deploy_key" },
+          "bypassMode": { "const": "pull_request" }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "type": "object",
+            "required": ["actorType"],
+            "properties": { "actorType": { "enum": ["deploy_key", "organization_admin"] } }
+          },
+          "then": { "type": "object", "properties": { "count": { "const": 1 } } }
+        }
+      ]
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repositoryId",
+        "owner",
+        "name",
+        "ownerType",
+        "visibility",
+        "defaultBranch",
+        "requestedBaseSha",
+        "observedBaseShaAtStart",
+        "observedBaseShaAtEnd"
+      ],
+      "properties": {
+        "repositoryId": { "$ref": "#/$defs/safeId" },
+        "owner": { "$ref": "#/$defs/asciiName" },
+        "name": { "$ref": "#/$defs/asciiName" },
+        "ownerType": { "enum": ["organization", "user"] },
+        "visibility": { "enum": ["public", "private", "internal"] },
+        "defaultBranch": { "$ref": "#/$defs/boundedText" },
+        "requestedBaseSha": { "$ref": "#/$defs/sha1" },
+        "observedBaseShaAtStart": { "$ref": "#/$defs/sha1" },
+        "observedBaseShaAtEnd": { "$ref": "#/$defs/sha1" }
+      }
+    },
+    "collectionBounds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bundleBytes",
+        "aggregateSourceBytes",
+        "sourceFileBytes",
+        "workflows",
+        "rulesets",
+        "findings",
+        "requestAttempts",
+        "pagesPerCollection",
+        "itemsPerPage",
+        "responseBytes",
+        "retriesPerRequest",
+        "deadlineMs",
+        "concurrency",
+        "jsonDepth",
+        "jsonObjectMembers",
+        "jsonArrayElements",
+        "jsonTokens",
+        "jsonStringBytes",
+        "jsonNumberChars"
+      ],
+      "properties": {
+        "bundleBytes": { "const": 8388608 },
+        "aggregateSourceBytes": { "const": 4194304 },
+        "sourceFileBytes": { "const": 262144 },
+        "workflows": { "const": 100 },
+        "rulesets": { "const": 100 },
+        "findings": { "const": 500 },
+        "requestAttempts": { "const": 768 },
+        "pagesPerCollection": { "const": 10 },
+        "itemsPerPage": { "const": 100 },
+        "responseBytes": { "const": 2097152 },
+        "retriesPerRequest": { "const": 1 },
+        "deadlineMs": { "const": 120000 },
+        "concurrency": { "const": 4 },
+        "jsonDepth": { "const": 32 },
+        "jsonObjectMembers": { "const": 20000 },
+        "jsonArrayElements": { "const": 20000 },
+        "jsonTokens": { "const": 100000 },
+        "jsonStringBytes": { "const": 6291456 },
+        "jsonNumberChars": { "const": 32 }
+      }
+    },
+    "collection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "apiVersion",
+        "consistency",
+        "observedAt",
+        "durationMs",
+        "status",
+        "missing",
+        "requestAttempts",
+        "retryAttempts",
+        "bounds"
+      ],
+      "properties": {
+        "apiVersion": { "const": "2026-03-10" },
+        "consistency": { "const": "stable-double-observation-v1" },
+        "observedAt": { "$ref": "#/$defs/observedAt" },
+        "durationMs": { "type": "integer", "minimum": 0, "maximum": 120000 },
+        "status": { "enum": ["complete", "incomplete"] },
+        "missing": {
+          "type": "array",
+          "$comment": "Runtime validation additionally requires missing codes in canonical UTF-16 order; Draft 2020-12 cannot express inter-item ordering.",
+          "uniqueItems": true,
+          "maxItems": 1,
+          "items": { "$ref": "#/$defs/missingCode" }
+        },
+        "requestAttempts": { "type": "integer", "minimum": 0, "maximum": 768 },
+        "retryAttempts": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 768,
+          "$comment": "Runtime validation additionally requires retryAttempts to be no greater than requestAttempts; Draft 2020-12 has no general numeric cross-field comparison keyword."
+        },
+        "bounds": { "$ref": "#/$defs/collectionBounds" }
+      },
+      "not": {
+        "type": "object",
+        "required": ["missing"],
+        "properties": {
+          "missing": {
+            "type": "array",
+            "allOf": [
+              { "contains": { "const": "settings-authority-incomplete" } },
+              { "contains": { "const": "settings-observation-mismatch" } }
+            ]
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "type": "object",
+            "required": ["status"],
+            "properties": { "status": { "const": "complete" } }
+          },
+          "then": {
+            "type": "object",
+            "properties": { "missing": { "type": "array", "maxItems": 0 } }
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "required": ["status"],
+            "properties": { "status": { "const": "incomplete" } }
+          },
+          "then": {
+            "type": "object",
+            "properties": { "missing": { "type": "array", "minItems": 1 } }
+          }
+        }
+      ]
+    },
+    "assertions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policyPath", "protectedWorkflowPaths", "trustedWorkflowPaths"],
+      "properties": {
+        "policyPath": { "$ref": "#/$defs/repositoryPath" },
+        "protectedWorkflowPaths": {
+          "type": "array",
+          "$comment": "Runtime validation additionally requires a sorted unique workflow-path set; Draft 2020-12 cannot express inter-item ordering.",
+          "uniqueItems": true,
+          "maxItems": 100,
+          "items": { "$ref": "#/$defs/workflowPath" }
+        },
+        "trustedWorkflowPaths": {
+          "type": "array",
+          "$comment": "Runtime validation additionally requires a sorted unique workflow-path set; Draft 2020-12 cannot express inter-item ordering.",
+          "uniqueItems": true,
+          "maxItems": 100,
+          "items": { "$ref": "#/$defs/workflowPath" }
+        }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy", "workflows"],
+      "properties": {
+        "policy": { "$ref": "#/$defs/policySourceArtifact" },
+        "workflows": {
+          "type": "array",
+          "$comment": "Runtime validation additionally requires exactly one source artifact for each sorted unique workflow path; Draft 2020-12 cannot express property-key uniqueness or inter-item ordering.",
+          "uniqueItems": true,
+          "maxItems": 100,
+          "items": { "$ref": "#/$defs/workflowSourceArtifact" }
+        }
+      }
+    },
+    "policySourceArtifact": {
+      "allOf": [
+        { "$ref": "#/$defs/sourceArtifact" },
+        {
+          "type": "object",
+          "properties": { "byteLength": { "type": "integer", "minimum": 1 } }
+        }
+      ]
+    },
+    "workflowSourceArtifact": {
+      "allOf": [
+        { "$ref": "#/$defs/sourceArtifact" },
+        { "type": "object", "properties": { "path": { "$ref": "#/$defs/workflowPath" } } }
+      ]
+    },
+    "sourceArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "revisionSha", "sha256", "byteLength", "contentBase64url"],
+      "properties": {
+        "path": { "$ref": "#/$defs/repositoryPath" },
+        "revisionSha": { "$ref": "#/$defs/sha1" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "byteLength": { "type": "integer", "minimum": 0, "maximum": 262144 },
+        "contentBase64url": { "$ref": "#/$defs/base64url" }
+      }
+    },
+    "integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "snapshotSha256", "reportSha256", "payloadSha256"],
+      "properties": {
+        "algorithm": { "const": "sha256" },
+        "snapshotSha256": { "$ref": "#/$defs/sha256" },
+        "reportSha256": { "$ref": "#/$defs/sha256" },
+        "payloadSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "auditReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["auditVersion", "status", "repository", "findings", "checked"],
+      "properties": {
+        "auditVersion": { "const": 1 },
+        "status": { "enum": ["pass", "fail", "incomplete"] },
+        "repository": { "$ref": "#/$defs/reportRepository" },
+        "findings": {
+          "type": "array",
+          "maxItems": 500,
+          "$comment": "The runtime validator additionally requires findings to use the frozen comparator order; Draft 2020-12 cannot express a general inter-item ordering constraint.",
+          "items": { "$ref": "#/$defs/auditFinding" }
+        },
+        "checked": {
+          "type": "array",
+          "minItems": 5,
+          "maxItems": 5,
+          "prefixItems": [
+            { "const": "base-revision" },
+            { "const": "branch-protection" },
+            { "const": "rulesets" },
+            { "const": "tag-protection" },
+            { "const": "workflows" }
+          ],
+          "items": false
+        }
+      }
+    },
+    "reportRepository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["owner", "name", "baseSha"],
+      "properties": {
+        "owner": { "$ref": "#/$defs/boundedText" },
+        "name": { "$ref": "#/$defs/boundedText" },
+        "baseSha": {
+          "$ref": "#/$defs/sha1"
+        }
+      }
+    },
+    "auditFinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "category", "severity", "message"],
+      "properties": {
+        "code": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "category": {
+          "enum": ["completeness", "integrity", "configuration", "provenance", "workflow"]
+        },
+        "severity": { "enum": ["error", "warning"] },
+        "path": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "line": { "type": "integer", "minimum": 1, "maximum": 1000000 },
+        "message": { "type": "string", "minLength": 1, "maxLength": 1024 }
+      }
+    }
+  }
+}

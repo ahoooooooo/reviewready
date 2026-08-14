@@ -240,6 +240,264 @@ describe("collectCheckRunPages", () => {
     ).resolves.toEqual([]);
     expect(calls).toBe(3);
   });
+
+  it("fails closed on a blank Retry-After instead of retrying immediately", async () => {
+    const client = fakeOctokit();
+    let calls = 0;
+    vi.mocked(client.rest.checks.listForRef).mockImplementation(() => {
+      calls += 1;
+      return Promise.reject(
+        Object.assign(new Error("rate limited"), {
+          status: 503,
+          response: { headers: { "retry-after": "" } }
+        })
+      );
+    });
+    vi.mocked(getOctokit).mockReturnValue(client);
+    const api = createGitHubGateway("secret");
+
+    await expect(
+      api.listCheckRuns({ owner: "octocat", repo: "demo", ref: "head" })
+    ).rejects.toMatchObject({ status: 503 });
+    expect(calls).toBe(1);
+  });
+
+  it("fails closed on a non-string Retry-After instead of retrying", async () => {
+    const client = fakeOctokit();
+    let calls = 0;
+    vi.mocked(client.rest.checks.listForRef).mockImplementation(() => {
+      calls += 1;
+      return Promise.reject(
+        Object.assign(new Error("rate limited"), {
+          status: 503,
+          response: { headers: { "retry-after": 42 } }
+        })
+      );
+    });
+    vi.mocked(getOctokit).mockReturnValue(client);
+    const api = createGitHubGateway("secret");
+
+    await expect(
+      api.listCheckRuns({ owner: "octocat", repo: "demo", ref: "head" })
+    ).rejects.toMatchObject({ status: 503 });
+    expect(calls).toBe(1);
+  });
+
+  it("fails closed on an invalid Retry-After number instead of retrying a forbidden response", async () => {
+    const client = fakeOctokit();
+    let calls = 0;
+    vi.mocked(client.rest.checks.listForRef).mockImplementation(() => {
+      calls += 1;
+      return Promise.reject(
+        Object.assign(new Error("forbidden"), {
+          status: 403,
+          response: { headers: { "retry-after": "-0" } }
+        })
+      );
+    });
+    vi.mocked(getOctokit).mockReturnValue(client);
+    const api = createGitHubGateway("secret");
+
+    await expect(
+      api.listCheckRuns({ owner: "octocat", repo: "demo", ref: "head" })
+    ).rejects.toMatchObject({ status: 403 });
+    expect(calls).toBe(1);
+  });
+
+  it.each([
+    ["a delay beyond the retry bound", "3"],
+    ["an overflowing delay", "9".repeat(400)]
+  ])("fails closed on %s", async (_label, retryAfter) => {
+    const client = fakeOctokit();
+    let calls = 0;
+    vi.mocked(client.rest.checks.listForRef).mockImplementation(() => {
+      calls += 1;
+      return Promise.reject(
+        Object.assign(new Error("rate limited"), {
+          status: 503,
+          response: { headers: { "retry-after": retryAfter } }
+        })
+      );
+    });
+    vi.mocked(getOctokit).mockReturnValue(client);
+    const api = createGitHubGateway("secret");
+
+    await expect(
+      api.listCheckRuns({ owner: "octocat", repo: "demo", ref: "head" })
+    ).rejects.toMatchObject({ status: 503 });
+    expect(calls).toBe(1);
+  });
+
+  it("fails closed on a non-string rate-limit remaining header", async () => {
+    const client = fakeOctokit();
+    let calls = 0;
+    vi.mocked(client.rest.checks.listForRef).mockImplementation(() => {
+      calls += 1;
+      return Promise.reject(
+        Object.assign(new Error("rate limited"), {
+          status: 503,
+          response: {
+            headers: { "x-ratelimit-remaining": 0, "x-ratelimit-reset": "1001" }
+          }
+        })
+      );
+    });
+    vi.mocked(getOctokit).mockReturnValue(client);
+    const api = createGitHubGateway("secret");
+
+    await expect(
+      api.listCheckRuns({ owner: "octocat", repo: "demo", ref: "head" })
+    ).rejects.toMatchObject({ status: 503 });
+    expect(calls).toBe(1);
+  });
+
+  it("uses a bounded numeric rate-limit reset when its headers are valid", async () => {
+    const client = fakeOctokit();
+    let calls = 0;
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(1_000_000);
+    vi.mocked(client.rest.checks.listForRef).mockImplementation(() => {
+      calls += 1;
+      if (calls === 1) {
+        return Promise.reject(
+          Object.assign(new Error("rate limited"), {
+            status: 403,
+            response: { headers: { "x-ratelimit-remaining": "0", "x-ratelimit-reset": "1001" } }
+          })
+        );
+      }
+      return Promise.resolve({ data: { total_count: 0, check_runs: [] }, headers: {} }) as never;
+    });
+    vi.mocked(getOctokit).mockReturnValue(client);
+    const api = createGitHubGateway("secret");
+
+    try {
+      await expect(
+        api.listCheckRuns({ owner: "octocat", repo: "demo", ref: "head" })
+      ).resolves.toEqual([]);
+    } finally {
+      nowSpy.mockRestore();
+    }
+    expect(calls).toBe(3);
+  });
+
+  it("normalizes a padded zero rate-limit remaining header", async () => {
+    const client = fakeOctokit();
+    let calls = 0;
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(999);
+    vi.mocked(client.rest.checks.listForRef).mockImplementation(() => {
+      calls += 1;
+      if (calls === 1) {
+        return Promise.reject(
+          Object.assign(new Error("rate limited"), {
+            status: 403,
+            response: { headers: { "x-ratelimit-remaining": " 0 ", "x-ratelimit-reset": "1" } }
+          })
+        );
+      }
+      return Promise.resolve({ data: { total_count: 0, check_runs: [] }, headers: {} }) as never;
+    });
+    vi.mocked(getOctokit).mockReturnValue(client);
+    const api = createGitHubGateway("secret");
+
+    try {
+      await expect(
+        api.listCheckRuns({ owner: "octocat", repo: "demo", ref: "head" })
+      ).resolves.toEqual([]);
+    } finally {
+      nowSpy.mockRestore();
+    }
+    expect(calls).toBe(3);
+  });
+
+  it("fails closed on an unsafe rate-limit reset number", async () => {
+    const client = fakeOctokit();
+    let calls = 0;
+    vi.mocked(client.rest.checks.listForRef).mockImplementation(() => {
+      calls += 1;
+      return Promise.reject(
+        Object.assign(new Error("rate limited"), {
+          status: 403,
+          response: {
+            headers: { "x-ratelimit-remaining": "0", "x-ratelimit-reset": "9007199254740992" }
+          }
+        })
+      );
+    });
+    vi.mocked(getOctokit).mockReturnValue(client);
+    const api = createGitHubGateway("secret");
+
+    await expect(
+      api.listCheckRuns({ owner: "octocat", repo: "demo", ref: "head" })
+    ).rejects.toMatchObject({ status: 403 });
+    expect(calls).toBe(1);
+  });
+
+  it("does not retry after the bounded retry attempt is exhausted", async () => {
+    const client = fakeOctokit();
+    let calls = 0;
+    vi.mocked(client.rest.checks.listForRef).mockImplementation(() => {
+      calls += 1;
+      return Promise.reject(
+        Object.assign(new Error("rate limited"), {
+          status: 503,
+          response: { headers: { "retry-after": "0" } }
+        })
+      );
+    });
+    vi.mocked(getOctokit).mockReturnValue(client);
+    const api = createGitHubGateway("secret");
+
+    await expect(
+      api.listCheckRuns({ owner: "octocat", repo: "demo", ref: "head" })
+    ).rejects.toMatchObject({ status: 503 });
+    expect(calls).toBe(2);
+  });
+
+  it("fails closed on a blank rate-limit reset instead of retrying immediately", async () => {
+    const client = fakeOctokit();
+    let calls = 0;
+    vi.mocked(client.rest.checks.listForRef).mockImplementation(() => {
+      calls += 1;
+      return Promise.reject(
+        Object.assign(new Error("rate limited"), {
+          status: 403,
+          response: {
+            headers: { "x-ratelimit-remaining": "0", "x-ratelimit-reset": "" }
+          }
+        })
+      );
+    });
+    vi.mocked(getOctokit).mockReturnValue(client);
+    const api = createGitHubGateway("secret");
+
+    await expect(
+      api.listCheckRuns({ owner: "octocat", repo: "demo", ref: "head" })
+    ).rejects.toMatchObject({ status: 403 });
+    expect(calls).toBe(1);
+  });
+
+  it("fails closed on a non-string rate-limit reset instead of retrying", async () => {
+    const client = fakeOctokit();
+    let calls = 0;
+    vi.mocked(client.rest.checks.listForRef).mockImplementation(() => {
+      calls += 1;
+      return Promise.reject(
+        Object.assign(new Error("rate limited"), {
+          status: 503,
+          response: {
+            headers: { "x-ratelimit-remaining": "0", "x-ratelimit-reset": 42 }
+          }
+        })
+      );
+    });
+    vi.mocked(getOctokit).mockReturnValue(client);
+    const api = createGitHubGateway("secret");
+
+    await expect(
+      api.listCheckRuns({ owner: "octocat", repo: "demo", ref: "head" })
+    ).rejects.toMatchObject({ status: 503 });
+    expect(calls).toBe(1);
+  });
 });
 
 describe("createGitHubGateway", () => {
@@ -858,10 +1116,7 @@ describe("createGitHubGateway", () => {
 
     await expect(
       api.listCheckRuns({ owner: "octocat", repo: "demo", ref: "head" })
-    ).resolves.toEqual([
-      { name: "build", conclusion: "failure", app: "trusted-app" },
-      { name: "build", conclusion: null }
-    ]);
+    ).resolves.toEqual([{ name: "build", conclusion: null }]);
   });
 
   it("does not let a malformed pending Check Run ordering expose a status success", async () => {
@@ -898,10 +1153,7 @@ describe("createGitHubGateway", () => {
 
     await expect(
       api.listCheckRuns({ owner: "octocat", repo: "demo", ref: "head" })
-    ).resolves.toEqual([
-      { name: "build", conclusion: null, app: "trusted-app" },
-      { name: "build", conclusion: null }
-    ]);
+    ).resolves.toEqual([{ name: "build", conclusion: null }]);
   });
 
   it("does not let malformed pending status ordering expose a Check Run success", async () => {
@@ -938,10 +1190,7 @@ describe("createGitHubGateway", () => {
 
     await expect(
       api.listCheckRuns({ owner: "octocat", repo: "demo", ref: "head" })
-    ).resolves.toEqual([
-      { name: "build", conclusion: "success", app: "trusted-app" },
-      { name: "build", conclusion: null }
-    ]);
+    ).resolves.toEqual([{ name: "build", conclusion: null }]);
   });
 
   it("does not let an incomplete Check Run conclusion win a cross-provider aggregate", async () => {
@@ -976,10 +1225,7 @@ describe("createGitHubGateway", () => {
 
     await expect(
       api.listCheckRuns({ owner: "octocat", repo: "demo", ref: "head" })
-    ).resolves.toEqual([
-      { name: "build", conclusion: null, app: "trusted-app" },
-      { name: "build", conclusion: null }
-    ]);
+    ).resolves.toEqual([{ name: "build", conclusion: null }]);
   });
 
   it("rejects a non-string commit-status timestamp field", async () => {
@@ -1036,10 +1282,7 @@ describe("createGitHubGateway", () => {
 
     await expect(
       api.listCheckRuns({ owner: "octocat", repo: "demo", ref: "head" })
-    ).resolves.toEqual([
-      { name: "build", conclusion: "success", app: "trusted-app" },
-      { name: "build", conclusion: null }
-    ]);
+    ).resolves.toEqual([{ name: "build", conclusion: null }]);
   });
 
   it("does not let a legacy success mask a failed Check Run with the same name", async () => {
@@ -1077,10 +1320,113 @@ describe("createGitHubGateway", () => {
 
     await expect(
       api.listCheckRuns({ owner: "octocat", repo: "demo", ref: "head" })
-    ).resolves.toEqual([
-      { name: "build", conclusion: "failure", app: "github-actions" },
-      { name: "build", conclusion: "failure" }
-    ]);
+    ).resolves.toEqual([{ name: "build", conclusion: "failure" }]);
+  });
+
+  it("does not expose an older provider-specific success beside a newer same-name status failure", async () => {
+    const client = fakeOctokit();
+    vi.mocked(client.rest.checks.listForRef).mockResolvedValueOnce({
+      data: {
+        total_count: 1,
+        check_runs: [
+          {
+            id: 1,
+            name: "build",
+            status: "completed",
+            conclusion: "success",
+            completed_at: "2026-08-11T10:00:00Z",
+            app: { slug: "trusted-app" }
+          }
+        ]
+      }
+    } as never);
+    vi.mocked(client.rest.checks.listForRef).mockResolvedValueOnce({
+      data: { total_count: 1, check_runs: [] }
+    } as never);
+    vi.mocked(client.rest.repos.listCommitStatusesForRef).mockResolvedValueOnce({
+      data: [
+        {
+          id: 2,
+          context: "build",
+          state: "failure",
+          updated_at: "2026-08-11T11:00:00Z"
+        }
+      ]
+    } as never);
+    vi.mocked(getOctokit).mockReturnValue(client);
+    const api = createGitHubGateway("secret");
+
+    await expect(
+      api.listCheckRuns({ owner: "octocat", repo: "demo", ref: "head" })
+    ).resolves.toEqual([{ name: "build", conclusion: "failure" }]);
+  });
+
+  it("does not order an impossible calendar date as newer evidence", async () => {
+    const client = fakeOctokit();
+    vi.mocked(client.rest.checks.listForRef).mockResolvedValueOnce({
+      data: {
+        total_count: 1,
+        check_runs: [
+          {
+            id: 1,
+            name: "build",
+            status: "completed",
+            conclusion: "failure",
+            completed_at: "2026-11-30T10:00:00Z",
+            app: { slug: "trusted-app" }
+          }
+        ]
+      }
+    } as never);
+    vi.mocked(client.rest.checks.listForRef).mockResolvedValueOnce({
+      data: { total_count: 1, check_runs: [] }
+    } as never);
+    vi.mocked(client.rest.repos.listCommitStatusesForRef).mockResolvedValueOnce({
+      data: [
+        {
+          id: 2,
+          context: "build",
+          state: "success",
+          updated_at: "2026-11-31T10:00:00Z"
+        }
+      ]
+    } as never);
+    vi.mocked(getOctokit).mockReturnValue(client);
+    const api = createGitHubGateway("secret");
+
+    await expect(
+      api.listCheckRuns({ owner: "octocat", repo: "demo", ref: "head" })
+    ).resolves.toEqual([{ name: "build", conclusion: null }]);
+  });
+
+  it("does not order an impossible timezone offset as evidence", async () => {
+    const client = fakeOctokit();
+    vi.mocked(client.rest.checks.listForRef).mockResolvedValueOnce({
+      data: {
+        total_count: 1,
+        check_runs: [
+          {
+            name: "build",
+            status: "completed",
+            conclusion: "failure",
+            completed_at: "2026-08-11T10:00:00Z",
+            app: { slug: "trusted-app" }
+          }
+        ]
+      }
+    } as never);
+    vi.mocked(client.rest.checks.listForRef).mockResolvedValueOnce({
+      data: { total_count: 1, check_runs: [] }
+    } as never);
+    vi.mocked(client.rest.repos.listCommitStatusesForRef).mockResolvedValueOnce({
+      data: [{ context: "build", state: "success", updated_at: "2026-08-11T11:00:00+24:00" }]
+    } as never);
+    vi.mocked(getOctokit).mockReturnValue(client);
+    const api = createGitHubGateway("secret");
+
+    await expect(
+      api.listCheckRuns({ owner: "octocat", repo: "demo", ref: "head" })
+    ).resolves.toEqual([{ name: "build", conclusion: null }]);
   });
 
   it("fails closed when same-name providers cannot be ordered by reliable timestamps", async () => {
@@ -1110,10 +1456,7 @@ describe("createGitHubGateway", () => {
 
     await expect(
       api.listCheckRuns({ owner: "octocat", repo: "demo", ref: "head" })
-    ).resolves.toEqual([
-      { name: "build", conclusion: null, app: "trusted-app" },
-      { name: "build", conclusion: null }
-    ]);
+    ).resolves.toEqual([{ name: "build", conclusion: null }]);
   });
 
   it("rejects a non-null Check Run provider without a stable slug", async () => {
@@ -1174,13 +1517,7 @@ describe("createGitHubGateway", () => {
 
     await expect(
       api.listCheckRuns({ owner: "octocat", repo: "demo", ref: "head" })
-    ).resolves.toEqual(
-      expect.arrayContaining([
-        { name: "build", conclusion: "success", app: "trusted-app" },
-        { name: "build", conclusion: "failure", app: "other-app" },
-        { name: "build", conclusion: "failure" }
-      ])
-    );
+    ).resolves.toEqual([{ name: "build", conclusion: "failure" }]);
   });
 
   it("preserves the previous filename for renamed files", async () => {
@@ -1362,6 +1699,101 @@ describe("createGitHubGateway", () => {
     ).rejects.toMatchObject({ code: "GITHUB_EVIDENCE_INCOMPLETE" });
   });
 
+  it("fails closed when a case-insensitive Link header skips a pagination page", async () => {
+    const client = fakeOctokit();
+    vi.mocked(client.rest.pulls.listReviews).mockImplementation((arguments_) => {
+      const page = (arguments_ as { readonly page?: number }).page ?? 1;
+      return Promise.resolve(
+        page === 1
+          ? {
+              data: Array.from({ length: 100 }, () => ({
+                user: { login: "reviewer" },
+                state: "COMMENTED"
+              })),
+              headers: { Link: '<https://api.github.test?page=3>; rel="next"' }
+            }
+          : { data: [], headers: {} }
+      ) as never;
+    });
+    vi.mocked(getOctokit).mockReturnValue(client);
+    const api = createGitHubGateway("secret");
+
+    await expect(
+      api.listPullRequestReviews({ owner: "octocat", repo: "demo", pullNumber: 42 })
+    ).rejects.toMatchObject({ code: "GITHUB_EVIDENCE_INCOMPLETE" });
+  });
+
+  it("fails closed on duplicate Link headers with different casing", async () => {
+    const client = fakeOctokit();
+    vi.mocked(client.rest.pulls.listReviews).mockImplementation((arguments_) => {
+      const page = (arguments_ as { readonly page?: number }).page ?? 1;
+      return Promise.resolve(
+        page === 1
+          ? {
+              data: Array.from({ length: 100 }, () => ({
+                user: { login: "reviewer" },
+                state: "COMMENTED"
+              })),
+              headers: {
+                link: '<https://api.github.test?page=2>; rel="next"',
+                Link: '<https://api.github.test?page=3>; rel="next"'
+              }
+            }
+          : { data: [], headers: {} }
+      ) as never;
+    });
+    vi.mocked(getOctokit).mockReturnValue(client);
+    const api = createGitHubGateway("secret");
+
+    await expect(
+      api.listPullRequestReviews({ owner: "octocat", repo: "demo", pullNumber: 42 })
+    ).rejects.toMatchObject({ code: "GITHUB_EVIDENCE_INCOMPLETE" });
+  });
+
+  it.each(["omitted", "changed"] as const)(
+    "retains a declared rel-last page across %s review continuations",
+    async (scenario) => {
+      const client = fakeOctokit();
+      const link = (page: number, relation: "next" | "last") =>
+        `<https://api.github.test?page=${String(page)}>; rel="${relation}"`;
+      const links =
+        scenario === "omitted"
+          ? new Map([
+              [1, `${link(2, "next")}, ${link(5, "last")}`],
+              [2, link(3, "next")],
+              [3, link(4, "next")]
+            ])
+          : new Map([
+              [1, `${link(2, "next")}, ${link(5, "last")}`],
+              [2, `${link(3, "next")}, ${link(4, "last")}`],
+              [3, link(4, "next")]
+            ]);
+      vi.mocked(client.rest.pulls.listReviews).mockImplementation((arguments_) => {
+        const page = (arguments_ as { readonly page?: number }).page ?? 1;
+        const pageLink = links.get(page);
+        const data =
+          page <= 3
+            ? Array.from({ length: 100 }, () => ({
+                user: { login: "reviewer" },
+                state: "COMMENTED"
+              }))
+            : page === 4
+              ? [{ user: { login: "reviewer" }, state: "COMMENTED" }]
+              : [];
+        return Promise.resolve({
+          data,
+          headers: pageLink === undefined ? {} : { link: pageLink }
+        }) as never;
+      });
+      vi.mocked(getOctokit).mockReturnValue(client);
+      const api = createGitHubGateway("secret");
+
+      await expect(
+        api.listPullRequestReviews({ owner: "octocat", repo: "demo", pullNumber: 42 })
+      ).rejects.toMatchObject({ code: "GITHUB_EVIDENCE_INCOMPLETE" });
+    }
+  );
+
   it("rejects a partial review page when a hidden next page is not linked", async () => {
     const client = fakeOctokit();
     vi.mocked(client.rest.pulls.listReviews).mockImplementation((arguments_) => {
@@ -1382,7 +1814,15 @@ describe("createGitHubGateway", () => {
 
   it.each([
     ["unquoted next relation", "<https://api.github.test?page=2>; rel=next"],
-    ["trailing next-link text", '<https://api.github.test?page=2>; rel="next" trailing']
+    ["multiple quoted relations", '<https://api.github.test?page=2>; rel="next last"'],
+    ["reverse multiple quoted relations", '<https://api.github.test?page=2>; rel="last next"'],
+    ["trailing next-link text", '<https://api.github.test?page=2>; rel="next" trailing'],
+    ["trailing malformed token", '<https://api.github.test?page=2>; rel="next", garbage'],
+    ["malformed next URL", '<not a URL>; rel="next"'],
+    ["next URL without a page", '<https://api.github.test>; rel="next"'],
+    ["malformed last URL", '<not a URL>; rel="last"'],
+    ["last URL without a page", '<https://api.github.test>; rel="last"'],
+    ["invalid last page", '<https://api.github.test?page=0>; rel="last"']
   ])("rejects malformed Link metadata (%s)", async (_label, link) => {
     const client = fakeOctokit();
     vi.mocked(client.rest.pulls.listReviews).mockImplementation((arguments_) => {
@@ -1407,12 +1847,91 @@ describe("createGitHubGateway", () => {
     ).rejects.toMatchObject({ code: "GITHUB_EVIDENCE_INCOMPLETE" });
   });
 
+  it("fails closed on a non-string Link header", async () => {
+    const client = fakeOctokit();
+    vi.mocked(client.rest.pulls.listReviews).mockImplementation((arguments_) => {
+      const page = (arguments_ as { readonly page?: number }).page ?? 1;
+      return Promise.resolve(
+        page === 1
+          ? {
+              data: Array.from({ length: 100 }, () => ({
+                user: { login: "reviewer" },
+                state: "COMMENTED"
+              })),
+              headers: { link: 42 }
+            }
+          : { data: [], headers: {} }
+      ) as never;
+    });
+    vi.mocked(getOctokit).mockReturnValue(client);
+    const api = createGitHubGateway("secret");
+
+    await expect(
+      api.listPullRequestReviews({ owner: "octocat", repo: "demo", pullNumber: 42 })
+    ).rejects.toMatchObject({ code: "GITHUB_EVIDENCE_INCOMPLETE" });
+  });
+
+  it("accepts a well-formed Link header without a next relation", async () => {
+    const client = fakeOctokit();
+    vi.mocked(client.rest.pulls.listReviews).mockImplementation((arguments_) => {
+      const page = (arguments_ as { readonly page?: number }).page ?? 1;
+      return Promise.resolve(
+        page === 1
+          ? {
+              data: Array.from({ length: 100 }, () => ({
+                user: { login: "reviewer" },
+                state: "COMMENTED"
+              })),
+              headers: { link: '<https://api.github.test?page=1>; rel="last"' }
+            }
+          : { data: [], headers: {} }
+      ) as never;
+    });
+    vi.mocked(getOctokit).mockReturnValue(client);
+    const api = createGitHubGateway("secret");
+
+    await expect(
+      api.listPullRequestReviews({ owner: "octocat", repo: "demo", pullNumber: 42 })
+    ).resolves.toHaveLength(100);
+  });
+
+  it("fails closed when a partial status page claims a later last page without a next link", async () => {
+    const client = fakeOctokit();
+    vi.mocked(client.rest.checks.listForRef).mockResolvedValueOnce({
+      data: { total_count: 0, check_runs: [] }
+    } as never);
+    vi.mocked(client.rest.checks.listForRef).mockResolvedValueOnce({
+      data: { total_count: 0, check_runs: [] }
+    } as never);
+    vi.mocked(client.rest.repos.listCommitStatusesForRef).mockImplementation((arguments_) => {
+      const page = (arguments_ as { readonly page?: number }).page ?? 1;
+      return Promise.resolve(
+        page === 1
+          ? {
+              data: [{ context: "build", state: "success" }],
+              headers: { link: '<https://api.github.test?page=5>; rel="last"' }
+            }
+          : { data: [], headers: {} }
+      ) as never;
+    });
+    vi.mocked(getOctokit).mockReturnValue(client);
+    const api = createGitHubGateway("secret");
+
+    await expect(
+      api.listCheckRuns({ owner: "octocat", repo: "demo", ref: "head" })
+    ).rejects.toMatchObject({ code: "GITHUB_EVIDENCE_INCOMPLETE" });
+  });
+
   it.each([
     [
       "duplicate next relations",
       '<https://api.github.test?page=2>; rel="next", <https://api.github.test?page=3>; rel="next"'
     ],
-    ["duplicate next page parameters", '<https://api.github.test?page=2&page=999>; rel="next"']
+    ["duplicate next page parameters", '<https://api.github.test?page=2&page=999>; rel="next"'],
+    [
+      "duplicate last relations",
+      '<https://api.github.test?page=1>; rel="last", <https://api.github.test?page=2>; rel="last"'
+    ]
   ])("rejects ambiguous next-page Link metadata (%s)", async (_label, link) => {
     const client = fakeOctokit();
     vi.mocked(client.rest.pulls.listReviews).mockImplementation((arguments_) => {
@@ -1425,6 +1944,63 @@ describe("createGitHubGateway", () => {
                 state: "COMMENTED"
               })),
               headers: { link }
+            }
+          : { data: [], headers: {} }
+      ) as never;
+    });
+    vi.mocked(getOctokit).mockReturnValue(client);
+    const api = createGitHubGateway("secret");
+
+    await expect(
+      api.listPullRequestReviews({ owner: "octocat", repo: "demo", pullNumber: 42 })
+    ).rejects.toMatchObject({ code: "GITHUB_EVIDENCE_INCOMPLETE" });
+  });
+
+  it("checks a valid last page while following a next page", async () => {
+    const client = fakeOctokit();
+    vi.mocked(client.rest.pulls.listReviews).mockImplementation((arguments_) => {
+      const page = (arguments_ as { readonly page?: number }).page ?? 1;
+      return Promise.resolve(
+        page === 1
+          ? {
+              data: Array.from({ length: 100 }, () => ({
+                user: { login: "first" },
+                state: "COMMENTED"
+              })),
+              headers: {
+                link: '<https://api.github.test?page=2>; rel="next", <https://api.github.test?page=2>; rel="last"'
+              }
+            }
+          : page === 2
+            ? {
+                data: [{ user: { login: "last" }, state: "COMMENTED" }],
+                headers: { link: '<https://api.github.test?page=2>; rel="last"' }
+              }
+            : { data: [], headers: {} }
+      ) as never;
+    });
+    vi.mocked(getOctokit).mockReturnValue(client);
+    const api = createGitHubGateway("secret");
+
+    await expect(
+      api.listPullRequestReviews({ owner: "octocat", repo: "demo", pullNumber: 42 })
+    ).resolves.toHaveLength(101);
+  });
+
+  it("fails closed when a next page exceeds the declared last page", async () => {
+    const client = fakeOctokit();
+    vi.mocked(client.rest.pulls.listReviews).mockImplementation((arguments_) => {
+      const page = (arguments_ as { readonly page?: number }).page ?? 1;
+      return Promise.resolve(
+        page === 1
+          ? {
+              data: Array.from({ length: 100 }, () => ({
+                user: { login: "reviewer" },
+                state: "COMMENTED"
+              })),
+              headers: {
+                link: '<https://api.github.test?page=2>; rel="next", <https://api.github.test?page=1>; rel="last"'
+              }
             }
           : { data: [], headers: {} }
       ) as never;

@@ -2,6 +2,7 @@ import { lstat, open, type FileHandle } from "node:fs/promises";
 import type { Stats } from "node:fs";
 
 export const MAX_CLI_FILE_BYTES = 4 * 1024 * 1024;
+export const MAX_AUDIT_EVIDENCE_CLI_FILE_BYTES = 8 * 1024 * 1024;
 
 export type FileReadFailure =
   "not_found" | "access_denied" | "not_regular" | "too_large" | "read_failed";
@@ -52,10 +53,12 @@ export function classifyFileReadFailure(error: unknown): FileReadFailure {
   return error instanceof CliFileError ? error.reason : classifyFileSystemError(error);
 }
 
-function ensureValidLimit(maxBytes: number): void {
-  if (!Number.isSafeInteger(maxBytes) || maxBytes < 0 || maxBytes > MAX_CLI_FILE_BYTES) {
+function ensureValidLimit(maxBytes: number, maximum = MAX_AUDIT_EVIDENCE_CLI_FILE_BYTES): void {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 0 || maxBytes > maximum) {
     throw new RangeError(
-      `maxBytes must be a safe integer between 0 and ${String(MAX_CLI_FILE_BYTES)}.`
+      "maxBytes must be a safe integer between 0 and " +
+        String(MAX_AUDIT_EVIDENCE_CLI_FILE_BYTES) +
+        "."
     );
   }
 }
@@ -69,6 +72,15 @@ export async function readBoundedFile(
   maxBytes = MAX_CLI_FILE_BYTES,
   fileSystem: BoundedFileSystem = defaultFileSystem
 ): Promise<string> {
+  ensureValidLimit(maxBytes, MAX_CLI_FILE_BYTES);
+  return Buffer.from(await readBoundedBytes(path, maxBytes, fileSystem)).toString("utf8");
+}
+
+export async function readBoundedBytes(
+  path: string,
+  maxBytes = MAX_AUDIT_EVIDENCE_CLI_FILE_BYTES,
+  fileSystem: BoundedFileSystem = defaultFileSystem
+): Promise<Uint8Array> {
   ensureValidLimit(maxBytes);
 
   let handle: FileHandle | undefined;
@@ -130,7 +142,7 @@ export async function readBoundedFile(
     if (bytesRead !== finalStats.size) {
       throw new CliFileError("read_failed");
     }
-    return buffer.subarray(0, bytesRead).toString("utf8");
+    return buffer.subarray(0, bytesRead);
   } catch (error) {
     if (error instanceof CliFileError) {
       throw error;

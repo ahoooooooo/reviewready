@@ -15,6 +15,7 @@ const REQUIRED_FILES = [
   "package.json",
   "reviewready.schema.json",
   "reviewready.audit.schema.json",
+  "reviewready.audit-evidence.schema.json",
   "reviewready.result.schema.json",
   "dist/cli.js",
   "dist/cli.d.ts"
@@ -26,6 +27,7 @@ const EXACT_ALLOWED_FILES = new Set([
   "package.json",
   "reviewready.schema.json",
   "reviewready.audit.schema.json",
+  "reviewready.audit-evidence.schema.json",
   "reviewready.result.schema.json"
 ]);
 

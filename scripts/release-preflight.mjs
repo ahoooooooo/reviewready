@@ -872,6 +872,14 @@ function verifyCleanRoom(projectRoot, tarballPath) {
     if (!existsSync(cli)) {
       throw new Error("clean-room installation did not contain the CLI");
     }
+    const evidenceSchemaPath = join(installedRoot, "reviewready.audit-evidence.schema.json");
+    if (!existsSync(evidenceSchemaPath)) {
+      throw new Error("clean-room installation did not contain the evidence schema");
+    }
+    const evidenceSchema = record(readJson(evidenceSchemaPath));
+    if (evidenceSchema.$schema !== "https://json-schema.org/draft/2020-12/schema") {
+      throw new Error("clean-room evidence schema is not Draft 2020-12");
+    }
     const policy = join(projectRoot, "fixtures", "basic", ".reviewready.yml");
     const readyInput = join(projectRoot, "fixtures", "basic", "ready.json");
     runNode([cli, "validate", "--policy", policy], projectRoot);
@@ -887,6 +895,15 @@ function verifyCleanRoom(projectRoot, tarballPath) {
       /** @type {{ status?: unknown }} */ (report).status !== "ready"
     ) {
       throw new Error("clean-room CLI smoke test did not produce a ready result");
+    }
+    const evidenceFixture = join(projectRoot, "fixtures", "audit", "evidence-bundle-v1.json");
+    const replayOutput = runNode(
+      [cli, "audit", "replay", "--bundle", evidenceFixture, "--json"],
+      projectRoot
+    );
+    const replayReport = record(JSON.parse(replayOutput));
+    if (replayReport.status !== "pass") {
+      throw new Error("clean-room evidence replay did not produce a pass result");
     }
   } finally {
     rmSync(temporaryRoot, { recursive: true, force: true });

@@ -18,7 +18,7 @@ const UNSAFE_TEXT = /[\p{Control}\p{Format}\p{Surrogate}\u2028\u2029]/u;
 const TEXT = z
   .string()
   .min(1)
-  .max(512)
+  .refine((value) => Array.from(value).length <= 512)
   .refine((value) => !UNSAFE_TEXT.test(value));
 
 const REPOSITORY_PATH = TEXT.refine(
@@ -32,15 +32,31 @@ const REPOSITORY_PATH = TEXT.refine(
 );
 
 const actorSchema = z
-  .object({ id: TEXT, type: z.enum(["user", "team", "app", "integration"]).optional() })
+  .object({
+    id: TEXT,
+    type: z.enum(["user", "team", "app", "integration"]).optional(),
+    actorType: z
+      .enum(["user", "team", "integration", "organization_admin", "repository_role", "deploy_key"])
+      .optional(),
+    bypassMode: z.enum(["always", "exempt", "pull_request"]).optional()
+  })
   .strict();
 const checkSchema = z
   .object({
     name: TEXT,
-    appId: z.number().int().nonnegative().max(2_147_483_647).optional(),
+    appId: z.number().int().min(1).max(2_147_483_647).optional(),
     appSlug: TEXT.optional()
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    if (value.appId !== undefined && value.appSlug !== undefined) {
+      context.addIssue({
+        code: "custom",
+        path: ["appSlug"],
+        message: "appId and appSlug are mutually exclusive"
+      });
+    }
+  });
 const checksSchema = z.array(checkSchema).max(MAX_AUDIT_CHECKS);
 
 const branchProtectionSchema = z
@@ -67,7 +83,7 @@ const branchProtectionSchema = z
 
 const rulesetSchema = z
   .object({
-    id: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    id: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
     name: TEXT,
     target: z.enum(["branch", "tag", "push", "repository"]),
     refPatterns: z.array(TEXT).max(100),
@@ -163,7 +179,22 @@ const auditSnapshotSchema = z
       .strict(),
     completeness: z.object({ complete: z.boolean(), missing: z.array(TEXT).max(100) }).strict(),
     branchProtection: branchProtectionSchema.nullable(),
-    rulesets: z.array(rulesetSchema).max(MAX_AUDIT_RULESETS),
+    rulesets: z
+      .array(rulesetSchema)
+      .max(MAX_AUDIT_RULESETS)
+      .superRefine((rulesets, context) => {
+        const ids = new Set<number>();
+        rulesets.forEach((ruleset, index) => {
+          if (ids.has(ruleset.id)) {
+            context.addIssue({
+              code: "custom",
+              path: [index, "id"],
+              message: "ruleset IDs must be unique"
+            });
+          }
+          ids.add(ruleset.id);
+        });
+      }),
     tagProtection: z
       .object({ known: z.boolean(), allowsDeletion: z.boolean(), allowsUpdate: z.boolean() })
       .strict(),
@@ -510,7 +541,7 @@ function auditSnapshot(snapshot: AuditSnapshot): AuditReport {
           )
         );
       }
-      if (branchProtection.requiredPullRequestReviews.bypassActorsKnown === false) {
+      if (branchProtection.requiredPullRequestReviews.bypassActorsKnown !== true) {
         add(
           auditFinding(
             "AUDIT_REVIEW_BYPASS_UNKNOWN",
@@ -649,7 +680,7 @@ function auditSnapshot(snapshot: AuditSnapshot): AuditReport {
 
   for (const ruleset of relevantRulesets) {
     const path = `rulesets.${String(ruleset.id)}`;
-    if (ruleset.bypassActorsKnown === false) {
+    if (ruleset.bypassActorsKnown !== true) {
       add(
         auditFinding(
           "AUDIT_RULESET_BYPASS_UNKNOWN",
@@ -805,7 +836,7 @@ function auditSnapshot(snapshot: AuditSnapshot): AuditReport {
     }
   }
 
-  findings.sort(compareFindings);
+  findings.sort(compareAuditFindings);
   if (findings.length > MAX_AUDIT_FINDINGS) {
     findings.length = MAX_AUDIT_FINDINGS - 1;
     findings.push(
@@ -818,7 +849,7 @@ function auditSnapshot(snapshot: AuditSnapshot): AuditReport {
     );
     hasIncomplete = true;
   }
-  findings.sort(compareFindings);
+  findings.sort(compareAuditFindings);
   const status: AuditStatus = hasIncomplete ? "incomplete" : findings.length > 0 ? "fail" : "pass";
   return {
     auditVersion: AUDIT_VERSION,
@@ -847,17 +878,19 @@ function addWorkflowFinding(
   });
 }
 
-function compareFindings(left: AuditFinding, right: AuditFinding): number {
+export function compareAuditFindings(left: AuditFinding, right: AuditFinding): number {
   const codeOrder = compareStrings(left.code, right.code);
   const pathOrder = compareStrings(left.path ?? "", right.path ?? "");
   const lineOrder = (left.line ?? 0) - (right.line ?? 0);
   const severityOrder = compareStrings(left.severity, right.severity);
+  const categoryOrder = compareStrings(left.category, right.category);
   return (
     codeOrder ||
     pathOrder ||
     lineOrder ||
     severityOrder ||
-    compareStrings(left.message, right.message)
+    compareStrings(left.message, right.message) ||
+    categoryOrder
   );
 }
 

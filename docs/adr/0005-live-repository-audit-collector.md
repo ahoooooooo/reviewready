@@ -26,6 +26,9 @@ into evidence of a trusted merge gate.
 - treats missing branch-review bypass data, missing trusted/protected workflow
   roots, changed base revisions, malformed responses, and unavailable settings as
   incomplete;
+- rejects branch-protection security fields outside the modeled v1 contract and
+  contradictory structured/legacy required-check representations rather than
+  silently dropping them;
 - treats a missing bounded transport as unavailable for every API read, passes
   the bounded fetch per request, and buffers every response before JSON parsing
   within the response-byte limit. The boundary uses Octokit's configured fetch
@@ -41,7 +44,11 @@ into evidence of a trusted merge gate.
   configuration. The collector never infers a trusted root from a successful
   API call, a check name, or the fact that a workflow is on the default branch;
 - bounds source size, workflow count, concurrency, retries, response bytes,
-  512 total request attempts, pagination, and the overall collection deadline.
+  768 total request attempts, ruleset pagination, and the overall collection
+  deadline; the GitHub Contents workflow directory is requested once with only
+  its immutable ref, rejects any Link header, and rejects more than the bounded
+  workflow count rather than inventing pagination for an endpoint that does not
+  expose it in this contract;
 
 The pure `auditRepository` function remains the only classifier. Live collection
 cannot influence PR readiness and has no write API. An installation token may

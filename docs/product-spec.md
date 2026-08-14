@@ -76,7 +76,7 @@ The policy engine receives data, not an API client:
 - PR body and labels;
 - linked issue numbers;
 - completed checks or terminal commit statuses with name, conclusion, and
-  optional app identity;
+  optional mutually-exclusive positive App ID or provider slug identity;
 - reviews with reviewer login, maintainer status, and an optional submission
   timestamp;
 - attestations supplied through exact checked markdown task-list items.
