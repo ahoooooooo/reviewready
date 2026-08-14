@@ -62,6 +62,7 @@ export interface AuditGitHubClient {
   listRulesets: (
     arguments_: AuditRepositoryArguments & {
       readonly ownerType?: "organization" | "user" | undefined;
+      readonly repositoryId?: number | undefined;
     }
   ) => Promise<readonly AuditRuleset[]>;
   listWorkflowFiles: (
@@ -284,13 +285,14 @@ async function collectMutableSettings(
   client: AuditGitHubClient,
   arguments_: AuditRepositoryArguments,
   branch: string,
-  ownerType: "organization" | "user"
+  ownerType: "organization" | "user",
+  repositoryId: number
 ): Promise<MutableAuditSettings> {
   const [branchProtection, tagProtection] = await Promise.all([
     client.getBranchProtection({ ...arguments_, branch }),
     client.getTagProtection(arguments_)
   ]);
-  const rulesets = await client.listRulesets({ ...arguments_, ownerType });
+  const rulesets = await client.listRulesets({ ...arguments_, ownerType, repositoryId });
   return { branchProtection, rulesets, tagProtection };
 }
 
@@ -611,7 +613,8 @@ async function collectRepositoryAuditSnapshotInternal(
       client,
       arguments_,
       defaultBranch,
-      repository.ownerType
+      repository.ownerType,
+      repository.id
     );
     const [workflowEntries, policySource] = await Promise.all([
       client.listWorkflowFiles({ ...arguments_, ref: baseSha }),
@@ -679,7 +682,8 @@ async function collectRepositoryAuditSnapshotInternal(
       client,
       arguments_,
       defaultBranch,
-      repository.ownerType
+      repository.ownerType,
+      repository.id
     );
     const settingsMismatch =
       canonicalMutableSettings(firstSettings) !== canonicalMutableSettings(secondSettings);

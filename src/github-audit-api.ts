@@ -38,7 +38,8 @@ const RULESET_SUPPORTED_FIELDS = new Set([
   "updated_at",
   "conditions",
   "rules",
-  "bypass_actors"
+  "bypass_actors",
+  "current_user_can_bypass"
 ]);
 
 type RequestResponse = {
@@ -48,7 +49,7 @@ type RequestResponse = {
 };
 type PaginationIdentity = {
   readonly apiBaseUrl: string;
-  readonly pathname: string;
+  readonly pathnames: readonly string[];
   readonly fixedQuery: Readonly<Record<string, string>>;
 };
 type PageResult = {
@@ -451,7 +452,7 @@ function nextPage(headers: unknown, identity: PaginationIdentity): PageLinks {
         url.username.length > 0 ||
         url.password.length > 0 ||
         url.hash.length > 0 ||
-        url.pathname !== `${basePath}${identity.pathname}`
+        !identity.pathnames.some((pathname) => url.pathname === `${basePath}${pathname}`)
       ) {
         throw new AuditApiFailure("pagination-link-invalid");
       }
@@ -906,6 +907,9 @@ function mapRuleset(
     throw new AuditApiFailure("ruleset-field-unsupported");
   }
   validateRulesetMetadata(item, ownerType, owner, repo);
+  if (item.current_user_can_bypass !== undefined && item.current_user_can_bypass !== "never") {
+    throw new AuditApiFailure("ruleset-bypass-semantics-unsupported");
+  }
   const target = item.target;
   if (target !== "branch" && target !== "tag" && target !== "push" && target !== "repository") {
     throw new AuditApiFailure("ruleset-target-invalid");
@@ -1179,11 +1183,10 @@ async function collectPages(
     const extra = await requestPage(page + 1);
     const extraLinks = nextPage(extra.headers, extra.pagination);
     if (
-      shortUnlinkedPageComplete &&
-      pageResult.items.length < PAGE_SIZE &&
+      extra.items.length === 0 &&
       extraLinks.nextPage === undefined &&
-      !extraLinks.hasLast &&
-      extra.items.length === 0
+      ((shortUnlinkedPageComplete && pageResult.items.length < PAGE_SIZE && !extraLinks.hasLast) ||
+        (extraLinks.hasLast && extraLinks.lastPage === page))
     ) {
       return result;
     }
@@ -1405,7 +1408,13 @@ export function createGitHubAuditClient(
         throw error;
       }
     },
-    listRulesets: async ({ owner, repo, ownerType }) => {
+    listRulesets: async ({ owner, repo, ownerType, repositoryId }) => {
+      const pathnames = [
+        `/repos/${owner}/${repo}/rulesets`,
+        ...(Number.isSafeInteger(repositoryId) && (repositoryId as number) >= 1
+          ? [`/repositories/${String(repositoryId)}/rulesets`]
+          : [])
+      ];
       const summaries = await collectPages(
         async (page) => {
           const response = await read("GET /repos/{owner}/{repo}/rulesets", {
@@ -1424,7 +1433,7 @@ export function createGitHubAuditClient(
             headers: response.headers,
             pagination: {
               apiBaseUrl: configuredBaseUrl,
-              pathname: `/repos/${owner}/${repo}/rulesets`,
+              pathnames,
               fixedQuery: {
                 includes_parents: "true",
                 targets: "branch,tag,push,repository",
