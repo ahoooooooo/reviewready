@@ -1,25 +1,26 @@
 # TA-2 replayable audit evidence implementation plan
 
-Status: **v1 contract frozen; modeled ruleset-semantics v2 extension, local
-gates, and main-bound live promotion are verified; the bounded durable-artifact
-and independent-review workflow is implemented, but a new main-bound artifact
-inspection remains pending.**
+Status: **Complete.** The v1 contract, modeled ruleset-semantics v2 extension,
+local gates, main-bound promotion, bounded durable artifact, and independent
+credential-free replay are verified. The preserved audit result is
+'incomplete', because unavailable governance and workflow authority are
+findings that must not be upgraded to pass. TA-3 design is the next node.
 
 This plan implements [ADR 0009](../../adr/0009-replayable-audit-evidence-bundle.md)
 and the [TA-2 threat model](../../threat-model-ta2-evidence-bundle.md) for
 [#55](https://github.com/ahoooooooo/reviewready/issues/55). It is subordinate to
 the fixed node order in [post-v1.md](post-v1.md). The implementation phases
-below are now historical execution records; TA-3 design/implementation must not
-start until the remaining dogfood and promotion gates exit.
+below are historical execution records. TA-3 design/implementation must not
+start until its separate design gate is approved.
 
 ## Current execution evidence
 
 - The evidence schema, canonicalizer, bundle projection/hydration, bounded
   base64 artifacts, exact-revision collector boundary, request metrics, CLI
   `audit collect`/`audit replay`, package exports, and tests are implemented.
-- The final local gate passed on 2026-08-15: 29 test files, 809 passed and
-  5 skipped (814 total), 92.63% statements, 88.14% branches, 98.53%
-  functions, and 92.53% lines.
+- The final local gate passed on 2026-08-16: 30 test files, 817 passed and
+  6 skipped (823 total), 92.63% statements, 88.13% branches, 98.53%
+  functions, and 92.54% lines.
   bundle/package smoke, clean-room replay, and the Action ncc build also passed.
 - Release preflight now reads external evidence and artifacts through bounded
   descriptor-backed snapshots, binds clean-room installation to the verified
@@ -30,10 +31,10 @@ start until the remaining dogfood and promotion gates exit.
   `fixtures/audit/evidence-bundle-v1.json` passes strict canonical parsing,
   hydration, replay, package smoke, and release-preflight clean-room checks.
   It is a replay fixture, not evidence of the live repository.
-- A real authenticated dogfood run completed and correctly emitted no bundle
-  because the remote ruleset contains semantics outside bundle v1. The live
-  acceptance artifact and final promotion review remain pending; this plan does
-  not treat the local fixture as a substitute for either one.
+- An earlier authenticated dogfood run correctly emitted no bundle because the
+  remote ruleset contains semantics outside bundle v1. The current-main
+  acceptance artifact is recorded below; this historical failed-closed run is
+  not substituted for it.
 - The production TA-2 workflow remains Ubuntu-bound for its no-follow filesystem
   assumptions. Windows local verification still performs lstat/fstat and
   post-read identity checks, but Node does not expose O_NOFOLLOW there; this
@@ -43,8 +44,18 @@ start until the remaining dogfood and promotion gates exit.
   policy path, and workflow roots; it bounds child output and replay. After
   successful replay it exposes exactly the bundle, replay report, and manifest
   to a pinned 30-day Actions artifact, and a separate job downloads and checks
-  the same bytes offline. This is an execution path until one main-bound run is
-  inspected and recorded as acceptance evidence.
+  the same bytes offline. The current-main acceptance artifact is recorded
+  below.
+  Current-main promotion run
+  [31898181562](https://github.com/ahoooooooo/reviewready/actions/runs/31898181562)
+  bound collection to 6ae4c96123aa5d377eb44fd2598fad052ea45cf8. The run-scoped
+  artifact was independently checked as exactly three bounded files: bundle
+  55136 bytes with SHA-256
+  410c3f78ed48fd6848f01e19d7910ed357dbe06bcf0ba7902d1f09c7ed21a398, manifest
+  503 bytes, and replay 5049 bytes with SHA-256
+  b41264311d78fe04bb8b5bab369ffca09be212daffe9d582efb9897904fc4949. Live and
+  offline replay agree on incomplete and exit class 2.
+
 - The first authenticated dogfood attempt reached the real repository ruleset
   but correctly stopped without bundle output: its official detail includes a
   `pull_request` review rule and additional required-status enforcement fields
@@ -351,16 +362,16 @@ Any valid P0/P1/P2 returns work to the owning phase, adds a regression first, an
 repeats the focused/full/review gates. Reviewers must be given time to finish and
 closed only after their reports are integrated.
 
-Node exit requires all #55 acceptance boxes, one reproducible dogfood bundle,
-matching live/offline results, compatible public schemas, complete local gates,
-and no open valid P0/P1/P2 in the TA-2 scope. Only then may #55 close and TA-3-D
-begin. Commit/push/PR decisions follow the user's standing authorization, but no
-npm or GitHub release is part of TA-2.
+Node exit required one reproducible bundle, matching live/offline results,
+compatible public schemas, complete local gates, and no open valid P0/P1/P2 in
+the TA-2 scope. Those gates are satisfied by the current-main run above. The
+preserved incomplete audit result is part of the evidence, not a failed
+acceptance gate. #55 may close as the completed evidence-mechanism node; TA-3-D
+remains a separate design gate. No npm or GitHub release is part of TA-2.
 
 ## Stop condition for this implementation session
 
-ADR 0009, the normative v1 contract, the threat model, and this plan are the
-complete SOL MAX decision artifact for the evidence-bundle node. The remaining
-work is bounded dogfood collection and final LUNA MAX review. After that node
-exits, trusted-root/GitHub App/public-provider authority design is the next
-absolute SOL MAX decision gate; implementation must stop there.
+ADR 0009, the normative v1 contract, the threat model, this plan, and the
+current-main evidence artifact are the complete decision record for TA-2. The
+node is closed. Trusted-root/GitHub App/provider authority design in #56 is the
+next absolute decision gate; implementation must stop there.
