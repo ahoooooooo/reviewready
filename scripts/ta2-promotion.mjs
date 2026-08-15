@@ -377,6 +377,7 @@ function writeEvidenceFile(
   const evidencePath = trustedEvidencePath(path, directoryDescriptor);
   let descriptor;
   let openedStats;
+  let writtenStats;
   let created = false;
   let cleanupIncomplete = false;
   try {
@@ -393,6 +394,7 @@ function writeEvidenceFile(
         writeFileSync(fileDescriptor, value);
       })
     )(descriptor, bytes);
+    writtenStats = fstatSync(descriptor);
   } catch (error) {
     if (descriptor !== undefined) {
       try {
@@ -443,7 +445,7 @@ function writeEvidenceFile(
       if (
         !current.isSymbolicLink() &&
         current.isFile() &&
-        sameEvidenceIdentity(openedStats, current)
+        sameEvidenceFile(writtenStats, current)
       ) {
         unlinkSync(evidencePath);
       } else {
