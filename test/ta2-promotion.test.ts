@@ -70,15 +70,12 @@ function reportBytes(status: "pass" | "fail" | "incomplete" = "pass"): Buffer {
   );
 }
 
-function parentVisibleChildPath(path: string, childEnvironment: NodeJS.ProcessEnv): string {
+function parentVisibleChildPath(path: string, parentRunnerTemp: string): string {
   const childDescriptorPrefix = "/proc/self/fd/3/";
   if (!path.startsWith(childDescriptorPrefix)) {
     return path;
   }
-  if (typeof childEnvironment.RUNNER_TEMP !== "string") {
-    throw new Error("runner temp is missing");
-  }
-  return join(childEnvironment.RUNNER_TEMP, "reviewready-ta2", basename(path));
+  return join(parentRunnerTemp, "reviewready-ta2", basename(path));
 }
 
 describe("trusted TA-2 promotion entrypoint", () => {
@@ -394,34 +391,30 @@ describe("trusted TA-2 promotion entrypoint", () => {
 
   it("rejects a bundle file mutated while replay is running", () => {
     const root = mkdtempSync(join(tmpdir(), "reviewready-ta2-bundle-race-test-"));
+    const parentRunnerTemp = join(root, "runner-temp");
     let replayCalls = 0;
     try {
       expect(() =>
-        runPromotion(
-          { ...environment(), RUNNER_TEMP: join(root, "runner-temp") },
-          [],
-          process.cwd(),
-          {
-            runNode: (_projectRoot, args, childEnvironment) => {
-              if (args.includes("collect")) {
-                return bundleBytes();
-              }
-              replayCalls += 1;
-              if (replayCalls === 1) {
-                const bundleArgumentIndex = args.indexOf("--bundle");
-                const bundlePath = args[bundleArgumentIndex + 1];
-                if (typeof bundlePath !== "string") {
-                  throw new Error("bundle path was not passed");
-                }
-                writeFileSync(
-                  parentVisibleChildPath(bundlePath, childEnvironment),
-                  bundleBytes("tampered")
-                );
-              }
-              return reportBytes();
+        runPromotion({ ...environment(), RUNNER_TEMP: parentRunnerTemp }, [], process.cwd(), {
+          runNode: (_projectRoot, args) => {
+            if (args.includes("collect")) {
+              return bundleBytes();
             }
+            replayCalls += 1;
+            if (replayCalls === 1) {
+              const bundleArgumentIndex = args.indexOf("--bundle");
+              const bundlePath = args[bundleArgumentIndex + 1];
+              if (typeof bundlePath !== "string") {
+                throw new Error("bundle path was not passed");
+              }
+              writeFileSync(
+                parentVisibleChildPath(bundlePath, parentRunnerTemp),
+                bundleBytes("tampered")
+              );
+            }
+            return reportBytes();
           }
-        )
+        })
       ).toThrow("changed");
       expect(
         existsSync(join(root, "runner-temp", "reviewready-ta2", "evidence-bundle-v1.json"))
@@ -433,41 +426,37 @@ describe("trusted TA-2 promotion entrypoint", () => {
 
   it("binds replay to the staged bundle digest", () => {
     const root = mkdtempSync(join(tmpdir(), "reviewready-ta2-bundle-digest-test-"));
+    const parentRunnerTemp = join(root, "runner-temp");
     try {
       expect(() =>
-        runPromotion(
-          { ...environment(), RUNNER_TEMP: join(root, "runner-temp") },
-          [],
-          process.cwd(),
-          {
-            runNode: (_projectRoot, args, childEnvironment) => {
-              if (args.includes("collect")) {
-                return bundleBytes();
-              }
-              const bundleArgumentIndex = args.indexOf("--bundle");
-              const bundlePath = args[bundleArgumentIndex + 1];
-              if (typeof bundlePath !== "string") {
-                throw new Error("bundle path was not passed");
-              }
-              const parentBundlePath = parentVisibleChildPath(bundlePath, childEnvironment);
-              const alternate = bundleBytes("alternate");
-              writeFileSync(parentBundlePath, alternate);
-              try {
-                const digestArgumentIndex = args.indexOf("--bundle-sha256");
-                const expectedDigest = args[digestArgumentIndex + 1];
-                if (digestArgumentIndex >= 0 && typeof expectedDigest === "string") {
-                  const actualDigest = createHash("sha256").update(alternate).digest("hex");
-                  if (actualDigest !== expectedDigest) {
-                    throw new Error("bundle digest mismatch");
-                  }
-                }
-              } finally {
-                writeFileSync(parentBundlePath, bundleBytes());
-              }
-              return reportBytes();
+        runPromotion({ ...environment(), RUNNER_TEMP: parentRunnerTemp }, [], process.cwd(), {
+          runNode: (_projectRoot, args) => {
+            if (args.includes("collect")) {
+              return bundleBytes();
             }
+            const bundleArgumentIndex = args.indexOf("--bundle");
+            const bundlePath = args[bundleArgumentIndex + 1];
+            if (typeof bundlePath !== "string") {
+              throw new Error("bundle path was not passed");
+            }
+            const parentBundlePath = parentVisibleChildPath(bundlePath, parentRunnerTemp);
+            const alternate = bundleBytes("alternate");
+            writeFileSync(parentBundlePath, alternate);
+            try {
+              const digestArgumentIndex = args.indexOf("--bundle-sha256");
+              const expectedDigest = args[digestArgumentIndex + 1];
+              if (digestArgumentIndex >= 0 && typeof expectedDigest === "string") {
+                const actualDigest = createHash("sha256").update(alternate).digest("hex");
+                if (actualDigest !== expectedDigest) {
+                  throw new Error("bundle digest mismatch");
+                }
+              }
+            } finally {
+              writeFileSync(parentBundlePath, bundleBytes());
+            }
+            return reportBytes();
           }
-        )
+        })
       ).toThrow("digest");
     } finally {
       rmSync(root, { recursive: true, force: true });
