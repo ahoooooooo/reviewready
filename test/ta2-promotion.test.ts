@@ -277,6 +277,38 @@ describe("trusted TA-2 promotion entrypoint", () => {
     }
   });
 
+  it("preserves fixed diagnostic codes from Uint8Array stderr", () => {
+    const root = mkdtempSync(join(tmpdir(), "reviewready-ta2-uint8-stderr-test-"));
+    try {
+      expect(() =>
+        runPromotion(
+          { ...environment(), RUNNER_TEMP: join(root, "runner-temp") },
+          [],
+          process.cwd(),
+          {
+            runNode: (_projectRoot, args) =>
+              args.includes("collect")
+                ? {
+                    output: Buffer.alloc(0),
+                    exitCode: 2,
+                    stderr: new Uint8Array(
+                      Buffer.from(
+                        "[AUDIT_EVIDENCE_UNSUPPORTED_SEMANTICS] stopped closed.\\n",
+                        "utf8"
+                      )
+                    ) as unknown as Buffer
+                  }
+                : reportBytes()
+          }
+        )
+      ).toThrow(
+        "trusted TA-2 collection stopped for unsupported semantics; no evidence bundle was emitted"
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("uses an incomplete fallback for an empty exit-2 collection without a stable error code", () => {
     const root = mkdtempSync(join(tmpdir(), "reviewready-ta2-empty-fallback-test-"));
     const projectRoot = join(root, "project");
