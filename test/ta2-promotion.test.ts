@@ -109,6 +109,21 @@ describe("trusted TA-2 promotion entrypoint", () => {
     ).toThrow("trusted TA-2 promotion accepts no arguments");
   });
 
+  it("redacts initialization filesystem errors", () => {
+    const segment = "a".repeat(process.platform === "win32" ? 32760 : 4096);
+    const runnerTemp = process.platform === "win32" ? "C:\\" + segment : "/" + segment;
+    let failure: unknown;
+    try {
+      runPromotion({ ...environment(), RUNNER_TEMP: runnerTemp }, [], process.cwd());
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toBeInstanceOf(Error);
+    const message = (failure as Error).message;
+    expect(message).toContain("trusted TA-2 evidence output validation failed");
+    expect(message).not.toContain(segment);
+  });
+
   it("keeps the production workflow base-only and fixes the policy/workflow roots", async () => {
     const workflow = await readFile(".github/workflows/reviewready-ta2-promotion.yml", "utf8");
     const promotion = await readFile("scripts/ta2-promotion.mjs", "utf8");
@@ -158,6 +173,66 @@ describe("trusted TA-2 promotion entrypoint", () => {
         bundleBytes().toString("utf8")
       );
       expect(manifest.status).toBe("pass");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("does not pass credential-bearing environment values to replay children", () => {
+    const root = mkdtempSync(join(tmpdir(), "reviewready-ta2-replay-env-test-"));
+    const calls: Array<{ args: string[]; environment: NodeJS.ProcessEnv }> = [];
+    try {
+      runPromotion(
+        {
+          ...environment(),
+          ACTIONS_RUNTIME_TOKEN: "runtime-secret",
+          CUSTOM_SECRET: "custom-secret",
+          NODE_OPTIONS: "--require=untrusted-loader",
+          RUNNER_TEMP: root
+        },
+        [],
+        process.cwd(),
+        {
+          runNode: (_projectRoot, args, childEnvironment) => {
+            calls.push({ args: [...args], environment: childEnvironment });
+            return args.includes("collect") ? bundleBytes() : reportBytes();
+          }
+        }
+      );
+
+      expect(calls).toHaveLength(3);
+      for (const call of calls.slice(1)) {
+        expect(call.environment.GITHUB_TOKEN).toBeUndefined();
+        expect(call.environment.ACTIONS_RUNTIME_TOKEN).toBeUndefined();
+        expect(call.environment.CUSTOM_SECRET).toBeUndefined();
+        expect(call.environment.NODE_OPTIONS).toBeUndefined();
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("fails closed when collection and replay exit classes differ", () => {
+    const root = mkdtempSync(join(tmpdir(), "reviewready-ta2-exit-class-test-"));
+    const projectRoot = join(root, "project");
+    mkdirSync(join(projectRoot, "dist"), { recursive: true });
+    const bundle = bundleBytes().toString("utf8");
+    const report = reportBytes("fail").toString("utf8");
+    writeFileSync(
+      join(projectRoot, "dist", "cli.js"),
+      "const collect = process.argv.includes('collect');" +
+        "const output = collect ? " +
+        JSON.stringify(bundle) +
+        " : " +
+        JSON.stringify(report) +
+        ";" +
+        "process.stdout.write(output);" +
+        "process.exitCode = collect ? 1 : 0;"
+    );
+    try {
+      expect(() =>
+        runPromotion({ ...environment(), RUNNER_TEMP: join(root, "runner-temp") }, [], projectRoot)
+      ).toThrow("exit class");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -231,7 +306,7 @@ describe("trusted TA-2 promotion entrypoint", () => {
       join(projectRoot, "dist", "cli.js"),
       'if (process.argv.includes("collect")) {\n' +
         '  process.stdout.write(JSON.stringify({bundleVersion:1,canonicalization:"RFC8785",subject:{},collection:{},assertions:{},snapshot:{},artifacts:{},report:{},integrity:{}}));\n' +
-        "  process.exitCode = 1;\n" +
+        "  process.exitCode = 2;\n" +
         "} else {\n" +
         '  process.stdout.write(JSON.stringify({auditVersion:1,status:"incomplete",repository:{owner:"ahoooooooo",name:"reviewready",baseSha:"' +
         sha +
@@ -777,6 +852,105 @@ describe("trusted TA-2 promotion entrypoint", () => {
         })
       ).toThrow("cleanup incomplete");
       expect(existsSync(pendingPath)).toBe(true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("redacts absolute runner paths from cleanup errors", () => {
+    const root = mkdtempSync(join(tmpdir(), "reviewready-ta2-path-redaction-test-"));
+    const runnerTemp = join(root, "runner-temp");
+    try {
+      let failure: unknown;
+      try {
+        runPromotion({ ...environment(), RUNNER_TEMP: runnerTemp }, [], process.cwd(), {
+          runNode: (_projectRoot, args) =>
+            args.includes("collect") ? bundleBytes() : reportBytes(),
+          writeEvidenceBytes: (descriptor) => {
+            writeFileSync(descriptor, Buffer.from("partial", "utf8"));
+            throw new Error("simulated evidence write failure");
+          },
+          beforeEvidencePartialCleanup: () => {
+            throw new Error("simulated cleanup failure");
+          }
+        });
+      } catch (error) {
+        failure = error;
+      }
+      expect(failure).toBeInstanceOf(Error);
+      const message = (failure as Error).message;
+      expect(message).toContain("TA-2 cleanup incomplete");
+      expect(message).toContain("evidence-bundle-v1.json.pending");
+      expect(message).not.toContain(root);
+      expect(message).not.toContain(runnerTemp);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("redacts filesystem paths from cleanup validation errors", () => {
+    const root = mkdtempSync(join(tmpdir(), "reviewready-ta2-filesystem-path-test-"));
+    const runnerTemp = join(root, "runner-temp");
+    const pendingPath = join(runnerTemp, "reviewready-ta2", "evidence-bundle-v1.json.pending");
+    let raced = false;
+    try {
+      let failure: unknown;
+      try {
+        runPromotion({ ...environment(), RUNNER_TEMP: runnerTemp }, [], process.cwd(), {
+          runNode: (_projectRoot, args) =>
+            args.includes("collect") ? bundleBytes() : reportBytes(),
+          afterEvidenceClose: (path) => {
+            if (!raced && path === pendingPath) {
+              raced = true;
+              rmSync(path, { force: true });
+            }
+          }
+        });
+      } catch (error) {
+        failure = error;
+      }
+      expect(raced).toBe(true);
+      expect(failure).toBeInstanceOf(Error);
+      const message = (failure as Error).message;
+      expect(message).toContain("trusted TA-2 evidence output validation failed");
+      expect(message).toContain("TA-2 cleanup incomplete");
+      expect(message).not.toContain(root);
+      expect(message).not.toContain(pendingPath);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("redacts filesystem paths from replay ownership errors", () => {
+    const root = mkdtempSync(join(tmpdir(), "reviewready-ta2-replay-path-test-"));
+    const runnerTemp = join(root, "runner-temp");
+    const pendingPath = join(runnerTemp, "reviewready-ta2", "evidence-bundle-v1.json.pending");
+    let replayCalls = 0;
+    try {
+      let failure: unknown;
+      try {
+        runPromotion({ ...environment(), RUNNER_TEMP: runnerTemp }, [], process.cwd(), {
+          runNode: (_projectRoot, args) => {
+            if (args.includes("collect")) {
+              return bundleBytes();
+            }
+            replayCalls += 1;
+            if (replayCalls === 1) {
+              rmSync(pendingPath, { force: true });
+            }
+            return reportBytes();
+          }
+        });
+      } catch (error) {
+        failure = error;
+      }
+      expect(replayCalls).toBe(1);
+      expect(failure).toBeInstanceOf(Error);
+      const message = (failure as Error).message;
+      expect(message).toContain("trusted TA-2 evidence output validation failed");
+      expect(message).toContain("TA-2 cleanup incomplete");
+      expect(message).not.toContain(root);
+      expect(message).not.toContain(pendingPath);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

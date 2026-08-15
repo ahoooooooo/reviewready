@@ -15,8 +15,8 @@ start until the remaining dogfood and promotion gates exit.
 - The evidence schema, canonicalizer, bundle projection/hydration, bounded
   base64 artifacts, exact-revision collector boundary, request metrics, CLI
   `audit collect`/`audit replay`, package exports, and tests are implemented.
-- The final local gate passed on 2026-08-15: 29 test files, 784 passed and
-  5 skipped (789 total), 92.63% statements, 88.17% branches, 98.50%
+- The final local gate passed on 2026-08-15: 29 test files, 793 passed and
+  5 skipped (798 total), 92.63% statements, 88.17% branches, 98.50%
   functions, and 92.53% lines.
   bundle/package smoke, clean-room replay, and the Action ncc build also passed.
 - Release preflight now reads external evidence and artifacts through bounded

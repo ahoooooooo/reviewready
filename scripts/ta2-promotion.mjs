@@ -35,6 +35,21 @@ const MAX_BUNDLE_BYTES = 8 * 1024 * 1024;
 const MAX_CHILD_OUTPUT_BYTES = 1 * 1024 * 1024;
 const MAX_CHILD_PROCESS_MS = 180_000;
 const ALLOWED_EVENTS = new Set(["push", "workflow_dispatch"]);
+const REPLAY_ENVIRONMENT_KEYS = [
+  "CI",
+  "LANG",
+  "LANGUAGE",
+  "LC_ALL",
+  "LC_CTYPE",
+  "PATH",
+  "PATHEXT",
+  "SystemRoot",
+  "TEMP",
+  "TMP",
+  "TMPDIR",
+  "TZ",
+  "WINDIR"
+];
 const AUDIT_EXIT_CODES = [0, 1, 2];
 const NO_FOLLOW = typeof constants.O_NOFOLLOW === "number" ? constants.O_NOFOLLOW : 0;
 const DIRECTORY_FD_SUPPORTED =
@@ -55,7 +70,8 @@ const BUNDLE_KEYS = [
   "integrity"
 ];
 
-/** @typedef {(projectRoot: string, args: readonly string[], environment: NodeJS.ProcessEnv, maxOutputBytes?: number, allowedExitCodes?: readonly number[], directoryDescriptor?: number) => Buffer} CommandRunner */
+/** @typedef {{output: Buffer, exitCode: number}} CommandResult */
+/** @typedef {(projectRoot: string, args: readonly string[], environment: NodeJS.ProcessEnv, maxOutputBytes?: number, allowedExitCodes?: readonly number[], directoryDescriptor?: number) => Buffer | CommandResult} CommandRunner */
 /** @typedef {{stats: import("node:fs").Stats, bytes: number, sha256: string}} OwnedEvidenceFile */
 
 /** @param {unknown} value @returns {value is Record<string, unknown>} */
@@ -121,7 +137,7 @@ export function validatePromotionEnvironment(environment, args) {
  * @param {number} [maxOutputBytes]
  * @param {readonly number[]} [allowedExitCodes]
  * @param {number} [directoryDescriptor]
- * @returns {Buffer}
+ * @returns {CommandResult}
  */
 function runNode(
   projectRoot,
@@ -148,7 +164,7 @@ function runNode(
     if (!Buffer.isBuffer(output)) {
       throw new Error("child output type is invalid");
     }
-    return output;
+    return { output, exitCode: 0 };
   } catch (error) {
     if (
       isRecord(error) &&
@@ -156,10 +172,71 @@ function runNode(
       allowedExitCodes.includes(error.status) &&
       Buffer.isBuffer(error.stdout)
     ) {
-      return error.stdout;
+      return { output: error.stdout, exitCode: error.status };
     }
     throw new Error("trusted TA-2 command failed closed", { cause: error });
   }
+}
+
+/**
+ * @param {Buffer | CommandResult} result
+ * @returns {CommandResult}
+ */
+function normalizeCommandResult(result) {
+  if (Buffer.isBuffer(result)) {
+    return { output: result, exitCode: 0 };
+  }
+  if (
+    isRecord(result) &&
+    Buffer.isBuffer(result.output) &&
+    typeof result.exitCode === "number" &&
+    Number.isInteger(result.exitCode) &&
+    AUDIT_EXIT_CODES.includes(result.exitCode)
+  ) {
+    return { output: result.output, exitCode: result.exitCode };
+  }
+  throw new Error("trusted TA-2 command result is invalid");
+}
+
+/**
+ * @param {NodeJS.ProcessEnv} environment
+ * @returns {NodeJS.ProcessEnv}
+ */
+function replayEnvironment(environment) {
+  /** @type {NodeJS.ProcessEnv} */
+  const result = {};
+  for (const key of REPLAY_ENVIRONMENT_KEYS) {
+    const value = environment[key];
+    if (typeof value === "string") {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
+/**
+ * @param {"pass" | "fail" | "incomplete"} status
+ * @returns {number}
+ */
+function auditStatusExitCode(status) {
+  return status === "pass" ? 0 : status === "fail" ? 1 : 2;
+}
+
+/**
+ * @param {unknown} error
+ * @returns {string}
+ */
+function safeEvidenceErrorMessage(error) {
+  const message = error instanceof Error ? error.message : "";
+  if (
+    isRecord(error) &&
+    (typeof error.path === "string" ||
+      typeof error.dest === "string" ||
+      (typeof error.code === "string" && typeof error.syscall === "string"))
+  ) {
+    return "trusted TA-2 evidence output validation failed";
+  }
+  return message || "trusted TA-2 evidence output validation failed";
 }
 
 /**
@@ -190,7 +267,7 @@ function validateBundleEnvelope(bytes) {
  * @param {Buffer} bytes
  * @param {string} repository
  * @param {string} revision
- * @returns {Record<string, unknown>}
+ * @returns {Record<string, unknown> & {status: "pass" | "fail" | "incomplete"}}
  */
 function parseReplay(bytes, repository, revision) {
   if (bytes.byteLength === 0 || bytes.byteLength > MAX_CHILD_OUTPUT_BYTES) {
@@ -221,7 +298,7 @@ function parseReplay(bytes, repository, revision) {
   ) {
     throw new Error("trusted TA-2 replay report is invalid");
   }
-  return parsed;
+  return /** @type {Record<string, unknown> & {status: "pass" | "fail" | "incomplete"}} */ (parsed);
 }
 
 /**
@@ -421,7 +498,7 @@ function writeEvidenceFile(
     }
     const message =
       "trusted TA-2 evidence output is not a new regular file" +
-      (cleanupIncomplete ? "; TA-2 cleanup incomplete: " + path : "");
+      (cleanupIncomplete ? "; TA-2 cleanup incomplete: " + basename(path) : "");
     throw new Error(message, {
       cause: error
     });
@@ -454,8 +531,9 @@ function writeEvidenceFile(
     } catch {
       cleanupIncomplete = true;
     }
-    const detail = error instanceof Error ? error.message : "trusted TA-2 evidence output failed";
-    const message = detail + (cleanupIncomplete ? "; TA-2 cleanup incomplete: " + path : "");
+    const detail = safeEvidenceErrorMessage(error);
+    const message =
+      detail + (cleanupIncomplete ? "; TA-2 cleanup incomplete: " + basename(path) : "");
     throw new Error(message, { cause: error });
   }
 }
@@ -642,7 +720,7 @@ function tryRemoveEvidenceFile(path, trustedRoot, expected, directoryDescriptor,
   try {
     unlinkOwnedEvidenceFile(path, trustedRoot, expected, directoryDescriptor);
   } catch {
-    cleanupFailures.push(path);
+    cleanupFailures.push(basename(path));
   }
 }
 
@@ -670,16 +748,23 @@ export function runPromotion(
   const commandRunner = options.runNode ?? runNode;
   const context = validatePromotionEnvironment(environment, args);
   const cli = join(projectRoot, "dist", "cli.js");
-  if (!existsSync(cli) || !lstatSync(cli).isFile()) {
-    throw new Error("trusted TA-2 CLI build is missing");
-  }
-  ensureOutputDirectory(context.outputRoot);
-  const outputIdentity = trustedOutputIdentity(context.outputRoot);
   const bundlePath = join(context.outputRoot, "evidence-bundle-v1.json");
   const pendingBundlePath = join(context.outputRoot, "evidence-bundle-v1.json.pending");
   const replayPath = join(context.outputRoot, "replay.json");
   const manifestPath = join(context.outputRoot, "manifest.json");
-  const outputDirectoryDescriptor = openTrustedOutputDirectory(context.outputRoot, outputIdentity);
+  let outputIdentity = "";
+  /** @type {number | undefined} */
+  let outputDirectoryDescriptor;
+  try {
+    if (!existsSync(cli) || !lstatSync(cli).isFile()) {
+      throw new Error("trusted TA-2 CLI build is missing");
+    }
+    ensureOutputDirectory(context.outputRoot);
+    outputIdentity = trustedOutputIdentity(context.outputRoot);
+    outputDirectoryDescriptor = openTrustedOutputDirectory(context.outputRoot, outputIdentity);
+  } catch (error) {
+    throw new Error(safeEvidenceErrorMessage(error), { cause: error });
+  }
   /** @param {string} path @param {Buffer} bytes @returns {import("node:fs").Stats} */
   const writeEvidence = (path, bytes) => {
     return writeEvidenceFile(
@@ -727,14 +812,17 @@ export function runPromotion(
       "--trusted-workflow",
       PROMOTION_TRUSTED_WORKFLOW
     ];
-    const bundle = commandRunner(
-      projectRoot,
-      collectArgs,
-      environment,
-      MAX_BUNDLE_BYTES,
-      AUDIT_EXIT_CODES,
-      outputDirectoryDescriptor
+    const collectResult = normalizeCommandResult(
+      commandRunner(
+        projectRoot,
+        collectArgs,
+        environment,
+        MAX_BUNDLE_BYTES,
+        AUDIT_EXIT_CODES,
+        outputDirectoryDescriptor
+      )
     );
+    const bundle = collectResult.output;
     if (bundle.byteLength === 0 || bundle.byteLength > MAX_BUNDLE_BYTES) {
       throw new Error("trusted TA-2 evidence bundle is out of bounds");
     }
@@ -747,10 +835,7 @@ export function runPromotion(
     };
     pendingBundleWritten = true;
 
-    const offlineEnvironment = { ...environment };
-    delete offlineEnvironment.GITHUB_TOKEN;
-    delete offlineEnvironment.GH_TOKEN;
-    delete offlineEnvironment.NODE_AUTH_TOKEN;
+    const offlineEnvironment = replayEnvironment(environment);
     const replayArgs = [
       cli,
       "audit",
@@ -763,25 +848,40 @@ export function runPromotion(
     ];
     assertTrustedOutputIdentity(context.outputRoot, outputIdentity);
     assertOwnership(pendingBundlePath, pendingEvidence);
-    const replay = commandRunner(
-      projectRoot,
-      replayArgs,
-      offlineEnvironment,
-      MAX_CHILD_OUTPUT_BYTES,
-      AUDIT_EXIT_CODES,
-      outputDirectoryDescriptor
+    const replayResult = normalizeCommandResult(
+      commandRunner(
+        projectRoot,
+        replayArgs,
+        offlineEnvironment,
+        MAX_CHILD_OUTPUT_BYTES,
+        AUDIT_EXIT_CODES,
+        outputDirectoryDescriptor
+      )
     );
+    const replay = replayResult.output;
     assertOwnership(pendingBundlePath, pendingEvidence);
-    const replayAgain = commandRunner(
-      projectRoot,
-      replayArgs,
-      offlineEnvironment,
-      MAX_CHILD_OUTPUT_BYTES,
-      AUDIT_EXIT_CODES,
-      outputDirectoryDescriptor
+    const replayAgainResult = normalizeCommandResult(
+      commandRunner(
+        projectRoot,
+        replayArgs,
+        offlineEnvironment,
+        MAX_CHILD_OUTPUT_BYTES,
+        AUDIT_EXIT_CODES,
+        outputDirectoryDescriptor
+      )
     );
+    const replayAgain = replayAgainResult.output;
     assertOwnership(pendingBundlePath, pendingEvidence);
+    if (
+      collectResult.exitCode !== replayResult.exitCode ||
+      replayResult.exitCode !== replayAgainResult.exitCode
+    ) {
+      throw new Error("trusted TA-2 command exit class changed during replay");
+    }
     const report = parseReplay(replay, context.repository, context.revision);
+    if (replayResult.exitCode !== auditStatusExitCode(report.status)) {
+      throw new Error("trusted TA-2 replay exit class does not match report status");
+    }
     if (!replay.equals(replayAgain)) {
       throw new Error("trusted TA-2 replay was not deterministic");
     }
@@ -899,13 +999,19 @@ export function runPromotion(
     }
     if (cleanupFailures.length > 0) {
       const message = "TA-2 cleanup incomplete: " + cleanupFailures.join(", ");
+      const detail = safeEvidenceErrorMessage(error);
       if (error instanceof Error) {
-        error.message += "; " + message;
+        error.message = detail + "; " + message;
         throw error;
       }
-      throw new Error(message, { cause: error });
+      throw new Error(detail + "; " + message, { cause: error });
     }
-    throw error;
+    const detail = safeEvidenceErrorMessage(error);
+    if (error instanceof Error) {
+      error.message = detail;
+      throw error;
+    }
+    throw new Error(detail, { cause: error });
   } finally {
     if (outputDirectoryDescriptor !== undefined) {
       closeSync(outputDirectoryDescriptor);
