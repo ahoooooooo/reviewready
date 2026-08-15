@@ -1,0 +1,410 @@
+{
+  "fixtureVersion": 1,
+  "contract": "reviewready.ta3.trusted-ingress",
+  "purpose": "Design acceptance cases for durable ingress and provider publication. These are not live evidence.",
+  "limits": {
+    "maxBodyBytes": 1048576,
+    "replayWindowMs": 604800000,
+    "maxAttempts": 3,
+    "maxProviderMatches": 1
+  },
+  "binding": {
+    "appId": 9001,
+    "hookId": "hook-7",
+    "installationId": 8001,
+    "repositoryId": 7001,
+    "pullNumber": 42,
+    "baseSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "headSha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "policyPath": ".reviewready.yml",
+    "policySha256": "1111111111111111111111111111111111111111111111111111111111111111",
+    "rootDigest": "2222222222222222222222222222222222222222222222222222222222222222",
+    "checkName": "ReviewReady / trusted"
+  },
+  "cases": [
+    {
+      "id": "accept-new-delivery",
+      "steps": [
+        {
+          "operation": "accept",
+          "deliveryId": "delivery-1",
+          "bodySha256": "body-1",
+          "binding": "binding-a"
+        }
+      ],
+      "expect": {
+        "outcomes": ["accepted"],
+        "claims": ["delivery:delivery-1", "body:body-1"],
+        "state": "accepted"
+      }
+    },
+    {
+      "id": "same-delivery-same-body-is-idempotent",
+      "initial": {
+        "deliveryId": "delivery-1",
+        "bodySha256": "body-1",
+        "binding": "binding-a",
+        "state": "accepted"
+      },
+      "steps": [
+        {
+          "operation": "accept",
+          "deliveryId": "delivery-1",
+          "bodySha256": "body-1",
+          "binding": "binding-a"
+        }
+      ],
+      "expect": {
+        "outcomes": ["duplicate"],
+        "newClaims": 0,
+        "stateUnchanged": true
+      }
+    },
+    {
+      "id": "same-delivery-different-body-is-conflict",
+      "initial": {
+        "deliveryId": "delivery-1",
+        "bodySha256": "body-1",
+        "binding": "binding-a",
+        "state": "accepted"
+      },
+      "steps": [
+        {
+          "operation": "accept",
+          "deliveryId": "delivery-1",
+          "bodySha256": "body-2",
+          "binding": "binding-b"
+        }
+      ],
+      "expect": {
+        "outcomes": ["conflict"],
+        "newClaims": 0,
+        "stateUnchanged": true
+      }
+    },
+    {
+      "id": "new-delivery-same-body-is-replay",
+      "initial": {
+        "deliveryId": "delivery-1",
+        "bodySha256": "body-1",
+        "binding": "binding-a",
+        "state": "accepted"
+      },
+      "steps": [
+        {
+          "operation": "accept",
+          "deliveryId": "delivery-2",
+          "bodySha256": "body-1",
+          "binding": "binding-a"
+        }
+      ],
+      "expect": {
+        "outcomes": ["duplicate"],
+        "newClaims": 0,
+        "deliveryAliases": 1,
+        "evaluations": 1
+      }
+    },
+    {
+      "id": "concurrent-first-acceptance-has-one-winner",
+      "steps": [
+        {
+          "operation": "accept-concurrently",
+          "requests": [
+            {
+              "deliveryId": "delivery-1",
+              "bodySha256": "body-1",
+              "binding": "binding-a"
+            },
+            {
+              "deliveryId": "delivery-2",
+              "bodySha256": "body-1",
+              "binding": "binding-a"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "outcomes": ["accepted", "duplicate"],
+        "acceptedCount": 1,
+        "bodyClaims": 1,
+        "evaluations": 1
+      }
+    },
+    {
+      "id": "ambiguous-store-never-becomes-accepted",
+      "steps": [
+        {
+          "operation": "accept",
+          "deliveryId": "delivery-1",
+          "bodySha256": "body-1",
+          "binding": "binding-a",
+          "storeResult": "unknown"
+        }
+      ],
+      "expect": {
+        "outcomes": ["store_error"],
+        "accepted": false,
+        "callerKnowledge": "unresolved",
+        "requiresReconciliation": true,
+        "retryBeforeReconciliation": false
+      }
+    },
+    {
+      "id": "invalid-freshness-does-not-touch-store",
+      "steps": [
+        {
+          "operation": "accept",
+          "deliveryId": "delivery-1",
+          "bodySha256": "body-1",
+          "binding": "binding-a",
+          "validation": "future-or-stale"
+        }
+      ],
+      "expect": {
+        "outcomes": ["invalid"],
+        "storeCalls": 0,
+        "claims": 0
+      }
+    },
+    {
+      "id": "crashed-worker-is-reclaimed-by-receipt",
+      "initial": {
+        "deliveryId": "delivery-1",
+        "bodySha256": "body-1",
+        "binding": "binding-a",
+        "state": "accepted"
+      },
+      "steps": [
+        {
+          "operation": "lease",
+          "receipt": "delivery-1",
+          "attempt": 1
+        },
+        {
+          "operation": "crash",
+          "after": "processing"
+        },
+        {
+          "operation": "reclaim",
+          "receipt": "delivery-1",
+          "afterLeaseExpiry": true
+        }
+      ],
+      "expect": {
+        "outcomes": ["leased", "reclaimed"],
+        "attempts": 2,
+        "newReceipt": false,
+        "maxConcurrentWorkers": 1
+      }
+    },
+    {
+      "id": "new-generation-makes-old-result-stale",
+      "steps": [
+        {
+          "operation": "accept",
+          "deliveryId": "delivery-1",
+          "bodySha256": "body-1",
+          "binding": "binding-a"
+        },
+        {
+          "operation": "lease-and-prepare",
+          "receipt": "delivery-1",
+          "generation": 1
+        },
+        {
+          "operation": "accept",
+          "deliveryId": "delivery-3",
+          "bodySha256": "body-3",
+          "binding": "binding-b"
+        },
+        {
+          "operation": "commit",
+          "receipt": "delivery-1",
+          "generation": 1
+        }
+      ],
+      "expect": {
+        "outcomes": ["accepted", "prepared", "accepted", "stale"],
+        "currentGeneration": 2,
+        "successfulCommits": 0
+      }
+    },
+    {
+      "id": "lost-provider-create-response-is-not-success",
+      "initial": {
+        "receipt": "delivery-1",
+        "generation": 1,
+        "state": "prepared",
+        "externalId": "rr1-3333333333333333333333333333333333333333333333333333333333333333"
+      },
+      "steps": [
+        {
+          "operation": "create-check-run",
+          "status": "in_progress",
+          "providerResult": "timeout"
+        },
+        {
+          "operation": "reconcile-check-run",
+          "matches": [
+            {
+              "appId": 9001,
+              "repositoryId": 7001,
+              "headSha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "name": "ReviewReady / trusted",
+              "externalId": "rr1-3333333333333333333333333333333333333333333333333333333333333333"
+            }
+          ]
+        },
+        {
+          "operation": "complete-check-run",
+          "conclusion": "success"
+        }
+      ],
+      "expect": {
+        "outcomes": ["provider_ambiguous", "adopted", "published"],
+        "successBeforeReconciliation": false
+      }
+    },
+    {
+      "id": "wrong-or-duplicate-provider-result-is-ambiguous",
+      "initial": {
+        "receipt": "delivery-1",
+        "generation": 1,
+        "state": "prepared",
+        "externalId": "rr1-3333333333333333333333333333333333333333333333333333333333333333"
+      },
+      "steps": [
+        {
+          "operation": "reconcile-check-run",
+          "matches": [
+            {
+              "appId": 9002,
+              "repositoryId": 7001,
+              "headSha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "name": "ReviewReady / trusted",
+              "externalId": "rr1-3333333333333333333333333333333333333333333333333333333333333333"
+            },
+            {
+              "appId": 9001,
+              "repositoryId": 7001,
+              "headSha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "name": "ReviewReady / trusted",
+              "externalId": "rr1-3333333333333333333333333333333333333333333333333333333333333333"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "outcomes": ["provider_ambiguous"],
+        "successfulCommits": 0,
+        "requiredMode": "blocked"
+      }
+    },
+    {
+      "id": "same-head-policy-change-invalidates-old-generation",
+      "steps": [
+        {
+          "operation": "accept",
+          "deliveryId": "delivery-1",
+          "bodySha256": "body-1",
+          "binding": "binding-a"
+        },
+        {
+          "operation": "accept",
+          "deliveryId": "delivery-4",
+          "bodySha256": "body-4",
+          "binding": "same-head-new-policy"
+        },
+        {
+          "operation": "commit",
+          "receipt": "delivery-1",
+          "generation": 1
+        }
+      ],
+      "expect": {
+        "outcomes": ["accepted", "accepted", "stale"],
+        "headShaUnchanged": true,
+        "policyDigestCompared": true,
+        "successfulCommits": 0
+      }
+    },
+    {
+      "id": "token-profile-mismatch-is-rejected",
+      "steps": [
+        {
+          "operation": "validate-token",
+          "installationId": 8001,
+          "repositories": [7001, 7002],
+          "permissions": {
+            "metadata": "read",
+            "contents": "read",
+            "pull_requests": "read",
+            "checks": "write",
+            "issues": "write"
+          }
+        }
+      ],
+      "expect": {
+        "outcomes": ["profile_mismatch"],
+        "accepted": false,
+        "reason": "extra-repository-or-write-permission"
+      }
+    },
+    {
+      "id": "configuration-drift-downgrades-mode",
+      "initial": {
+        "mode": "required",
+        "profileDigest": "profile-a"
+      },
+      "steps": [
+        {
+          "operation": "startup-profile-check",
+          "observedProfileDigest": "profile-b"
+        },
+        {
+          "operation": "publish",
+          "conclusion": "success"
+        }
+      ],
+      "expect": {
+        "outcomes": ["profile_drift", "blocked"],
+        "mode": "advisory",
+        "successfulPublishes": 0
+      }
+    },
+    {
+      "id": "trusted-path-never-executes-pr-code",
+      "steps": [
+        {
+          "operation": "evaluate",
+          "inputs": ["base-policy-bytes", "bounded-api-data"],
+          "forbiddenInputs": ["checkout-head", "import-pr", "build-pr", "shell-pr", "run-workflow"]
+        }
+      ],
+      "expect": {
+        "outcomes": ["evaluated"],
+        "executedOperations": [],
+        "readinessAuthority": "deterministic-engine-only"
+      }
+    },
+    {
+      "id": "retention-does-not-delete-replay-early",
+      "initial": {
+        "deliveryId": "delivery-1",
+        "bodySha256": "body-1",
+        "expiresAt": 604800000
+      },
+      "steps": [
+        {
+          "operation": "cleanup",
+          "now": 604799999
+        }
+      ],
+      "expect": {
+        "outcomes": ["cleanup_deferred"],
+        "deliveryTombstoneExists": true
+      }
+    }
+  ]
+}
