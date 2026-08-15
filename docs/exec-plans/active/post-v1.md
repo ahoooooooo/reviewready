@@ -1,11 +1,11 @@
 # ReviewReady post-v1 trust roadmap
 
-Status: **PL-0, TA-1, and the TA-2 evidence-bundle implementation/local gate are
-complete on `codex/ta-2-hardening`; TA-2 dogfood evidence and promotion review
-remain pending.**
-TA-2 has not passed its promotion gate.
+Status: **PL-0, TA-1, and the TA-2 evidence-bundle implementation/local gate
+are complete; the main-bound TA-2 promotion run also passed. The durable saved
+dogfood artifact and independent promotion review remain pending.**
+TA-2 has not exited until those acceptance artifacts are reviewed.
 
-This is the forward execution plan after the verified v1.0.7 release. It does
+This is the forward execution plan after the verified v1 release line. It does
 not authorize product implementation, repository-setting changes, publication,
 tag movement, or deployment by itself. The completed v1 plans and release
 evidence remain historical records; this file is the source of truth for future
@@ -195,7 +195,8 @@ source-size parity, safe audit/SARIF locations,
 deterministic ordering, and audit-schema/CLI regressions. Repeated non-empty
 unlinked pages remain incomplete rather than being treated as complete. It now
 implements a replayable evidence bundle, but local tests are not a real remote
-dogfood artifact. Canonical serialization, bundle privacy/source retention,
+dogfood artifact. The main-bound promotion run at a4689c7 passed collection
+and offline replay. Canonical serialization, bundle privacy/source retention,
 exact caller-supplied revision semantics, stable double observation of settings,
 and
 independent provider authority were explicit SOL MAX design gates.

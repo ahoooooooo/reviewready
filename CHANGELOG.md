@@ -5,6 +5,23 @@ the project uses semantic versioning.
 
 ## [Unreleased]
 
+## [1.0.8] - 2026-08-15
+
+### Added
+
+- Publish the deterministic audit collect and offline audit replay evidence
+  surface, including the frozen v1 bundle contract and the versioned v2
+  ruleset-semantics extension.
+- Preserve modeled GitHub pull-request and required-status ruleset semantics
+  without changing readiness or public readiness JSON contracts.
+
+### Changed
+
+- Allow the trusted main-bound TA-2 promotion entrypoint to accept validated
+  evidence bundle v2 and prove the live App-token collection/replay path.
+- Document the bounded evidence, replay, promotion, and release coordinates for
+  the next verified package release.
+
 ### Security
 
 - Move pull-request template instructions outside required `Testing` and `Risk`

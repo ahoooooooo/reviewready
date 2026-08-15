@@ -1,6 +1,7 @@
 # ADR 0010: Versioned evidence for modeled GitHub ruleset semantics
 
-- Status: accepted; implementation and focused verification complete, live promotion pending
+- Status: accepted; implementation, focused verification, and main-bound live
+  promotion complete; durable acceptance artifact review remains pending
 - Date: 2026-08-15
 - Supersedes: none; extends [ADR 0009](0009-replayable-audit-evidence-bundle.md)
 

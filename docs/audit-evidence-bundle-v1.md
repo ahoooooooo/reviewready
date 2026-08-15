@@ -2,8 +2,8 @@
 
 - Status: normative frozen contract; executable schema and implementation
   complete; v2 semantic extension is documented separately
-- Publication: development branch only; not included in the published
-  `@ahoooooo/reviewready@1.0.7` package
+- Publication: included in the published
+  `@ahoooooo/reviewready@1.0.8` package
 - Date: 2026-08-14
 - Governing ADR: [ADR 0009](adr/0009-replayable-audit-evidence-bundle.md)
 
