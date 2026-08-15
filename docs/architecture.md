@@ -230,6 +230,15 @@ output is executed by these primitives. The separate observability contract
 accepts only UUID-form delivery/correlation identities and a bounded known
 webhook action; it never carries body, prompt, workflow, secret, or token data.
 
+TA-3 adds a separate provider-authority design in
+[ADR 0011](adr/0011-github-app-trusted-ingress.md). A dedicated GitHub App,
+installation/repository allowlist, required-check App ID, durable two-key
+inbox, generation-fenced result store, and provider reconciliation are
+required before any live result can be called authoritative. The design is
+accepted, but no production ingress or durable deployment exists yet. Until
+the live race, configuration, and external-governance evidence passes, the
+provider remains advisory and cannot change the v1 readiness JSON contract.
+
 ## Error model
 
 - `PolicyError`: invalid YAML, schema, semantics, or unsupported policy version.

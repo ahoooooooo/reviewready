@@ -1,11 +1,11 @@
 # ReviewReady post-v1 trust roadmap
 
-Status: **PL-0, TA-1, and TA-2 are complete.** The bounded durable-artifact
-workflow and independent replay were verified on the main revision used for
-collection.
+Status: **PL-0, TA-1, TA-2, and TA-3-D are complete.** The bounded
+durable-artifact workflow and independent replay were verified on the main
+revision used for collection. TA-3-I production implementation has not started.
 The resulting audit is intentionally 'incomplete' because governance and
 workflow authority remain unproven; that is a correct fail-closed outcome, not
-a release or readiness pass. TA-3 design is the next node.
+a release or readiness pass. TA-3-D is complete; TA-3-I is the next node.
 
 This is the forward execution plan after the verified v1 release line. It does
 not authorize product implementation, repository-setting changes, publication,
@@ -273,6 +273,35 @@ Subgates:
   implementation/evidence issues; it never completes TA-3 by itself.
 - TA-3-I starts only after TA-3-D exits. Its successor issues implement and
   prove the approved contract without silently expanding it.
+
+TA-3-D design evidence is now recorded in
+[ADR 0011](../../adr/0011-github-app-trusted-ingress.md), the
+[TA-3 threat model](../../threat-model-ta3-trusted-ingress.md), and the
+[state-machine fixtures](../../../fixtures/trust/ta3-ingress-state-machine-v1.json).
+The design integration is tracked by [PR #80](https://github.com/ahoooooooo/reviewready/pull/80);
+that PR remains documentation-only and must pass the repository gate before
+these design records are merged into the default branch.
+The design review closed the following authority gaps before implementation:
+
+- App identity, installation/repository allowlists, exact permissions, hook
+  identity, policy/root generation, and required Check Run App identity are
+  out-of-band configuration rather than payload-derived facts;
+- delivery and body replay claims are one tenant-scoped atomic operation, while
+  leases, generation CAS, crash recovery, and provider reconciliation have
+  distinct states and fail-closed outcomes;
+- base/head, policy digest, repository identity, provider identity, and
+  freshness are all part of the evaluation binding, including same-head policy
+  changes;
+- raw bodies are transient, logs are redacted, retention/deletion are bounded,
+  and rollout has disabled/shadow/advisory/required modes; and
+- the GitHub remote Check Run write is explicitly non-transactional with the
+  durable store, so live race evidence is a promotion blocker rather than an
+  implied guarantee.
+
+TA-3-D does not select or deploy the hosting runtime, durable store, secret
+manager, TLS/proxy, or retention provider. Those choices belong to the
+single-outcome TA-3-I successor and must be proved against this contract. The
+current repository remains advisory until that external evidence exists.
 
 Node exit: both TA-3-D and every TA-3-I successor are complete, and:
 
