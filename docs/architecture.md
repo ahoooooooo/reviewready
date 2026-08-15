@@ -23,6 +23,10 @@
 12. `http-contract` and `observability`: framework-neutral raw-byte transport
     and bounded redacted event contracts; they contain no sockets, secrets,
     durable store, or deployment provider.
+13. `ta3-ingress`: provider-neutral trusted-ingress state transitions,
+    allowlisted webhook composition, replay aliases, leases, generation
+    fencing, outbox, and provider-reconciliation contracts. Its in-memory
+    store is a deterministic reference for tests, not production durability.
 
 Dependencies point inward: entry points -> adapters/report -> engine -> domain.
 The engine must never import GitHub, filesystem, process, or Actions modules.
@@ -238,6 +242,9 @@ required before any live result can be called authoritative. The design is
 accepted, but no production ingress or durable deployment exists yet. Until
 the live race, configuration, and external-governance evidence passes, the
 provider remains advisory and cannot change the v1 readiness JSON contract.
+The local TA-3-I core implementation exercises those state transitions and
+allowlist boundaries without claiming that an HTTPS endpoint, transactional
+store, secret manager, or live Check Run enforcement has been deployed.
 
 ## Error model
 

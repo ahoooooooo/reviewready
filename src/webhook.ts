@@ -11,6 +11,7 @@ import {
 
 export const MAX_WEBHOOK_HEADER_LENGTH = 512;
 export const MAX_WEBHOOK_BODY_BYTES = 1_048_576;
+export const MAX_WEBHOOK_ALLOWLIST_IDS = 500;
 
 export type WebhookHeaderValue = string | readonly string[];
 
@@ -26,6 +27,9 @@ export interface GitHubWebhookConfig {
   readonly webhookSecret: string;
   /** The hook identifier is deployment configuration, not trusted header input. */
   readonly hookId: string;
+  /** TA-3 deployments must provide these out-of-band allowlists. */
+  readonly allowedInstallationIds?: readonly number[] | undefined;
+  readonly allowedRepositoryIds?: readonly number[] | undefined;
 }
 
 export interface DurableWebhookRecord {
@@ -115,6 +119,23 @@ function positiveInteger(value: unknown): number | undefined {
   return Number.isSafeInteger(value) && (value as number) > 0 ? (value as number) : undefined;
 }
 
+function validAllowlist(value: unknown): value is readonly number[] | undefined {
+  if (value === undefined) {
+    return true;
+  }
+  if (!Array.isArray(value) || value.length === 0 || value.length > MAX_WEBHOOK_ALLOWLIST_IDS) {
+    return false;
+  }
+  const seen = new Set<number>();
+  for (const entry of value) {
+    if (!Number.isSafeInteger(entry) || (entry as number) <= 0 || seen.has(entry as number)) {
+      return false;
+    }
+    seen.add(entry as number);
+  }
+  return true;
+}
+
 function stringValue(value: unknown, max = MAX_WEBHOOK_HEADER_LENGTH): string | undefined {
   return typeof value === "string" &&
     value.length > 0 &&
@@ -185,7 +206,9 @@ export async function receiveGitHubWebhook(
     !Number.isSafeInteger(config.appId) ||
     config.appId <= 0 ||
     typeof config.webhookSecret !== "string" ||
-    stringValue(config.hookId) === undefined
+    stringValue(config.hookId) === undefined ||
+    !validAllowlist(config.allowedInstallationIds) ||
+    !validAllowlist(config.allowedRepositoryIds)
   ) {
     return invalid();
   }
@@ -249,6 +272,13 @@ export async function receiveGitHubWebhook(
   if (
     (event === "pull_request_review" && review === undefined) ||
     (event === "pull_request" && review !== undefined)
+  ) {
+    return invalid();
+  }
+  if (
+    (config.allowedInstallationIds !== undefined &&
+      !config.allowedInstallationIds.includes(installation)) ||
+    (config.allowedRepositoryIds !== undefined && !config.allowedRepositoryIds.includes(repository))
   ) {
     return invalid();
   }
