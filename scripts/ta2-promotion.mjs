@@ -304,7 +304,7 @@ function validateBundleEnvelope(bytes) {
   }
   if (
     !isRecord(parsed) ||
-    parsed.bundleVersion !== 1 ||
+    (parsed.bundleVersion !== 1 && parsed.bundleVersion !== 2) ||
     parsed.canonicalization !== "RFC8785" ||
     Object.keys(parsed).length !== BUNDLE_KEYS.length ||
     BUNDLE_KEYS.some((key) => !Object.prototype.hasOwnProperty.call(parsed, key)) ||
