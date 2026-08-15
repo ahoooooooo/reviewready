@@ -88,13 +88,12 @@ describe("auditPackageEntries", () => {
       ])
     );
     expect(buildStep).toBeGreaterThanOrEqual(0);
-    expect(distVerificationSteps).toHaveLength(2);
-    expect(distVerificationSteps[0]).toBeLessThan(buildStep);
-    expect(distVerificationSteps[1]).toBeGreaterThan(buildStep);
+    expect(distVerificationSteps).toHaveLength(1);
+    expect(distVerificationSteps[0]).toBeGreaterThan(buildStep);
     expect(packageAuditStep).toBeGreaterThanOrEqual(0);
     expect(packageVerificationStep).toBeGreaterThan(packageAuditStep);
     expect(buildStep).toBeLessThan(packageAuditStep);
-    expect(distVerificationSteps[1]).toBeLessThan(packageAuditStep);
+    expect(distVerificationSteps[0]).toBeLessThan(packageAuditStep);
     expect(buildStep).toBeLessThan(packageVerificationStep);
   });
 
