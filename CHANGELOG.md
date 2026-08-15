@@ -5,6 +5,16 @@ the project uses semantic versioning.
 
 ## [Unreleased]
 
+## [1.0.9] - 2026-08-15
+
+### Fixed
+
+- Accept GitHub's canonical `last`/`first` pagination metadata on an empty
+  bounded probe page instead of misclassifying a complete pull-request file
+  set as incomplete.
+- Preserve fail-closed behavior for non-empty probe pages, unexpected next
+  links, and contradictory last-page metadata.
+
 ## [1.0.8] - 2026-08-15
 
 ### Added
