@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { endpoint } from "@octokit/endpoint";
 import { getOctokit } from "@actions/github";
 
 import { createGitHubAuditClient } from "../src/github-audit-api.js";
@@ -7,6 +8,59 @@ import { createGitHubAuditClient } from "../src/github-audit-api.js";
 vi.mock("@actions/github", () => ({ getOctokit: vi.fn() }));
 
 const sha = "a".repeat(40);
+
+function expectedFetchUrl(
+  baseUrl: string,
+  route: string,
+  parameters: Record<string, unknown>
+): string {
+  const template = route.slice(route.indexOf(" ") + 1);
+  const pathParameters = new Set(
+    [...template.matchAll(/\{([^{}]+)\}/gu)].map((entry) => entry[1] as string)
+  );
+  const scalar = (value: unknown): string => {
+    if (
+      typeof value === "string" ||
+      typeof value === "number" ||
+      typeof value === "boolean" ||
+      typeof value === "bigint"
+    ) {
+      return String(value);
+    }
+    throw new Error("test route parameter is not scalar");
+  };
+  const encode = (value: unknown): string =>
+    encodeURIComponent(scalar(value)).replace(
+      /[!'()*]/gu,
+      (character) => "%" + character.charCodeAt(0).toString(16).toUpperCase()
+    );
+  const path = template.replace(/\{([^{}]+)\}/gu, (_placeholder, name: string) =>
+    encode(parameters[name])
+  );
+  const target = new URL(baseUrl.replace(/\/+$/u, "") + path);
+  for (const [key, value] of Object.entries(parameters)) {
+    if (pathParameters.has(key) || key === "request" || key === "headers" || value === undefined) {
+      continue;
+    }
+    target.searchParams.append(key, scalar(value));
+  }
+  return target.toString();
+}
+
+it("keeps URL attestation aligned with the real Octokit endpoint encoder", () => {
+  const baseUrl = "https://ghe.example/api/v3";
+  const route = "GET /repos/{owner}/{repo}/contents/{path}";
+  const parameters = {
+    owner: "octocat",
+    repo: "demo",
+    path: ".github/workflows/a.yml",
+    ref: sha
+  };
+
+  expect(endpoint(route, { baseUrl, ...parameters }).url).toBe(
+    expectedFetchUrl(baseUrl, route, parameters)
+  );
+});
 
 function response(data: unknown, headers: Record<string, string> = {}) {
   const normalizedData =
@@ -30,12 +84,17 @@ function response(data: unknown, headers: Record<string, string> = {}) {
 function octokitWithTransport(
   request: unknown,
   fetchImplementation?: unknown,
-  baseUrl = "https://api.github.com"
+  baseUrl = "https://api.github.com",
+  options: { readonly autoInvokeFetch?: boolean } = {}
 ): never {
   const callable = request as ((...arguments_: never[]) => unknown) & {
     readonly endpoint?: unknown;
     readonly defaults?: unknown;
   };
+  const baseRequest = request as (
+    route: string,
+    params: Record<string, unknown>
+  ) => Promise<unknown>;
   Object.assign(callable, {
     endpoint: {
       DEFAULTS: {
@@ -45,7 +104,49 @@ function octokitWithTransport(
         }
       }
     },
-    defaults: () => request
+    defaults: (defaults: unknown) => {
+      const configured = defaults as {
+        readonly request?: { readonly fetch?: typeof globalThis.fetch };
+      };
+      if (options.autoInvokeFetch === false) {
+        return request;
+      }
+      const boundedFetch = configured.request?.fetch;
+      if (boundedFetch === undefined) {
+        return request;
+      }
+      return async (route: string, params: Record<string, unknown>) => {
+        const state = { observed: false };
+        const fetch = ((...arguments_: Parameters<typeof globalThis.fetch>) => {
+          state.observed = true;
+          const [input, init] = arguments_;
+          const mappedInput =
+            typeof input === "string" && input === baseUrl
+              ? expectedFetchUrl(baseUrl, route, params)
+              : input;
+          return boundedFetch(mappedInput, init);
+        }) as typeof globalThis.fetch;
+        const originalRequest =
+          typeof params.request === "object" && params.request !== null
+            ? (params.request as Record<string, unknown>)
+            : {};
+        try {
+          const result = await baseRequest(route, {
+            ...params,
+            request: { ...originalRequest, fetch }
+          });
+          if (!state.observed) {
+            await fetch(baseUrl);
+          }
+          return result;
+        } catch (error) {
+          if (!state.observed) {
+            await fetch(baseUrl);
+          }
+          throw error;
+        }
+      };
+    }
   });
   return { request: callable } as never;
 }
@@ -173,6 +274,105 @@ describe("GitHub repository audit API adapter", () => {
     await expect(client.getRepository({ owner: "octocat", repo: "demo" })).rejects.toThrow(
       "repository-identity-mismatch"
     );
+  });
+
+  it("rejects an API endpoint with an unsafe scheme before creating a client", () => {
+    const request = vi.fn();
+    vi.mocked(getOctokit).mockReturnValue(
+      octokitWithTransport(request, undefined, "http://attacker.example/api")
+    );
+
+    expect(() => createGitHubAuditClient("secret")).toThrow("api-base-url-invalid");
+  });
+
+  it("rejects a bounded fetch target outside the configured API endpoint", async () => {
+    const request = vi.fn(async (_route: string, parameters: Record<string, unknown>) => {
+      const requestOptions = parameters.request as {
+        readonly fetch?: typeof globalThis.fetch;
+      };
+      if (typeof requestOptions.fetch !== "function") {
+        throw new Error("bounded fetch was not passed");
+      }
+      await requestOptions.fetch("https://attacker.example/forged");
+      return response({
+        owner: { login: "octocat", type: "Organization" },
+        name: "demo",
+        id: 123,
+        visibility: "public",
+        default_branch: "main"
+      });
+    });
+    vi.mocked(getOctokit).mockReturnValue(octokitWithTransport(request));
+
+    await expect(
+      createGitHubAuditClient("secret", { sleep: () => Promise.resolve() }).getRepository({
+        owner: "octocat",
+        repo: "demo"
+      })
+    ).rejects.toThrow("response-target-untrusted");
+  });
+
+  it("captures an encoded contents route against an Enterprise API base", async () => {
+    const captured: string[] = [];
+    const request = vi.fn(async (route: string, parameters: Record<string, unknown>) => {
+      const requestOptions = parameters.request as {
+        readonly fetch?: typeof globalThis.fetch;
+      };
+      if (typeof requestOptions.fetch !== "function") {
+        throw new Error("bounded fetch was not passed");
+      }
+      const target =
+        route === "GET /repos/{owner}/{repo}/contents/{path}"
+          ? "https://ghe.example/api/v3/repos/octocat/demo/contents/.github%2Fworkflows%2Ftrusted.yml?ref=" +
+            sha
+          : "https://ghe.example/api/v3/repos/octocat/demo";
+      captured.push(target);
+      const fetched = await requestOptions.fetch(target);
+      return { data: await fetched.text(), headers: {}, status: fetched.status };
+    });
+    vi.mocked(getOctokit).mockReturnValue(
+      octokitWithTransport(request, undefined, "https://ghe.example/api/v3")
+    );
+
+    await expect(
+      createGitHubAuditClient("secret", { sleep: () => Promise.resolve() }).getFileAtRevision({
+        owner: "octocat",
+        repo: "demo",
+        path: ".github/workflows/trusted.yml",
+        ref: sha
+      })
+    ).resolves.toBe("");
+    expect(captured).toEqual([
+      "https://ghe.example/api/v3/repos/octocat/demo/contents/.github%2Fworkflows%2Ftrusted.yml?ref=" +
+        sha
+    ]);
+  });
+
+  it("rejects a same-origin fetch target for a different API route", async () => {
+    const request = vi.fn(async (_route: string, parameters: Record<string, unknown>) => {
+      const requestOptions = parameters.request as {
+        readonly fetch?: typeof globalThis.fetch;
+      };
+      if (typeof requestOptions.fetch !== "function") {
+        throw new Error("bounded fetch was not passed");
+      }
+      await requestOptions.fetch("https://api.github.com/repos/octocat/demo/branches/main");
+      return response({
+        owner: { login: "octocat", type: "Organization" },
+        name: "demo",
+        id: 123,
+        visibility: "public",
+        default_branch: "main"
+      });
+    });
+    vi.mocked(getOctokit).mockReturnValue(octokitWithTransport(request));
+
+    await expect(
+      createGitHubAuditClient("secret", { sleep: () => Promise.resolve() }).getRepository({
+        owner: "octocat",
+        repo: "demo"
+      })
+    ).rejects.toThrow("response-target-untrusted");
   });
 
   it("maps read-only GitHub responses into the collector contract", async () => {
@@ -570,17 +770,22 @@ describe("GitHub repository audit API adapter", () => {
   });
 
   it("does not count a budget-rejected request beyond the bounded attempt total", async () => {
-    const request = vi.fn(() =>
-      Promise.resolve(
-        response({
-          default_branch: "main",
-          owner: { login: "octocat", type: "Organization" },
-          name: "demo",
-          id: 123,
-          visibility: "public"
-        })
-      )
-    );
+    const request = vi.fn(async (_route: string, params: Record<string, unknown>) => {
+      const requestOptions = params.request as {
+        readonly fetch?: typeof globalThis.fetch;
+      };
+      if (typeof requestOptions.fetch !== "function") {
+        throw new Error("bounded fetch was not passed");
+      }
+      await requestOptions.fetch("https://api.github.com");
+      return response({
+        default_branch: "main",
+        owner: { login: "octocat", type: "Organization" },
+        name: "demo",
+        id: 123,
+        visibility: "public"
+      });
+    });
     vi.mocked(getOctokit).mockReturnValue(octokitWithTransport(request));
     const client = createGitHubAuditClient("secret", { sleep: () => Promise.resolve() });
 
@@ -645,10 +850,10 @@ describe("GitHub repository audit API adapter", () => {
     );
     const request = vi.fn(async (_route: string, parameters: Record<string, unknown>) => {
       const requestOptions = parameters.request as {
-        readonly fetch: (...arguments_: never[]) => Promise<unknown>;
+        readonly fetch: typeof globalThis.fetch;
       };
-      const bounded = await requestOptions.fetch();
-      if (typeof bounded !== "object" || bounded === null || (bounded as Response).status !== 200) {
+      const bounded = await requestOptions.fetch("https://api.github.com");
+      if (bounded.status !== 200) {
         throw Object.assign(new Error("response too large"), { status: 413 });
       }
       return response({ default_branch: "main" });
@@ -821,7 +1026,503 @@ describe("GitHub repository audit API adapter", () => {
     );
   });
 
-  it("keeps raw workflow and policy source within the analyzer limit", async () => {
+  it.each([
+    ["invalid", "not-a-number", "response-header-invalid"],
+    ["oversized", String(3 * 1024 * 1024), "response-size-limit"]
+  ])("rejects a malformed transport byte header (%s)", async (_name, value, expected) => {
+    const request = vi.fn(() =>
+      Promise.resolve(
+        response({ default_branch: "main" }, { "x-reviewready-response-bytes": value })
+      )
+    );
+    vi.mocked(getOctokit).mockReturnValue(octokitWithTransport(request));
+
+    await expect(
+      createGitHubAuditClient("secret", { sleep: () => Promise.resolve() }).getRepository({
+        owner: "octocat",
+        repo: "demo"
+      })
+    ).rejects.toThrow(expected);
+  });
+
+  it("fails closed when no bounded transport measurement is present", async () => {
+    const request = vi.fn(() =>
+      Promise.resolve(response({ default_branch: "main" }, { "content-length": "1024" }))
+    );
+    vi.mocked(getOctokit).mockReturnValue(
+      octokitWithTransport(request, undefined, undefined, {
+        autoInvokeFetch: false
+      })
+    );
+
+    await expect(
+      createGitHubAuditClient("secret", { sleep: () => Promise.resolve() }).getRepository({
+        owner: "octocat",
+        repo: "demo"
+      })
+    ).rejects.toThrow("response-boundary-unavailable");
+  });
+
+  it("rejects an operation whose aggregate response bytes exceed the global bound", async () => {
+    const data = {
+      owner: { login: "octocat", type: "Organization" },
+      name: "demo",
+      id: 123,
+      visibility: "public",
+      default_branch: "main"
+    };
+    const serialized = JSON.stringify(data);
+    const body = serialized + " ".repeat(2 * 1024 * 1024 - serialized.length);
+    const request = vi.fn(async (_route: string, params: Record<string, unknown>) => {
+      const requestOptions = params.request as {
+        readonly fetch?: typeof globalThis.fetch;
+      };
+      if (typeof requestOptions.fetch !== "function") {
+        throw new Error("bounded fetch was not passed");
+      }
+      const fetched = await requestOptions.fetch(
+        expectedFetchUrl("https://api.github.com", _route, params)
+      );
+      return {
+        data: JSON.parse(await fetched.text()) as unknown,
+        headers: fetched.headers,
+        status: fetched.status
+      };
+    });
+    vi.mocked(getOctokit).mockReturnValue(
+      octokitWithTransport(request, () => Promise.resolve(new Response(body, { status: 200 })))
+    );
+    const client = createGitHubAuditClient("secret", { sleep: () => Promise.resolve() });
+
+    await expect(
+      (async () => {
+        for (let index = 0; index < 40; index += 1) {
+          await client.getRepository({ owner: "octocat", repo: "demo" });
+        }
+      })()
+    ).rejects.toThrow("response-total-size-limit");
+  });
+
+  it("counts bounded wire bytes even when JSON parsing removes padding", async () => {
+    const data = {
+      owner: { login: "octocat", type: "Organization" },
+      name: "demo",
+      id: 123,
+      visibility: "public",
+      default_branch: "main"
+    };
+    const serialized = JSON.stringify(data);
+    const body = serialized + " ".repeat(2 * 1024 * 1024 - serialized.length);
+    const request = vi.fn(async (_route: string, params: Record<string, unknown>) => {
+      const requestOptions = params.request as {
+        readonly fetch?: typeof globalThis.fetch;
+      };
+      if (typeof requestOptions.fetch !== "function") {
+        throw new Error("bounded fetch was not passed");
+      }
+      const fetched = await requestOptions.fetch(
+        expectedFetchUrl("https://api.github.com", _route, params)
+      );
+      const parsed = JSON.parse(await fetched.text()) as unknown;
+      return {
+        data: parsed,
+        headers: fetched.headers,
+        status: fetched.status
+      };
+    });
+    vi.mocked(getOctokit).mockReturnValue(
+      octokitWithTransport(request, () => Promise.resolve(new Response(body, { status: 200 })))
+    );
+    const client = createGitHubAuditClient("secret", { sleep: () => Promise.resolve() });
+
+    await expect(
+      (async () => {
+        for (let index = 0; index < 40; index += 1) {
+          await client.getRepository({ owner: "octocat", repo: "demo" });
+        }
+      })()
+    ).rejects.toThrow("response-total-size-limit");
+  });
+
+  it("fails closed when an adapter drops or falsifies bounded transport byte metadata", async () => {
+    const data = {
+      owner: { login: "octocat", type: "Organization" },
+      name: "demo",
+      id: 123,
+      visibility: "public",
+      default_branch: "main"
+    };
+    const serialized = JSON.stringify(data);
+    const body = serialized + " ".repeat(2 * 1024 * 1024 - serialized.length);
+    const request = vi.fn(async (_route: string, params: Record<string, unknown>) => {
+      const requestOptions = params.request as {
+        readonly fetch?: typeof globalThis.fetch;
+      };
+      if (typeof requestOptions.fetch !== "function") {
+        throw new Error("bounded fetch was not passed");
+      }
+      const fetched = await requestOptions.fetch(
+        expectedFetchUrl("https://api.github.com", _route, params)
+      );
+      const parsed = JSON.parse(await fetched.text()) as unknown;
+      return { data: parsed, headers: { "x-reviewready-response-bytes": "0" }, status: 200 };
+    });
+    vi.mocked(getOctokit).mockReturnValue(
+      octokitWithTransport(request, () => Promise.resolve(new Response(body, { status: 200 })))
+    );
+    const client = createGitHubAuditClient("secret", { sleep: () => Promise.resolve() });
+
+    await expect(
+      (async () => {
+        for (let index = 0; index < 40; index += 1) {
+          await client.getRepository({ owner: "octocat", repo: "demo" });
+        }
+      })()
+    ).rejects.toThrow("response-total-size-limit");
+  });
+
+  it("fails closed when an adapter bypasses the bounded transport entirely", async () => {
+    const data = {
+      owner: { login: "octocat", type: "Organization" },
+      name: "demo",
+      id: 123,
+      visibility: "public",
+      default_branch: "main"
+    };
+    const request = vi.fn(() =>
+      Promise.resolve(response(data, { "x-reviewready-response-bytes": "0" }))
+    );
+    vi.mocked(getOctokit).mockReturnValue(
+      octokitWithTransport(
+        request,
+        () => Promise.resolve(new Response("untrusted body", { status: 200 })),
+        "https://api.github.com",
+        { autoInvokeFetch: false }
+      )
+    );
+    const client = createGitHubAuditClient("secret", { sleep: () => Promise.resolve() });
+
+    await expect(client.getRepository({ owner: "octocat", repo: "demo" })).rejects.toThrow(
+      "response-boundary-unavailable"
+    );
+  });
+
+  it("fails closed when an adapter rejects before bounded transport observation", async () => {
+    const request = vi.fn(() =>
+      Promise.reject(Object.assign(new Error("untrusted adapter failure"), { status: 503 }))
+    );
+    vi.mocked(getOctokit).mockReturnValue(
+      octokitWithTransport(request, undefined, undefined, { autoInvokeFetch: false })
+    );
+    const client = createGitHubAuditClient("secret", { sleep: () => Promise.resolve() });
+
+    await expect(client.getRepository({ owner: "octocat", repo: "demo" })).rejects.toThrow(
+      "response-boundary-unavailable"
+    );
+  });
+
+  it("bounds fetches performed repeatedly inside one adapter call", async () => {
+    const request = vi.fn(async (_route: string, params: Record<string, unknown>) => {
+      const requestOptions = params.request as {
+        readonly fetch?: typeof globalThis.fetch;
+      };
+      if (typeof requestOptions.fetch !== "function") {
+        throw new Error("bounded fetch was not passed");
+      }
+      for (let index = 0; index < 769; index += 1) {
+        await requestOptions.fetch("https://api.github.com");
+      }
+      return response({ default_branch: "main" });
+    });
+    vi.mocked(getOctokit).mockReturnValue(octokitWithTransport(request));
+    const client = createGitHubAuditClient("secret", { sleep: () => Promise.resolve() });
+
+    await expect(client.getRepository({ owner: "octocat", repo: "demo" })).rejects.toThrow(
+      "request-budget-exceeded"
+    );
+  });
+
+  it("enforces the audit deadline when an adapter never settles", async () => {
+    const request = vi.fn(() => new Promise<never>(() => undefined));
+    vi.mocked(getOctokit).mockReturnValue(
+      octokitWithTransport(request, undefined, undefined, { autoInvokeFetch: false })
+    );
+    const client = createGitHubAuditClient("secret", {
+      deadlineMs: 10,
+      sleep: () => Promise.resolve()
+    });
+    const operation = client.getRepository({ owner: "octocat", repo: "demo" });
+    const timeout = new Promise<never>((_resolve, reject) => {
+      setTimeout(() => {
+        reject(new Error("test timeout"));
+      }, 250);
+    });
+
+    await expect(Promise.race([operation, timeout])).rejects.toThrow("audit-deadline-exceeded");
+  });
+
+  it("bounds a stream that emits too many zero-byte chunks", async () => {
+    const cancel = vi.fn(() => Promise.resolve());
+    const reader = {
+      read: vi.fn(() => Promise.resolve({ done: false, value: new Uint8Array(0) })),
+      cancel
+    };
+    const fetchImplementation = vi.fn(() =>
+      Promise.resolve({
+        body: { getReader: () => reader },
+        headers: new Headers(),
+        status: 200,
+        statusText: "OK"
+      })
+    );
+    const request = vi.fn(async (_route: string, parameters: Record<string, unknown>) => {
+      const requestOptions = parameters.request as {
+        readonly fetch?: typeof globalThis.fetch;
+      };
+      if (typeof requestOptions.fetch !== "function") {
+        throw new Error("bounded fetch was not passed");
+      }
+      await requestOptions.fetch("https://api.github.com");
+      return response({ default_branch: "main" });
+    });
+    vi.mocked(getOctokit).mockReturnValue(octokitWithTransport(request, fetchImplementation));
+
+    await expect(
+      createGitHubAuditClient("secret", { sleep: () => Promise.resolve() }).getRepository({
+        owner: "octocat",
+        repo: "demo"
+      })
+    ).rejects.toThrow("response-size-limit");
+    expect(cancel).toHaveBeenCalled();
+  });
+
+  it("bounds retry sleep by the overall audit deadline", async () => {
+    const request = vi.fn(async (_route: string, parameters: Record<string, unknown>) => {
+      const requestOptions = parameters.request as {
+        readonly fetch?: typeof globalThis.fetch;
+      };
+      if (typeof requestOptions.fetch !== "function") {
+        throw new Error("bounded fetch was not passed");
+      }
+      await requestOptions.fetch("https://api.github.com");
+      throw Object.assign(new Error("upstream unavailable"), {
+        response: { headers: { "retry-after": "0" } },
+        status: 503
+      });
+    });
+    vi.mocked(getOctokit).mockReturnValue(octokitWithTransport(request));
+    const operation = createGitHubAuditClient("secret", {
+      deadlineMs: 20,
+      sleep: () => new Promise<void>(() => undefined)
+    }).getRepository({ owner: "octocat", repo: "demo" });
+    const timeout = new Promise<never>((_resolve, reject) => {
+      setTimeout(() => {
+        reject(new Error("test timeout"));
+      }, 250);
+    });
+
+    await expect(Promise.race([operation, timeout])).rejects.toThrow("audit-deadline-exceeded");
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it("prefers an expired audit deadline over a late non-retryable request error", async () => {
+    let current = 100;
+    const request = vi.fn(() => {
+      current = 151;
+      throw Object.assign(new Error("bad request"), { status: 400 });
+    });
+    vi.mocked(getOctokit).mockReturnValue(
+      octokitWithTransport(request, undefined, undefined, { autoInvokeFetch: false })
+    );
+
+    await expect(
+      createGitHubAuditClient("secret", {
+        deadlineMs: 50,
+        now: () => current,
+        sleep: () => Promise.resolve()
+      }).getRepository({ owner: "octocat", repo: "demo" })
+    ).rejects.toThrow("audit-deadline-exceeded");
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it("normalizes throwing error-property access at the API boundary", async () => {
+    const failure = new Proxy(new Error("attacker error"), {
+      get() {
+        throw new Error("attacker error getter");
+      }
+    });
+    const request = vi.fn(async (_route: string, parameters: Record<string, unknown>) => {
+      const requestOptions = parameters.request as {
+        readonly fetch?: typeof globalThis.fetch;
+      };
+      if (typeof requestOptions.fetch !== "function") {
+        throw new Error("bounded fetch was not passed");
+      }
+      await requestOptions.fetch("https://api.github.com");
+      throw failure;
+    });
+    vi.mocked(getOctokit).mockReturnValue(octokitWithTransport(request));
+
+    await expect(
+      createGitHubAuditClient("secret", { sleep: () => Promise.resolve() }).getRepository({
+        owner: "octocat",
+        repo: "demo"
+      })
+    ).rejects.toThrow("response-error-invalid");
+  });
+
+  it("cancels a bounded response reader when the audit deadline expires", async () => {
+    const cancel = vi.fn(() => Promise.resolve());
+    const reader = {
+      read: vi.fn(() => new Promise<never>(() => undefined)),
+      cancel
+    };
+    const fetchImplementation = vi.fn(() =>
+      Promise.resolve({
+        body: { getReader: () => reader },
+        headers: new Headers(),
+        status: 200,
+        statusText: "OK"
+      })
+    );
+    const request = vi.fn(async (_route: string, parameters: Record<string, unknown>) => {
+      const requestOptions = parameters.request as {
+        readonly fetch?: typeof globalThis.fetch;
+      };
+      if (typeof requestOptions.fetch !== "function") {
+        throw new Error("bounded fetch was not passed");
+      }
+      await requestOptions.fetch("https://api.github.com");
+      return response({ default_branch: "main" });
+    });
+    vi.mocked(getOctokit).mockReturnValue(octokitWithTransport(request, fetchImplementation));
+    const client = createGitHubAuditClient("secret", {
+      deadlineMs: 10,
+      sleep: () => Promise.resolve()
+    });
+
+    await expect(client.getRepository({ owner: "octocat", repo: "demo" })).rejects.toThrow(
+      "audit-deadline-exceeded"
+    );
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(cancel).toHaveBeenCalled();
+  });
+
+  it("counts an oversized streamed error response toward the aggregate bound", async () => {
+    const oversizedBody = new Uint8Array(2 * 1024 * 1024 + 1);
+    const fetchImplementation = vi.fn(() =>
+      Promise.resolve(new Response(oversizedBody, { status: 503 }))
+    );
+    const request = vi.fn(async (_route: string, params: Record<string, unknown>) => {
+      const requestOptions = params.request as {
+        readonly fetch?: typeof globalThis.fetch;
+      };
+      if (typeof requestOptions.fetch !== "function") {
+        throw new Error("bounded fetch was not passed");
+      }
+      const fetched = await requestOptions.fetch(
+        expectedFetchUrl("https://api.github.com", _route, params)
+      );
+      throw Object.assign(new Error("upstream unavailable"), {
+        response: { headers: Object.fromEntries(fetched.headers.entries()) },
+        status: 503
+      });
+    });
+    vi.mocked(getOctokit).mockReturnValue(octokitWithTransport(request, fetchImplementation));
+    const client = createGitHubAuditClient("secret", { sleep: () => Promise.resolve() });
+    let aggregateFailure: unknown;
+
+    for (let index = 0; index < 40 && aggregateFailure === undefined; index += 1) {
+      try {
+        await client.getRepository({ owner: "octocat", repo: "demo" });
+      } catch (error) {
+        if (error instanceof Error && error.message.includes("response-total-size-limit")) {
+          aggregateFailure = error;
+        }
+      }
+    }
+
+    expect(aggregateFailure).toBeInstanceOf(Error);
+  });
+
+  it("counts bounded bytes from retryable error responses", async () => {
+    const body = " ".repeat(2 * 1024 * 1024);
+    const request = vi.fn(async (_route: string, params: Record<string, unknown>) => {
+      const requestOptions = params.request as {
+        readonly fetch?: typeof globalThis.fetch;
+      };
+      if (typeof requestOptions.fetch !== "function") {
+        throw new Error("bounded fetch was not passed");
+      }
+      const fetched = await requestOptions.fetch("https://api.github.com", { method: "GET" });
+      const failure = Object.assign(new Error("upstream unavailable"), {
+        response: { headers: Object.fromEntries(fetched.headers.entries()) },
+        status: 503
+      });
+      throw failure;
+    });
+    vi.mocked(getOctokit).mockReturnValue(
+      octokitWithTransport(request, () => Promise.resolve(new Response(body, { status: 503 })))
+    );
+    const client = createGitHubAuditClient("secret", { sleep: () => Promise.resolve() });
+    let aggregateFailure: unknown;
+
+    for (let index = 0; index < 40 && aggregateFailure === undefined; index += 1) {
+      try {
+        await client.getRepository({ owner: "octocat", repo: "demo" });
+      } catch (error) {
+        if (error instanceof Error && error.message.includes("response-total-size-limit")) {
+          aggregateFailure = error;
+        }
+      }
+    }
+
+    expect(aggregateFailure).toBeInstanceOf(Error);
+  });
+
+  it("counts wire bytes before response-data validation fails", async () => {
+    const circular: Record<string, unknown> = { default_branch: "main" };
+    circular.self = circular;
+    const request = vi.fn(async (_route: string, params: Record<string, unknown>) => {
+      const requestOptions = params.request as {
+        readonly fetch?: typeof globalThis.fetch;
+      };
+      if (typeof requestOptions.fetch !== "function") {
+        throw new Error("bounded fetch was not passed");
+      }
+      await requestOptions.fetch("https://api.github.com");
+      return response(circular);
+    });
+    vi.mocked(getOctokit).mockReturnValue(
+      octokitWithTransport(request, () =>
+        Promise.resolve(new Response(" ".repeat(2 * 1024 * 1024), { status: 200 }))
+      )
+    );
+    const client = createGitHubAuditClient("secret", { sleep: () => Promise.resolve() });
+    let aggregateFailure: unknown;
+
+    for (let index = 0; index < 40 && aggregateFailure === undefined; index += 1) {
+      try {
+        await client.getRepository({ owner: "octocat", repo: "demo" });
+      } catch (error) {
+        if (error instanceof Error && error.message.includes("response-total-size-limit")) {
+          aggregateFailure = error;
+        }
+      }
+    }
+
+    expect(aggregateFailure).toBeInstanceOf(Error);
+  });
+
+  it("counts structured adapter data toward the aggregate response bound", async () => {
+    const data = {
+      owner: { login: "octocat", type: "Organization" },
+      name: "demo",
+      id: 123,
+      visibility: "public",
+      default_branch: "main",
+      padding: "x".repeat(1_800_000)
+    };
     const request = vi.fn(async (_route: string, parameters: Record<string, unknown>) => {
       const requestOptions = parameters.request as {
         readonly fetch?: typeof globalThis.fetch;
@@ -830,6 +1531,146 @@ describe("GitHub repository audit API adapter", () => {
         throw new Error("bounded fetch was not passed");
       }
       const fetched = await requestOptions.fetch("https://api.github.com");
+      return { data, headers: fetched.headers, status: fetched.status };
+    });
+    vi.mocked(getOctokit).mockReturnValue(
+      octokitWithTransport(request, () => Promise.resolve(new Response("x", { status: 200 })))
+    );
+    const client = createGitHubAuditClient("secret", { sleep: () => Promise.resolve() });
+    let aggregateFailure: unknown;
+
+    for (let index = 0; index < 40 && aggregateFailure === undefined; index += 1) {
+      try {
+        await client.getRepository({ owner: "octocat", repo: "demo" });
+      } catch (error) {
+        if (error instanceof Error && error.message.includes("response-total-size-limit")) {
+          aggregateFailure = error;
+        }
+      }
+    }
+
+    expect(aggregateFailure).toBeInstanceOf(Error);
+  });
+
+  it("normalizes exceptions from untrusted response header access", async () => {
+    const headers = {
+      get: () => {
+        throw new Error("attacker header getter");
+      }
+    };
+    const request = vi.fn(() =>
+      Promise.resolve({
+        data: { default_branch: "main" },
+        headers,
+        status: 200
+      })
+    );
+    vi.mocked(getOctokit).mockReturnValue(octokitWithTransport(request));
+
+    await expect(
+      createGitHubAuditClient("secret", { sleep: () => Promise.resolve() }).getRepository({
+        owner: "octocat",
+        repo: "demo"
+      })
+    ).rejects.toThrow("response-header-invalid");
+  });
+
+  it("normalizes exceptions from an untrusted response headers get getter", async () => {
+    const headers = new Proxy(
+      {},
+      {
+        get(_target, property) {
+          if (property === "get") {
+            throw new Error("attacker headers get getter");
+          }
+          return undefined;
+        }
+      }
+    );
+    const request = vi.fn(() =>
+      Promise.resolve({
+        data: { default_branch: "main" },
+        headers,
+        status: 200
+      })
+    );
+    vi.mocked(getOctokit).mockReturnValue(octokitWithTransport(request));
+
+    await expect(
+      createGitHubAuditClient("secret", { sleep: () => Promise.resolve() }).getRepository({
+        owner: "octocat",
+        repo: "demo"
+      })
+    ).rejects.toThrow("response-header-invalid");
+  });
+
+  it("normalizes exceptions from an untrusted response headers property", async () => {
+    const responseObject = new Proxy(response({ default_branch: "main" }), {
+      get(target, property, receiver) {
+        if (property === "headers") {
+          throw new Error("attacker response headers getter");
+        }
+        return Reflect.get(target, property, receiver) as unknown;
+      }
+    });
+    const request = vi.fn(() => Promise.resolve(responseObject));
+    vi.mocked(getOctokit).mockReturnValue(octokitWithTransport(request));
+
+    await expect(
+      createGitHubAuditClient("secret", { sleep: () => Promise.resolve() }).getRepository({
+        owner: "octocat",
+        repo: "demo"
+      })
+    ).rejects.toThrow("response-object-invalid");
+  });
+
+  it("normalizes exceptions from nested error response data", async () => {
+    const errorResponse = new Proxy(
+      { headers: {}, data: { message: "denied" } },
+      {
+        get(target, property, receiver) {
+          if (property === "data") {
+            throw new Error("attacker response data getter");
+          }
+          return Reflect.get(target, property, receiver) as unknown;
+        }
+      }
+    );
+    const failure = Object.assign(new Error("denied"), {
+      response: errorResponse,
+      status: 400
+    });
+    const request = vi.fn(async (_route: string, parameters: Record<string, unknown>) => {
+      const requestOptions = parameters.request as {
+        readonly fetch?: typeof globalThis.fetch;
+      };
+      if (typeof requestOptions.fetch !== "function") {
+        throw new Error("bounded fetch was not passed");
+      }
+      await requestOptions.fetch("https://api.github.com");
+      throw failure;
+    });
+    vi.mocked(getOctokit).mockReturnValue(octokitWithTransport(request));
+
+    await expect(
+      createGitHubAuditClient("secret", { sleep: () => Promise.resolve() }).getRepository({
+        owner: "octocat",
+        repo: "demo"
+      })
+    ).rejects.toThrow("response-error-invalid");
+  });
+
+  it("keeps raw workflow and policy source within the analyzer limit", async () => {
+    const request = vi.fn(async (_route: string, parameters: Record<string, unknown>) => {
+      const requestOptions = parameters.request as {
+        readonly fetch?: typeof globalThis.fetch;
+      };
+      if (typeof requestOptions.fetch !== "function") {
+        throw new Error("bounded fetch was not passed");
+      }
+      const fetched = await requestOptions.fetch(
+        expectedFetchUrl("https://api.github.com", _route, parameters)
+      );
       return { data: await fetched.text(), headers: {}, status: fetched.status };
     });
     const rawRequest = Object.assign(request, {
@@ -867,7 +1708,9 @@ describe("GitHub repository audit API adapter", () => {
       if (typeof requestOptions.fetch !== "function") {
         throw new Error("bounded fetch was not passed");
       }
-      const fetched = await requestOptions.fetch("https://api.github.com");
+      const fetched = await requestOptions.fetch(
+        expectedFetchUrl("https://api.github.com", _route, parameters)
+      );
       return { data: await fetched.text(), headers: {}, status: fetched.status };
     });
     const rawRequest = Object.assign(request, {
@@ -899,7 +1742,9 @@ describe("GitHub repository audit API adapter", () => {
       if (typeof requestOptions.fetch !== "function") {
         throw new Error("bounded fetch was not passed");
       }
-      const fetched = await requestOptions.fetch("https://api.github.com");
+      const fetched = await requestOptions.fetch(
+        expectedFetchUrl("https://api.github.com", _route, parameters)
+      );
       return { data: await fetched.text(), headers: {}, status: fetched.status };
     });
     const rawRequest = Object.assign(request, {
@@ -927,7 +1772,9 @@ describe("GitHub repository audit API adapter", () => {
       if (typeof requestOptions.fetch !== "function") {
         throw new Error("bounded fetch was not passed");
       }
-      const fetched = await requestOptions.fetch("https://api.github.com");
+      const fetched = await requestOptions.fetch(
+        expectedFetchUrl("https://api.github.com", _route, parameters)
+      );
       return { data: await fetched.text(), headers: {}, status: fetched.status };
     });
     const rawRequest = Object.assign(request, {
@@ -1017,7 +1864,9 @@ describe("GitHub repository audit API adapter", () => {
 
   it("fails closed when a raw request returns parser data without byte capture", async () => {
     const request = vi.fn(() => Promise.resolve(response("on: pull_request\njobs: {}")));
-    vi.mocked(getOctokit).mockReturnValue(octokitWithTransport(request));
+    vi.mocked(getOctokit).mockReturnValue(
+      octokitWithTransport(request, undefined, undefined, { autoInvokeFetch: false })
+    );
     const client = createGitHubAuditClient("secret", { sleep: () => Promise.resolve() });
 
     await expect(
@@ -1027,7 +1876,7 @@ describe("GitHub repository audit API adapter", () => {
         path: ".github/workflows/reviewready.yml",
         ref: sha
       })
-    ).rejects.toThrow("raw-byte-capture-unavailable");
+    ).rejects.toThrow("response-boundary-unavailable");
   });
 
   it("fails closed when a bounded raw transport cannot be installed", async () => {
@@ -1076,7 +1925,9 @@ describe("GitHub repository audit API adapter", () => {
       if (typeof fetchImplementation !== "function") {
         throw new Error("bounded fetch was not passed to the request");
       }
-      const boundedResponse = await fetchImplementation("https://api.github.com");
+      const boundedResponse = await fetchImplementation(
+        expectedFetchUrl("https://api.github.com", _route, parameters)
+      );
       if (boundedResponse.status >= 400) {
         throw Object.assign(new Error("response failed"), { status: boundedResponse.status });
       }
@@ -1116,7 +1967,9 @@ describe("GitHub repository audit API adapter", () => {
         if (typeof fetchImplementation !== "function") {
           throw new Error("bounded fetch was not passed to the request");
         }
-        const boundedResponse = await fetchImplementation("https://api.github.com");
+        const boundedResponse = await fetchImplementation(
+          expectedFetchUrl("https://api.github.com", _route, parameters)
+        );
         if (boundedResponse.status >= 400) {
           throw Object.assign(new Error("response failed"), { status: boundedResponse.status });
         }
@@ -1145,11 +1998,13 @@ describe("GitHub repository audit API adapter", () => {
   it("does not accept a parser-swallowed oversized raw response", async () => {
     const oversized = '{"default_branch":"main"}' + " ".repeat(2 * 1024 * 1024);
     let boundedFetch: ((input: string) => Promise<Response>) | undefined;
-    const parserRequest = vi.fn(async () => {
+    const parserRequest = vi.fn(async (route: string, parameters: Record<string, unknown>) => {
       if (boundedFetch === undefined) {
         throw new Error("bounded fetch was not installed");
       }
-      const parsedResponse = await boundedFetch("https://api.github.com");
+      const parsedResponse = await boundedFetch(
+        expectedFetchUrl("https://api.github.com", route, parameters)
+      );
       const data = await parsedResponse.text().catch(() => "");
       if (parsedResponse.status >= 400) {
         throw Object.assign(new Error("response failed"), { status: parsedResponse.status });
@@ -1194,11 +2049,13 @@ describe("GitHub repository audit API adapter", () => {
   it("cancels a response stream when the declared body is oversized", async () => {
     let cancel: (() => Promise<void>) | undefined;
     let boundedFetch: ((input: string) => Promise<Response>) | undefined;
-    const parserRequest = vi.fn(async () => {
+    const parserRequest = vi.fn(async (route: string, parameters: Record<string, unknown>) => {
       if (boundedFetch === undefined) {
         throw new Error("bounded fetch was not installed");
       }
-      const parsedResponse = await boundedFetch("https://api.github.com");
+      const parsedResponse = await boundedFetch(
+        expectedFetchUrl("https://api.github.com", route, parameters)
+      );
       await parsedResponse.text();
       return { data: "", headers: {}, status: parsedResponse.status };
     });
@@ -1256,14 +2113,21 @@ describe("GitHub repository audit API adapter", () => {
         failedRequests.add(requestKey);
         return Promise.reject(Object.assign(new Error("busy"), { status: 503 }));
       }
+      const requestOptions = params.request as {
+        readonly fetch?: typeof globalThis.fetch;
+      };
+      if (typeof requestOptions.fetch !== "function") {
+        throw new Error("bounded fetch was not passed");
+      }
+      const observed = requestOptions.fetch("https://api.github.com");
       if (route === "GET /repos/{owner}/{repo}") {
-        return Promise.resolve(response({ default_branch: "main" }));
+        return observed.then(() => response({ default_branch: "main" }));
       }
       if (route === "GET /repos/{owner}/{repo}/branches/{branch}") {
-        return Promise.resolve(response({ name: "main", commit: { sha } }));
+        return observed.then(() => response({ name: "main", commit: { sha } }));
       }
       if (route === "GET /repos/{owner}/{repo}/branches/{branch}/protection") {
-        return Promise.resolve(
+        return observed.then(() =>
           response({
             required_status_checks: null,
             enforce_admins: { enabled: true },
@@ -1274,11 +2138,11 @@ describe("GitHub repository audit API adapter", () => {
         );
       }
       if (route === "GET /repos/{owner}/{repo}/rulesets") {
-        return Promise.resolve(response(params.page === 1 ? ruleSummaries : []));
+        return observed.then(() => response(params.page === 1 ? ruleSummaries : []));
       }
       if (route === "GET /repos/{owner}/{repo}/rulesets/{ruleset_id}") {
         const id = params.ruleset_id;
-        return Promise.resolve(
+        return observed.then(() =>
           response({
             id,
             name: "ruleset-" + String(id),
@@ -1294,7 +2158,7 @@ describe("GitHub repository audit API adapter", () => {
         expect(params).toMatchObject({ ref: sha });
         expect(params).not.toHaveProperty("page");
         expect(params).not.toHaveProperty("per_page");
-        return Promise.resolve(response(workflowEntries));
+        return observed.then(() => response(workflowEntries));
       }
       if (route === "GET /repos/{owner}/{repo}/contents/{path}") {
         const requestOptions = params.request as {
@@ -1554,6 +2418,61 @@ describe("GitHub repository audit API adapter", () => {
       "GET /repos/{owner}/{repo}/rulesets",
       expect.objectContaining({ page: 2 })
     );
+  });
+
+  it("waits for in-flight ruleset detail workers after one worker fails", async () => {
+    let releaseBlockedWorker!: () => void;
+    const blockedWorker = new Promise<void>((resolve) => {
+      releaseBlockedWorker = resolve;
+    });
+    const request = vi.fn(async (route: string, params: Record<string, unknown>) => {
+      if (route === "GET /repos/{owner}/{repo}/rulesets") {
+        return Promise.resolve(params.page === 1 ? response([{ id: 7 }, { id: 8 }]) : response([]));
+      }
+      if (route === "GET /repos/{owner}/{repo}/rulesets/{ruleset_id}") {
+        const requestOptions = params.request as {
+          readonly fetch?: typeof globalThis.fetch;
+        };
+        if (typeof requestOptions.fetch !== "function") {
+          throw new Error("bounded fetch was not passed");
+        }
+        if (params.ruleset_id === 7) {
+          await requestOptions.fetch("https://api.github.com");
+          throw Object.assign(new Error("detail failed"), { status: 500 });
+        }
+        await blockedWorker;
+        await requestOptions.fetch("https://api.github.com");
+        return response({
+          id: 8,
+          name: "second",
+          target: "branch",
+          enforcement: "active",
+          conditions: { ref_name: { include: ["~DEFAULT_BRANCH"] } },
+          bypass_actors: [],
+          rules: []
+        });
+      }
+      throw new Error("unexpected route");
+    });
+    vi.mocked(getOctokit).mockReturnValue(octokitWithTransport(request));
+    const operation = createGitHubAuditClient("secret", {
+      sleep: () => Promise.resolve()
+    }).listRulesets({ owner: "octocat", repo: "demo" });
+    const earlyResult = await Promise.race([
+      operation.then(
+        () => "settled",
+        () => "settled"
+      ),
+      new Promise<string>((resolve) => {
+        setTimeout(() => {
+          resolve("pending");
+        }, 10);
+      })
+    ]);
+
+    expect(earlyResult).toBe("pending");
+    releaseBlockedWorker();
+    await expect(operation).rejects.toThrow("request-failed");
   });
 
   it("preserves an organization ruleset repository scope", async () => {
@@ -1816,27 +2735,30 @@ describe("GitHub repository audit API adapter", () => {
 
   it("keeps the bounded ruleset maximum within the request budget", async () => {
     const summaries = Array.from({ length: 100 }, (_, index) => ({ id: index + 1 }));
-    const request = vi.fn((route: string, params: Record<string, unknown>) => {
+    const request = vi.fn(async (route: string, params: Record<string, unknown>) => {
+      const requestOptions = params.request as {
+        readonly fetch?: typeof globalThis.fetch;
+      };
+      if (typeof requestOptions.fetch !== "function") {
+        throw new Error("bounded fetch was not passed");
+      }
+      await requestOptions.fetch("https://api.github.com");
       if (route === "GET /repos/{owner}/{repo}/rulesets") {
-        return params.page === 1
-          ? Promise.resolve(response(summaries))
-          : Promise.resolve(response([]));
+        return params.page === 1 ? response(summaries) : response([]);
       }
       if (route === "GET /repos/{owner}/{repo}/rulesets/{ruleset_id}") {
         const id = params.ruleset_id;
-        return Promise.resolve(
-          response({
-            id,
-            name: "ruleset-" + String(id),
-            target: "branch",
-            enforcement: "active",
-            conditions: { ref_name: { include: ["~DEFAULT_BRANCH"] } },
-            bypass_actors: [],
-            rules: []
-          })
-        );
+        return response({
+          id,
+          name: "ruleset-" + String(id),
+          target: "branch",
+          enforcement: "active",
+          conditions: { ref_name: { include: ["~DEFAULT_BRANCH"] } },
+          bypass_actors: [],
+          rules: []
+        });
       }
-      return Promise.reject(Object.assign(new Error("unexpected"), { status: 500 }));
+      throw Object.assign(new Error("unexpected"), { status: 500 });
     });
     vi.mocked(getOctokit).mockReturnValue(octokitWithTransport(request));
 
@@ -2683,7 +3605,9 @@ describe("GitHub repository audit API adapter", () => {
     ).rejects.toThrow("workflow-entry-type-invalid");
 
     const invalidFile = vi.fn(() => Promise.resolve(response({ content: "not raw text" })));
-    vi.mocked(getOctokit).mockReturnValue(octokitWithTransport(invalidFile));
+    vi.mocked(getOctokit).mockReturnValue(
+      octokitWithTransport(invalidFile, undefined, undefined, { autoInvokeFetch: false })
+    );
     await expect(
       createGitHubAuditClient("secret", { sleep: () => Promise.resolve() }).getFileAtRevision({
         owner: "octocat",
@@ -2691,7 +3615,7 @@ describe("GitHub repository audit API adapter", () => {
         path: ".reviewready.yml",
         ref: sha
       })
-    ).rejects.toThrow("raw-byte-capture-unavailable");
+    ).rejects.toThrow("response-boundary-unavailable");
 
     const invalidTags = vi.fn(() => Promise.resolve(response({ pattern: "*" })));
     vi.mocked(getOctokit).mockReturnValue(octokitWithTransport(invalidTags));

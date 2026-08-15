@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { createHash } from "node:crypto";
 import { pathToFileURL } from "node:url";
 
 import { auditRepository, renderAuditJson, renderAuditSarif, type AuditReport } from "./audit.js";
@@ -44,6 +45,7 @@ interface ParsedArguments {
   policy: string | undefined;
   input: string | undefined;
   bundle: string | undefined;
+  bundleSha256: string | undefined;
   revision: string | undefined;
   github: string | undefined;
   ref: string | undefined;
@@ -56,7 +58,7 @@ interface ParsedArguments {
 }
 
 const usage =
-  "Usage: reviewready <validate|check|explain> --policy <path> [--input <path>] [--json]; reviewready audit --input <snapshot> [--json|--sarif]; reviewready audit collect --github <owner/repo> --revision <full-sha> [options]; reviewready audit replay --bundle <path> [--json|--sarif]";
+  "Usage: reviewready <validate|check|explain> --policy <path> [--input <path>] [--json]; reviewready audit --input <snapshot> [--json|--sarif]; reviewready audit collect --github <owner/repo> --revision <full-sha> [options]; reviewready audit replay --bundle <path> [--bundle-sha256 <sha256>] [--json|--sarif]";
 
 const defaultIo: CliIo = {
   readFile: (path) => readBoundedFile(path),
@@ -77,6 +79,7 @@ function parseArguments(argv: readonly string[]): ParsedArguments {
   let policy: string | undefined;
   let input: string | undefined;
   let bundle: string | undefined;
+  let bundleSha256: string | undefined;
   let revision: string | undefined;
   let github: string | undefined;
   let ref: string | undefined;
@@ -101,6 +104,7 @@ function parseArguments(argv: readonly string[]): ParsedArguments {
       option !== "--policy" &&
       option !== "--input" &&
       option !== "--bundle" &&
+      option !== "--bundle-sha256" &&
       option !== "--revision" &&
       option !== "--github" &&
       option !== "--ref" &&
@@ -126,6 +130,11 @@ function parseArguments(argv: readonly string[]): ParsedArguments {
         throw new InputError("CLI_USAGE", 'Option "--bundle" may be provided only once.');
       }
       bundle = value;
+    } else if (option === "--bundle-sha256") {
+      if (bundleSha256 !== undefined) {
+        throw new InputError("CLI_USAGE", 'Option "--bundle-sha256" may be provided only once.');
+      }
+      bundleSha256 = value;
     } else if (option === "--revision") {
       if (revision !== undefined) {
         throw new InputError("CLI_USAGE", 'Option "--revision" may be provided only once.');
@@ -176,6 +185,7 @@ function parseArguments(argv: readonly string[]): ParsedArguments {
     policy,
     input,
     bundle,
+    bundleSha256,
     revision,
     github,
     ref,
@@ -198,7 +208,9 @@ function requiredPath(value: string | undefined, option: "--policy" | "--input")
 function validateCommandOptions(parsed: ParsedArguments): void {
   if (
     parsed.command !== "audit" &&
-    (parsed.bundle !== undefined || parsed.revision !== undefined)
+    (parsed.bundle !== undefined ||
+      parsed.bundleSha256 !== undefined ||
+      parsed.revision !== undefined)
   ) {
     throw new InputError(
       "CLI_USAGE",
@@ -212,6 +224,12 @@ function validateCommandOptions(parsed: ParsedArguments): void {
     if (parsed.bundle === undefined) {
       throw new InputError("CLI_USAGE", 'Audit replay requires "--bundle".');
     }
+    if (parsed.bundleSha256 !== undefined && !/^[0-9a-f]{64}$/iu.test(parsed.bundleSha256)) {
+      throw new InputError(
+        "CLI_USAGE",
+        'Option "--bundle-sha256" requires a 64-character SHA-256.'
+      );
+    }
     if (
       parsed.input !== undefined ||
       parsed.github !== undefined ||
@@ -224,7 +242,7 @@ function validateCommandOptions(parsed: ParsedArguments): void {
     ) {
       throw new InputError(
         "CLI_USAGE",
-        "Audit replay accepts only --bundle and an output renderer."
+        "Audit replay accepts only --bundle, --bundle-sha256, and an output renderer."
       );
     }
   }
@@ -235,7 +253,12 @@ function validateCommandOptions(parsed: ParsedArguments): void {
     if (!/^[0-9a-f]{40}$/iu.test(parsed.revision)) {
       throw new InputError("CLI_USAGE", "Audit collect requires a full 40-character revision SHA.");
     }
-    if (parsed.input !== undefined || parsed.bundle !== undefined || parsed.ref !== undefined) {
+    if (
+      parsed.input !== undefined ||
+      parsed.bundle !== undefined ||
+      parsed.bundleSha256 !== undefined ||
+      parsed.ref !== undefined
+    ) {
       throw new InputError(
         "CLI_USAGE",
         "Audit collect does not accept --input, --bundle, or --ref."
@@ -251,7 +274,9 @@ function validateCommandOptions(parsed: ParsedArguments): void {
   if (
     parsed.command === "audit" &&
     parsed.auditMode === "legacy" &&
-    (parsed.bundle !== undefined || parsed.revision !== undefined)
+    (parsed.bundle !== undefined ||
+      parsed.bundleSha256 !== undefined ||
+      parsed.revision !== undefined)
   ) {
     throw new InputError("CLI_USAGE", "Use audit collect or audit replay for bundle options.");
   }
@@ -463,7 +488,18 @@ export async function runCli(argv: readonly string[], io: CliIo = defaultIo): Pr
           const bundlePath = parsed.bundle as string;
           let report: AuditReport;
           try {
-            const bundle = parseCanonicalJsonBytes(await readCliBundle(bundlePath, io));
+            const bundleBytes = await readCliBundle(bundlePath, io);
+            if (
+              parsed.bundleSha256 !== undefined &&
+              createHash("sha256").update(bundleBytes).digest("hex") !==
+                parsed.bundleSha256.toLowerCase()
+            ) {
+              throw new InputError(
+                "AUDIT_BUNDLE_INVALID",
+                "Audit evidence bundle digest mismatch."
+              );
+            }
+            const bundle = parseCanonicalJsonBytes(bundleBytes);
             report = hydrateAuditEvidenceBundle(bundle).report;
           } catch (error) {
             if (error instanceof ReviewReadyError) {

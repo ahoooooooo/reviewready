@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // @ts-check
 
+import { Buffer } from "node:buffer";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { lstatSync, readFileSync } from "node:fs";
 import { dirname, resolve, sep } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -20,6 +21,11 @@ const REQUIRED_FILES = [
   "dist/cli.js",
   "dist/cli.d.ts"
 ];
+const MAX_CHILD_PROCESS_MS = 180_000;
+const MAX_PACKAGE_ENTRIES = 512;
+const MAX_PACKAGE_PATH_BYTES = 4 * 1024;
+const MAX_PACKAGE_FILE_BYTES = 20 * 1024 * 1024;
+const MAX_PACKAGE_TOTAL_BYTES = 20 * 1024 * 1024;
 
 const EXACT_ALLOWED_FILES = new Set([
   "LICENSE",
@@ -205,19 +211,44 @@ export function loadPlannedPackageEntries(projectRoot) {
   const output = execFileSync(
     process.execPath,
     [npmCliPath, "pack", "--dry-run", "--json", "--ignore-scripts"],
-    { cwd: projectRoot, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] }
+    {
+      cwd: projectRoot,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "inherit"],
+      timeout: MAX_CHILD_PROCESS_MS
+    }
   );
   const parsed = /** @type {unknown} */ (JSON.parse(output));
   const packResult = extractPackResult(parsed);
   if (!packResult) {
     throw new Error("npm pack returned an unexpected manifest");
   }
+  if (packResult.files.length > MAX_PACKAGE_ENTRIES) {
+    throw new Error("npm pack returned too many package files");
+  }
 
   const rootPrefix = resolve(projectRoot) + sep;
+  let totalBytes = 0;
   return packResult.files.map((file) => {
+    if (Buffer.byteLength(file.path, "utf8") > MAX_PACKAGE_PATH_BYTES) {
+      throw new Error("npm pack returned an overlong package path");
+    }
     const absolutePath = resolve(projectRoot, file.path);
     if (!absolutePath.startsWith(rootPrefix)) {
-      throw new Error(`npm pack returned an unsafe path: ${file.path}`);
+      throw new Error("npm pack returned an unsafe path: " + file.path);
+    }
+    let stats;
+    try {
+      stats = lstatSync(absolutePath);
+    } catch (error) {
+      throw new Error("npm pack returned an unavailable path: " + file.path, { cause: error });
+    }
+    if (stats.isSymbolicLink() || !stats.isFile() || stats.size > MAX_PACKAGE_FILE_BYTES) {
+      throw new Error("npm pack returned an oversized or non-regular file: " + file.path);
+    }
+    totalBytes += stats.size;
+    if (totalBytes > MAX_PACKAGE_TOTAL_BYTES) {
+      throw new Error("npm pack returned too many package content bytes");
     }
     return { path: file.path.replaceAll("\\", "/"), content: readFileSync(absolutePath, "utf8") };
   });

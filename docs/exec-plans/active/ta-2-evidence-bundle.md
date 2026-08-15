@@ -15,9 +15,15 @@ start until the remaining dogfood and promotion gates exit.
 - The evidence schema, canonicalizer, bundle projection/hydration, bounded
   base64 artifacts, exact-revision collector boundary, request metrics, CLI
   `audit collect`/`audit replay`, package exports, and tests are implemented.
-- The final local gate passed on 2026-08-14: 26 test files, 680 tests,
-  92.99% statements, 88.49% branches, 98.23% functions, and 92.89% lines.
+- The final local gate passed on 2026-08-15: 29 test files, 784 passed and
+  5 skipped (789 total), 92.63% statements, 88.17% branches, 98.50%
+  functions, and 92.53% lines.
   bundle/package smoke, clean-room replay, and the Action ncc build also passed.
+- Release preflight now reads external evidence and artifacts through bounded
+  descriptor-backed snapshots, binds clean-room installation to the verified
+  tarball digest, and reports incomplete TA-2 cleanup instead of hiding it.
+  The complete and compatibility quality gates verify the existing generated
+  tree before and after rebuilding it.
 - `git diff --check` passed. The canonical local fixture at
   `fixtures/audit/evidence-bundle-v1.json` passes strict canonical parsing,
   hydration, replay, package smoke, and release-preflight clean-room checks.
@@ -26,6 +32,15 @@ start until the remaining dogfood and promotion gates exit.
   because the remote ruleset contains semantics outside bundle v1. The live
   acceptance artifact and final promotion review remain pending; this plan does
   not treat the local fixture as a substitute for either one.
+- The production TA-2 workflow remains Ubuntu-bound for its no-follow filesystem
+  assumptions. Windows local verification still performs lstat/fstat and
+  post-read identity checks, but Node does not expose O_NOFOLLOW there; this
+  is a platform limitation, not an independent trusted-root claim.
+
+- A base-owned promotion entrypoint now fixes the repository, exact main SHA,
+  policy path, and workflow roots; it bounds child output and replay and keeps
+  raw evidence in runner temporary storage only. This is an execution path, not
+  accepted live evidence.
 - The first authenticated dogfood attempt reached the real repository ruleset
   but correctly stopped without bundle output: its official detail includes a
   `pull_request` review rule and additional required-status enforcement fields

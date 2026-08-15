@@ -231,7 +231,7 @@ jobs:
           SIGNATURE_FILE="$registry_dir/signatures.json" CONSUMER_DIR="$consumer_dir" node --input-type=module <<'NODE'
           import fs from "node:fs";
           import { execFileSync } from "node:child_process";
-          const output = execFileSync("npm", ["audit", "signatures", "--prefix", process.env.CONSUMER_DIR, "--json", "--include-attestations"], { encoding: "utf8", maxBuffer: 8 * 1024 * 1024 });
+           const output = execFileSync("npm", ["audit", "signatures", "--prefix", process.env.CONSUMER_DIR, "--json", "--include-attestations"], { encoding: "utf8", maxBuffer: 8 * 1024 * 1024, timeout: 180_000 });
           if (Buffer.byteLength(output, "utf8") > 8 * 1024 * 1024) throw new Error("npm signature output exceeds the bounded size");
           fs.writeFileSync(process.env.SIGNATURE_FILE, output, "utf8");
           NODE

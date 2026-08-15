@@ -919,6 +919,45 @@ describe("audit command", () => {
     expect(io.stderrLines).toEqual([]);
   });
 
+  it("rejects replay when the supplied bundle digest does not match", async () => {
+    const io = capture();
+    io.readBytes = () => Promise.resolve(replayBundle());
+
+    expect(
+      await runCli(
+        [
+          "audit",
+          "replay",
+          "--bundle",
+          "audit.bundle",
+          "--bundle-sha256",
+          "0".repeat(64),
+          "--json"
+        ],
+        io
+      )
+    ).toBe(2);
+    expect(io.stderrLines.join("\n")).toContain("digest mismatch");
+  });
+
+  it("accepts an uppercase form of the correct bundle digest", async () => {
+    const io = capture();
+    const bytes = replayBundle();
+    io.readBytes = () => Promise.resolve(bytes);
+    const digest = createHash("sha256").update(bytes).digest("hex").toUpperCase();
+
+    expect(
+      await runCli(
+        ["audit", "replay", "--bundle", "audit.bundle", "--bundle-sha256", digest, "--json"],
+        io
+      )
+    ).toBe(0);
+    expect(JSON.parse(io.stdoutLines.join(""))).toMatchObject({
+      auditVersion: 1,
+      status: "pass"
+    });
+  });
+
   it("rejects missing values and invalid option combinations before file access", async () => {
     const cases: readonly (readonly [string[], string])[] = [
       [["validate", "--policy"], "requires a path"],

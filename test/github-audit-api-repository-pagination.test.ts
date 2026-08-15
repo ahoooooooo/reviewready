@@ -9,11 +9,53 @@ function response(data: unknown, headers: Record<string, string> = {}) {
   return { data, headers, status: 200 };
 }
 
+function expectedFetchUrl(
+  baseUrl: string,
+  route: string,
+  parameters: Record<string, unknown>
+): string {
+  const template = route.slice(route.indexOf(" ") + 1);
+  const pathParameters = new Set(
+    [...template.matchAll(/\{([^{}]+)\}/gu)].map((entry) => entry[1] as string)
+  );
+  const scalar = (value: unknown): string => {
+    if (
+      typeof value === "string" ||
+      typeof value === "number" ||
+      typeof value === "boolean" ||
+      typeof value === "bigint"
+    ) {
+      return String(value);
+    }
+    throw new Error("test route parameter is not scalar");
+  };
+  const encode = (value: unknown): string =>
+    encodeURIComponent(scalar(value)).replace(
+      /[!'()*]/gu,
+      (character) => "%" + character.charCodeAt(0).toString(16).toUpperCase()
+    );
+  const path = template.replace(/\{([^{}]+)\}/gu, (_placeholder, name: string) =>
+    encode(parameters[name])
+  );
+  const target = new URL(baseUrl.replace(/\/+$/u, "") + path);
+  for (const [key, value] of Object.entries(parameters)) {
+    if (pathParameters.has(key) || key === "request" || key === "headers" || value === undefined) {
+      continue;
+    }
+    target.searchParams.append(key, scalar(value));
+  }
+  return target.toString();
+}
+
 function octokitWithTransport(request: unknown): never {
   const callable = request as ((...arguments_: never[]) => unknown) & {
     readonly endpoint?: unknown;
     readonly defaults?: unknown;
   };
+  const baseRequest = request as (
+    route: string,
+    params: Record<string, unknown>
+  ) => Promise<unknown>;
   Object.assign(callable, {
     endpoint: {
       DEFAULTS: {
@@ -21,7 +63,20 @@ function octokitWithTransport(request: unknown): never {
         request: { fetch: () => Promise.resolve(new Response("", { status: 200 })) }
       }
     },
-    defaults: () => request
+    defaults: (defaults: unknown) => {
+      const configured = defaults as {
+        readonly request?: { readonly fetch?: typeof globalThis.fetch };
+      };
+      const boundedFetch = configured.request?.fetch;
+      if (boundedFetch === undefined) {
+        return request;
+      }
+      return async (route: string, params: Record<string, unknown>) => {
+        const result = await baseRequest(route, params);
+        await boundedFetch(expectedFetchUrl("https://api.github.com", route, params));
+        return result;
+      };
+    }
   });
   return { request: callable } as never;
 }

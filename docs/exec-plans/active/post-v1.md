@@ -356,6 +356,8 @@ Exit:
   minimum Node runtime, and packed consumer behavior;
 - npm tarball/integrity/provenance, semantic-version tag, GitHub Release, stable
   Action ref, source commit, Action bundle, schemas, Marketplace, and docs agree;
+  release evidence uses the canonical artifact profile and generated root/Action
+  dist parity gate;
 - GitHub release immutability protects future releases; historical limitations
   remain documented rather than rewritten;
 - one consented external OSS pilot has reproducible sanitized evidence, including

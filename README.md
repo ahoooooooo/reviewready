@@ -34,6 +34,12 @@ contain these commands or the TA-2 bundle surface; they must not be treated as
 available from npm until a separately authorized release updates the package,
 dist, Action, schemas, and release evidence together.
 
+The checked-in TA-2 promotion workflow runs only on the exact main revision,
+fixes the repository, policy, and workflow roots in a trusted script, and
+replays the bundle without a token. It keeps raw evidence in runner temporary
+storage only; it is not live promotion evidence until a real run passes and is
+independently reviewed.
+
 Issue [#54](https://github.com/ahoooooooo/reviewready/issues/54) tracks live
 repository governance. The current required check selects the GitHub Actions
 App, which does not uniquely bind one workflow definition or event; the
@@ -433,8 +439,9 @@ npm run check
 ```
 
 `npm run check` enforces formatting, strict linting, TypeScript types, coverage
-thresholds, production build, package privacy checks, and the bundled JavaScript
-Action. See [CONTRIBUTING.md](CONTRIBUTING.md) for the red/green/regression workflow.
+thresholds, production build, generated dist parity, package privacy checks, and
+the bundled JavaScript Action. See [CONTRIBUTING.md](CONTRIBUTING.md) for the
+red/green/regression workflow.
 
 ## License
 

@@ -66,10 +66,16 @@ signatures/provenance, and a clean-room install before creating GitHub refs.
 
 ## 3. Verify the local artifact
 
+The package:smoke check intentionally installs and invokes the CLI from the
+candidate package. It is a trusted-release-artifact check with lifecycle scripts
+disabled, not a sandbox for hostile npm packages; do not point it at an
+unreviewed third-party tarball.
+
 Before publication:
 
 - inspect the tarball file list and package manifest;
-- run the privacy and credential-pattern audit against extracted tarball bytes;
+- run the privacy and credential-pattern audit against bounded tarball-member
+  bytes without extracting untrusted archive entries to disk;
 - verify package name, version, registry, integrity, and expected entry points;
 - install the tarball into a clean temporary consumer directory;
 - run policy validation plus ready and not-ready CLI fixtures;
