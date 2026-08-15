@@ -53,6 +53,14 @@ start until the remaining dogfood and promotion gates exit.
   stopped closed without an evidence bundle with the stable collection-failed
   diagnostic. This confirms no false pass under the workflow token, but it is
   not an acceptance artifact and does not close #55.
+- The main-bound promotion workflow now mints a repository-only, read-only
+  GitHub App installation token from the two repository secrets
+  `REVIEWREADY_AUDIT_APP_ID` and `REVIEWREADY_AUDIT_PRIVATE_KEY`. It binds the
+  token to `ahoooooooo/reviewready`, requests only the read permissions needed
+  by the collector, and passes the short-lived token only to collection. There
+  is no fallback to the built-in workflow token: missing or invalid App
+  credentials fail closed. This credential path improves API reachability; it
+  is not TA-2 acceptance evidence and does not widen the v1 bundle semantics.
 - The authenticated dogfood also exposed that the GitHub Contents workflow
   directory is not a paginated endpoint in the supported request contract. The
   adapter now sends only `ref`, accepts one bounded directory response, rejects

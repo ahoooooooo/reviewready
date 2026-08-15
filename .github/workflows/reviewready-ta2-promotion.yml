@@ -7,10 +7,6 @@ on:
 
 permissions:
   contents: read
-  pull-requests: read
-  checks: read
-  statuses: read
-  issues: read
 
 concurrency:
   group: reviewready-ta2-promotion-main
@@ -40,7 +36,19 @@ jobs:
       - name: Compile trusted source without package scripts
         run: node node_modules/typescript/bin/tsc -p tsconfig.build.json --outDir dist
 
+      - name: Mint repository-scoped audit token
+        id: audit-app-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
+        with:
+          app-id: ${{ secrets.REVIEWREADY_AUDIT_APP_ID }}
+          private-key: ${{ secrets.REVIEWREADY_AUDIT_PRIVATE_KEY }}
+          owner: ahoooooooo
+          repositories: reviewready
+          permission-administration: read
+          permission-contents: read
+          permission-metadata: read
+
       - name: Collect and replay bounded TA-2 evidence in runner temp only
         run: node scripts/ta2-promotion.mjs
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.audit-app-token.outputs.token }}

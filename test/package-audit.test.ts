@@ -120,12 +120,13 @@ describe("auditPackageEntries", () => {
     expect(compatibility).toContain("npm run verify:dist");
   });
 
-  it("gives the TA-2 collector explicit read-only scopes for sampled GitHub data", async () => {
+  it("keeps the built-in TA-2 workflow token to checkout-only scope", async () => {
     const workflow = await readFile(".github/workflows/reviewready-ta2-promotion.yml", "utf8");
 
-    expect(workflow).toContain(
-      "permissions:\n  contents: read\n  pull-requests: read\n  checks: read\n  statuses: read\n  issues: read"
-    );
+    expect(workflow).toContain("permissions:\n  contents: read\n\nconcurrency:");
+    for (const scope of ["pull-requests", "checks", "statuses", "issues"]) {
+      expect(workflow).not.toContain("\n  " + scope + ": read");
+    }
     expect(workflow).not.toMatch(
       /^\s+(?:contents|pull-requests|checks|statuses|issues):\s+write$/mu
     );
