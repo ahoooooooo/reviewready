@@ -150,12 +150,82 @@ describe("loadGitHubPullRequest", () => {
   });
 
   it("checks actionable reviewers once per coherent evidence read", async () => {
-    const permission = vi.fn(() => Promise.resolve<GitHubPermission>("write"));
+    const permission = vi.fn<GitHubGateway["getRepositoryPermission"]>(() =>
+      Promise.resolve<GitHubPermission>("write")
+    );
     const api = gateway({ getRepositoryPermission: permission });
 
     await loadGitHubPullRequest(event, ".reviewready.yml", api);
 
     expect(permission).toHaveBeenCalledTimes(2);
+  });
+
+  it("looks up permissions only for the latest opinionated review per login", async () => {
+    const requestedLogins: string[] = [];
+    const permission = vi.fn<GitHubGateway["getRepositoryPermission"]>(({ login }) => {
+      requestedLogins.push(login);
+      return Promise.resolve<GitHubPermission>("write");
+    });
+    const api = gateway({
+      listPullRequestReviews: vi.fn(() =>
+        Promise.resolve([
+          { login: "Approver", state: "APPROVED", submittedAt: "2026-08-11T00:00:00Z" },
+          {
+            login: "approver",
+            state: "CHANGES_REQUESTED",
+            submittedAt: "2026-08-11T01:00:00Z"
+          },
+          { login: "other", state: "APPROVED", submittedAt: "2026-08-11T00:30:00Z" }
+        ])
+      ),
+      getRepositoryPermission: permission
+    });
+
+    await loadGitHubPullRequest(event, ".reviewready.yml", api);
+
+    expect(permission).toHaveBeenCalledTimes(4);
+    expect(requestedLogins).toEqual(["approver", "other", "approver", "other"]);
+  });
+
+  it("keeps reviewer permission lookups below the small concurrency bound", async () => {
+    let inFlight = 0;
+    let maximumInFlight = 0;
+    let completed = 0;
+    const pending: Array<(permission: GitHubPermission) => void> = [];
+    const reviews = Array.from({ length: 12 }, (_, index) => ({
+      login: "reviewer-" + String(index),
+      state: "APPROVED",
+      submittedAt: "2026-08-11T00:" + String(index).padStart(2, "0") + ":00Z"
+    }));
+    const permission = vi.fn(
+      () =>
+        new Promise<GitHubPermission>((resolve) => {
+          inFlight += 1;
+          maximumInFlight = Math.max(maximumInFlight, inFlight);
+          pending.push((value) => {
+            inFlight -= 1;
+            completed += 1;
+            resolve(value);
+          });
+        })
+    );
+    const api = gateway({
+      listPullRequestReviews: vi.fn(() => Promise.resolve(reviews)),
+      getRepositoryPermission: permission
+    });
+
+    const loading = loadGitHubPullRequest(event, ".reviewready.yml", api);
+    while (completed < reviews.length * 2) {
+      while (pending.length === 0) {
+        await new Promise<void>((resolve) => setImmediate(resolve));
+      }
+      pending.shift()?.("write");
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+    await loading;
+
+    expect(permission).toHaveBeenCalledTimes(reviews.length * 2);
+    expect(maximumInFlight).toBeLessThanOrEqual(8);
   });
 
   it("canonicalizes multiple reviewer permissions and snapshot labels", async () => {

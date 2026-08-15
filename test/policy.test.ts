@@ -1,10 +1,17 @@
 import { readFile } from "node:fs/promises";
 
+import Ajv2020Module from "ajv/dist/2020.js";
 import { describe, expect, it } from "vitest";
 
 import { checkConclusions, policyLimits } from "../src/domain.js";
 import type { PolicyError } from "../src/errors.js";
 import { parsePolicy, POLICY_TEXT_SCHEMA_PATTERN } from "../src/policy.js";
+
+type Draft2020Constructor = new (options?: { readonly allErrors?: boolean }) => {
+  compile: (schema: object) => (data: unknown) => boolean;
+};
+
+const Ajv2020 = Ajv2020Module as unknown as Draft2020Constructor;
 
 const validPolicy = `
 version: 1
@@ -198,5 +205,83 @@ rules:
         "human_attestation"
       ])
     );
+  });
+
+  it("keeps a shared adversarial text corpus aligned with a Draft 2020-12 validator", async () => {
+    const schema = JSON.parse(await readFile("reviewready.schema.json", "utf8")) as object;
+    const validate = new Ajv2020({ allErrors: true }).compile(schema);
+    const cases = [
+      { name: "ordinary ASCII", value: "Testing", accepted: true },
+      { name: "ordinary Unicode", value: "測試", accepted: true },
+      { name: "combining accent with a letter", value: "Cafe\u0301", accepted: true },
+      { name: "leading whitespace", value: " Testing", accepted: false },
+      { name: "trailing whitespace", value: "Testing ", accepted: false },
+      { name: "exact code-point limit", value: "a".repeat(500), accepted: true },
+      { name: "over code-point limit", value: "a".repeat(501), accepted: false },
+      { name: "emoji code-point boundary", value: "😀".repeat(251), accepted: true },
+      { name: "CR", value: "Testing\rvalue", accepted: false },
+      { name: "LF", value: "Testing\nvalue", accepted: false },
+      { name: "ANSI CSI", value: "Testing\u001b[31m", accepted: false },
+      { name: "ANSI OSC", value: "Testing\u001b]0;owned\u0007", accepted: false },
+      { name: "bidi override", value: "Testing\u202e", accepted: false },
+      { name: "zero-width", value: "Testing\u200b", accepted: false },
+      { name: "invisible combining mark", value: "\u034f", accepted: false },
+      { name: "unicode format character", value: "Testing\u{e0001}", accepted: false }
+    ] as const;
+
+    for (const testCase of cases) {
+      const document = {
+        version: 1,
+        rules: [
+          {
+            id: "source",
+            when: { paths: { any: ["src/**"] } },
+            require: [{ type: "pr_body_section", heading: testCase.value }]
+          }
+        ]
+      };
+      let runtimeAccepted = true;
+      try {
+        parsePolicy(
+          [
+            "version: 1",
+            "rules:",
+            "  - id: source",
+            "    when:",
+            "      paths:",
+            "        any: [src/**]",
+            "    require:",
+            "      - type: pr_body_section",
+            "        heading: " + JSON.stringify(testCase.value)
+          ].join("\n")
+        );
+      } catch {
+        runtimeAccepted = false;
+      }
+
+      expect(runtimeAccepted, testCase.name + ": runtime").toBe(testCase.accepted);
+      expect(validate(document), testCase.name + ": JSON Schema").toBe(testCase.accepted);
+    }
+  });
+
+  it("applies the same safe text contract to descriptions", async () => {
+    const schema = JSON.parse(await readFile("reviewready.schema.json", "utf8")) as object;
+    const validate = new Ajv2020({ allErrors: true });
+    const document = {
+      version: 1,
+      rules: [
+        {
+          id: "source",
+          description: "\u034f",
+          when: { paths: { any: ["src/**"] } },
+          require: [{ type: "linked_issue" }]
+        }
+      ]
+    };
+
+    expect(() => parsePolicy(JSON.stringify(document))).toThrow(
+      expect.objectContaining<Partial<PolicyError>>({ code: "POLICY_TEXT_INVALID" })
+    );
+    expect(validate.compile(schema)(document)).toBe(false);
   });
 });

@@ -1,12 +1,26 @@
 # ReviewReady post-v1 trust roadmap
 
-Status: **PL-0 complete on 2026-08-13; TA-1 is next and has not started.**
+Status: **PL-0 complete on 2026-08-13; TA-1 local exit evidence is complete on
+the codex/ta-1-hardening branch.** The branch still requires normal GitHub
+integration review; no promotion to TA-2 has occurred.
 
 This is the forward execution plan after the verified v1.0.7 release. It does
 not authorize product implementation, repository-setting changes, publication,
 tag movement, or deployment by itself. The completed v1 plans and release
 evidence remain historical records; this file is the source of truth for future
 node order and promotion gates.
+
+## TA-1 current repair batch
+
+The active batch covers the retained v1 issues #18, #25, #26, #27, and #54.
+Local evidence includes direct CLI raw-byte/device-boundary regressions,
+independent v1 JSON compatibility assertions, Action/CLI JSON parity, latest
+reviewer-state permission selection with bounded concurrency, and a real
+Draft 2020-12 schema corpus. Focused tests and the complete local gate pass.
+Revision-bound live governance evidence is recorded in
+[docs/governance-evidence-ta1.md](../../governance-evidence-ta1.md), with
+unavailable settings and the remaining workflow-identity limitation explicitly
+marked advisory.
 
 ## Fixed node order
 

@@ -1,0 +1,48 @@
+{
+  "outputVersion": 1,
+  "status": "ready",
+  "policyVersion": 1,
+  "triggeredRules": ["all-evidence"],
+  "requirements": [
+    {
+      "key": "pr_body_section:testing",
+      "type": "pr_body_section",
+      "status": "satisfied",
+      "summary": "PR body section \"Testing\" has content",
+      "ruleIds": ["all-evidence"],
+      "evidence": "Found non-empty \"Testing\" section"
+    },
+    {
+      "key": "linked_issue",
+      "type": "linked_issue",
+      "status": "satisfied",
+      "summary": "Pull request links an issue",
+      "ruleIds": ["all-evidence"],
+      "evidence": "#7"
+    },
+    {
+      "key": "check:build:failure,success:github-actions",
+      "type": "check",
+      "status": "satisfied",
+      "summary": "Check \"build\" concludes success or failure",
+      "ruleIds": ["all-evidence"],
+      "evidence": "build: success (github-actions)"
+    },
+    {
+      "key": "maintainer_review:1",
+      "type": "maintainer_review",
+      "status": "satisfied",
+      "summary": "1 approving maintainer",
+      "ruleIds": ["all-evidence"],
+      "evidence": "1 approving maintainer"
+    },
+    {
+      "key": "human_attestation:I understand.",
+      "type": "human_attestation",
+      "status": "satisfied",
+      "summary": "Checked human attestation: \"I understand.\"",
+      "ruleIds": ["all-evidence"],
+      "evidence": "Exact checked task-list attestation found"
+    }
+  ]
+}

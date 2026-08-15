@@ -79,6 +79,7 @@ describe("bounded file reader", () => {
     expect(classifyFileSystemError({ code: "EISDIR" })).toBe("not_regular");
     expect(classifyFileSystemError({ code: "ELOOP" })).toBe("not_regular");
     expect(classifyFileSystemError({ code: "ENODEV" })).toBe("not_regular");
+    expect(classifyFileSystemError({ code: "ENXIO" })).toBe("not_regular");
     expect(classifyFileSystemError({ code: "EOVERFLOW" })).toBe("too_large");
     expect(classifyFileSystemError({ code: "EFBIG" })).toBe("too_large");
     expect(classifyFileSystemError({ code: "ERR_FS_FILE_TOO_LARGE" })).toBe("too_large");
@@ -125,6 +126,18 @@ describe("bounded file reader", () => {
       reason: "too_large"
     });
     expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("enforces raw byte boundaries for multibyte content", async () => {
+    const directory = await temporaryDirectory();
+    const path = join(directory, "unicode.txt");
+    await writeFile(path, "éé", "utf8");
+
+    await expect(readBoundedFile(path, 4)).resolves.toBe("éé");
+    await expect(readBoundedFile(path, 3)).rejects.toMatchObject({
+      name: "CliFileError",
+      reason: "too_large"
+    });
   });
 
   it("rejects same-inode content that changes size during the read", async () => {
@@ -361,6 +374,22 @@ describe("runCli", () => {
     expect(await runCli(["validate", "--policy", path], io)).toBe(2);
     expect(io.stderrLines).toEqual([
       "[POLICY_FILE_TOO_LARGE] Policy file exceeds the CLI raw-byte limit."
+    ]);
+  });
+
+  it("rejects an oversized normalized input before parsing JSON", async () => {
+    const directory = await temporaryDirectory();
+    const path = join(directory, "oversized.json");
+    await writeFile(path, Buffer.alloc(MAX_CLI_FILE_BYTES + 1, 0x20));
+
+    const io = capture();
+    io.readFile = (filePath) => readBoundedFile(filePath);
+
+    expect(
+      await runCli(["check", "--policy", fixture(".reviewready.yml"), "--input", path], io)
+    ).toBe(2);
+    expect(io.stderrLines).toEqual([
+      "[INPUT_FILE_TOO_LARGE] Input file exceeds the CLI raw-byte limit."
     ]);
   });
 
