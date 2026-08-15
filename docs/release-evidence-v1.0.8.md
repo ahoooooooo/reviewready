@@ -1,9 +1,9 @@
 # ReviewReady v1.0.8 release evidence
 
-This is the release-candidate checklist for the v1.0.8 package and Action
-release. Public coordinates, checksums, provenance, and registry metadata are
-intentionally not asserted until the protected release workflow verifies the
-exact artifact.
+This document records the v1.0.8 package and Action release. The
+machine-readable public coordinates are in
+docs/release-evidence-v1.0.8.json; all values were checked against the exact
+artifact and protected release workflow.
 
 ## Scope
 
@@ -24,14 +24,14 @@ exact artifact.
 
 ## Public verification
 
-- [ ] Publish the exact audited tarball through npm Trusted Publishing.
-- [ ] Verify npm latest, registry integrity, shasum, provenance, and clean-room
+- [x] Publish the exact audited tarball through npm Trusted Publishing.
+- [x] Verify npm latest, registry integrity, shasum, provenance, and clean-room
       install against that exact tarball.
-- [ ] Create and verify immutable semantic-version tag v1.0.8 and GitHub Release.
-- [ ] Move and verify the stable v1 Action tag only after npm verification.
-- [ ] Record exact public coordinates in
+- [x] Create and verify immutable semantic-version tag v1.0.8 and GitHub Release.
+- [x] Move and verify the stable v1 Action tag only after npm verification.
+- [x] Record exact public coordinates in
       docs/release-evidence-v1.0.8.json.
-- [ ] Update the trusted workflow pin in a protected follow-up change to the
+- [x] Update the trusted workflow pin in a protected follow-up change to the
       verified v1.0.8 release commit.
 
 ## Known boundaries
