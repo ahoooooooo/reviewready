@@ -40,6 +40,7 @@
     "./package.json": "./package.json",
     "./reviewready.schema.json": "./reviewready.schema.json",
     "./reviewready.audit.schema.json": "./reviewready.audit.schema.json",
+    "./reviewready.audit-evidence.schema.json": "./reviewready.audit-evidence.schema.json",
     "./reviewready.result.schema.json": "./reviewready.result.schema.json"
   },
   "files": [
@@ -47,6 +48,7 @@
     "dist/*.d.ts",
     "reviewready.schema.json",
     "reviewready.audit.schema.json",
+    "reviewready.audit-evidence.schema.json",
     "reviewready.result.schema.json",
     "README.md",
     "LICENSE"
@@ -64,10 +66,12 @@
     "format": "prettier --write .",
     "audit:dependencies": "npm audit --audit-level=high",
     "verify:package": "node scripts/verify-package.mjs",
+    "verify:dist": "node scripts/verify-dist.mjs",
     "package:smoke": "node scripts/package-smoke.mjs",
     "release:preflight": "node scripts/release-preflight.mjs",
     "release:verify": "node scripts/release-preflight.mjs --provenance",
-    "check": "npm run format:check && npm run lint && npm run typecheck && npm run bundle && npm run test:coverage && npm run verify:package && npm run package:smoke",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm run bundle && npm run verify:dist && npm run test:coverage && npm run verify:package && npm run package:smoke",
+    "check:compat": "npm run format:check && npm run lint && npm run typecheck && npm run bundle && npm run verify:dist && npm run test:coverage && npm run verify:package && npm run package:smoke",
     "prepublishOnly": "npm run check",
     "prepack": "npm run build"
   },

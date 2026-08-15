@@ -14,16 +14,12 @@ export const MAX_AUDIT_WORKFLOWS = 100;
 export const MAX_AUDIT_FINDINGS = 500;
 
 const SHA = z.string().regex(/^[0-9a-f]{40}$/iu);
-const TEXT = z.string().min(1).max(512);
-function hasControlCharacter(value: string): boolean {
-  for (const character of value) {
-    const codePoint = character.codePointAt(0) ?? 0;
-    if ((codePoint >= 0 && codePoint <= 31) || (codePoint >= 127 && codePoint <= 159)) {
-      return true;
-    }
-  }
-  return false;
-}
+const UNSAFE_TEXT = /[\p{Control}\p{Format}\p{Surrogate}\u2028\u2029]/u;
+const TEXT = z
+  .string()
+  .min(1)
+  .refine((value) => Array.from(value).length <= 512)
+  .refine((value) => !UNSAFE_TEXT.test(value));
 
 const REPOSITORY_PATH = TEXT.refine(
   (value) =>
@@ -31,20 +27,36 @@ const REPOSITORY_PATH = TEXT.refine(
     !value.startsWith("/") &&
     !/^[a-z]:/iu.test(value) &&
     !value.split("/").some((part) => part === "" || part === "." || part === "..") &&
-    !hasControlCharacter(value),
+    !UNSAFE_TEXT.test(value),
   "must be a bounded repository-relative path"
 );
 
 const actorSchema = z
-  .object({ id: TEXT, type: z.enum(["user", "team", "app", "integration"]).optional() })
+  .object({
+    id: TEXT,
+    type: z.enum(["user", "team", "app", "integration"]).optional(),
+    actorType: z
+      .enum(["user", "team", "integration", "organization_admin", "repository_role", "deploy_key"])
+      .optional(),
+    bypassMode: z.enum(["always", "exempt", "pull_request"]).optional()
+  })
   .strict();
 const checkSchema = z
   .object({
     name: TEXT,
-    appId: z.number().int().nonnegative().max(2_147_483_647).optional(),
+    appId: z.number().int().min(1).max(2_147_483_647).optional(),
     appSlug: TEXT.optional()
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    if (value.appId !== undefined && value.appSlug !== undefined) {
+      context.addIssue({
+        code: "custom",
+        path: ["appSlug"],
+        message: "appId and appSlug are mutually exclusive"
+      });
+    }
+  });
 const checksSchema = z.array(checkSchema).max(MAX_AUDIT_CHECKS);
 
 const branchProtectionSchema = z
@@ -71,7 +83,7 @@ const branchProtectionSchema = z
 
 const rulesetSchema = z
   .object({
-    id: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    id: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
     name: TEXT,
     target: z.enum(["branch", "tag", "push", "repository"]),
     refPatterns: z.array(TEXT).max(100),
@@ -94,6 +106,52 @@ const rulesetSchema = z
         path: ["allowForcePushes"],
         message: "branch and tag rulesets require force-push and deletion facts"
       });
+    }
+    if (value.target === "repository") {
+      if (value.enforcement === "evaluate") {
+        context.addIssue({
+          code: "custom",
+          path: ["enforcement"],
+          message: "repository rulesets cannot use evaluate enforcement"
+        });
+      }
+      if (value.refPatterns.length > 0) {
+        context.addIssue({
+          code: "custom",
+          path: ["refPatterns"],
+          message: "repository rulesets cannot contain ref patterns"
+        });
+      }
+      if (value.repositoryPatterns === undefined || value.repositoryPatterns.length === 0) {
+        context.addIssue({
+          code: "custom",
+          path: ["repositoryPatterns"],
+          message: "repository rulesets require an evaluated repository scope"
+        });
+      }
+      if (value.allowForcePushes !== undefined || value.allowDeletions !== undefined) {
+        context.addIssue({
+          code: "custom",
+          path: ["allowForcePushes"],
+          message: "repository rulesets cannot contain branch control facts"
+        });
+      }
+    }
+    if (value.target === "push") {
+      if (value.refPatterns.length > 0) {
+        context.addIssue({
+          code: "custom",
+          path: ["refPatterns"],
+          message: "push rulesets cannot contain ref patterns"
+        });
+      }
+      if (value.allowForcePushes !== undefined || value.allowDeletions !== undefined) {
+        context.addIssue({
+          code: "custom",
+          path: ["allowForcePushes"],
+          message: "push rulesets cannot contain branch control facts"
+        });
+      }
     }
   });
 
@@ -121,7 +179,22 @@ const auditSnapshotSchema = z
       .strict(),
     completeness: z.object({ complete: z.boolean(), missing: z.array(TEXT).max(100) }).strict(),
     branchProtection: branchProtectionSchema.nullable(),
-    rulesets: z.array(rulesetSchema).max(MAX_AUDIT_RULESETS),
+    rulesets: z
+      .array(rulesetSchema)
+      .max(MAX_AUDIT_RULESETS)
+      .superRefine((rulesets, context) => {
+        const ids = new Set<number>();
+        rulesets.forEach((ruleset, index) => {
+          if (ids.has(ruleset.id)) {
+            context.addIssue({
+              code: "custom",
+              path: [index, "id"],
+              message: "ruleset IDs must be unique"
+            });
+          }
+          ids.add(ruleset.id);
+        });
+      }),
     tagProtection: z
       .object({ known: z.boolean(), allowsDeletion: z.boolean(), allowsUpdate: z.boolean() })
       .strict(),
@@ -185,6 +258,13 @@ function compareStrings(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
+function sarifUri(path: string): string {
+  return path
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+}
+
 function checkIdentity(check: {
   readonly appId?: number | undefined;
   readonly appSlug?: string | undefined;
@@ -213,14 +293,20 @@ function appendCheckFindings(
     identities.add(checkIdentity(check));
     byName.set(check.name, identities);
   }
-  for (const [name, identities] of byName) {
+  const names = [...byName.keys()].sort(compareStrings);
+  for (const [index, name] of names.entries()) {
+    const identities = byName.get(name);
+    if (identities === undefined) {
+      continue;
+    }
+    const findingPath = `${path}[${String(index)}]`;
     if (identities.has("unknown")) {
       findings.push(
         auditFinding(
           "AUDIT_CHECK_PROVENANCE_UNKNOWN",
           "provenance",
           "Required check has no trusted App or provider identity.",
-          `${path}.${name}`
+          findingPath
         )
       );
     }
@@ -230,7 +316,7 @@ function appendCheckFindings(
           "AUDIT_CHECK_NAME_AMBIGUOUS",
           "provenance",
           "The same required check name has multiple producer identities.",
-          `${path}.${name}`
+          findingPath
         )
       );
     }
@@ -258,10 +344,12 @@ function evaluateRulesetRepositoryScope(
   const candidates = [`${repository.owner}/${repository.name}`, repository.name];
   try {
     return {
-      applies: ruleset.repositoryPatterns.some((pattern) =>
-        candidates.some((candidate) =>
-          micromatch.isMatch(candidate, pattern, { dot: true, nonegate: true })
-        )
+      applies: ruleset.repositoryPatterns.some(
+        (pattern) =>
+          pattern === "~ALL" ||
+          candidates.some((candidate) =>
+            micromatch.isMatch(candidate, pattern, { dot: true, nonegate: true })
+          )
       ),
       valid: true
     };
@@ -300,9 +388,7 @@ function balancedGlobDelimiters(pattern: string): boolean {
 }
 
 function validRefPattern(pattern: string): boolean {
-  return (
-    !pattern.includes("\\") && !hasControlCharacter(pattern) && balancedGlobDelimiters(pattern)
-  );
+  return !pattern.includes("\\") && !UNSAFE_TEXT.test(pattern) && balancedGlobDelimiters(pattern);
 }
 
 function evaluateRulesetScope(
@@ -455,7 +541,7 @@ function auditSnapshot(snapshot: AuditSnapshot): AuditReport {
           )
         );
       }
-      if (branchProtection.requiredPullRequestReviews.bypassActorsKnown === false) {
+      if (branchProtection.requiredPullRequestReviews.bypassActorsKnown !== true) {
         add(
           auditFinding(
             "AUDIT_REVIEW_BYPASS_UNKNOWN",
@@ -493,6 +579,7 @@ function auditSnapshot(snapshot: AuditSnapshot): AuditReport {
   }
 
   const applicableRulesets: AuditSnapshot["rulesets"] = [];
+  const relevantRulesets: AuditSnapshot["rulesets"] = [];
   for (const ruleset of snapshot.rulesets) {
     const repositoryScope = evaluateRulesetRepositoryScope(ruleset, snapshot.repository);
     if (!repositoryScope.valid) {
@@ -521,7 +608,26 @@ function auditSnapshot(snapshot: AuditSnapshot): AuditReport {
         ),
         true
       );
+      continue;
     }
+    if (ruleset.target === "branch" && !scope.applies) {
+      continue;
+    }
+    if (ruleset.target !== "branch" && ruleset.target !== "repository") {
+      if (ruleset.target === "tag" && ruleset.enforcement === "active") {
+        add(
+          auditFinding(
+            "AUDIT_RULESET_SCOPE_UNSUPPORTED",
+            "completeness",
+            "An active tag ruleset is not evaluated by the branch audit contract.",
+            "rulesets." + String(ruleset.id) + ".target"
+          ),
+          true
+        );
+      }
+      continue;
+    }
+    relevantRulesets.push(ruleset);
     if (ruleset.enforcement === "active" && scope.applies) {
       applicableRulesets.push(ruleset);
     }
@@ -545,7 +651,7 @@ function auditSnapshot(snapshot: AuditSnapshot): AuditReport {
     );
   }
   appendCheckFindings(effectiveChecks, "requiredChecks", findings);
-  for (const requiredCheck of snapshot.policy.requiredChecks) {
+  for (const [index, requiredCheck] of snapshot.policy.requiredChecks.entries()) {
     const matchingChecks = effectiveChecks.filter((check) => check.name === requiredCheck.name);
     if (matchingChecks.length === 0) {
       add(
@@ -553,7 +659,7 @@ function auditSnapshot(snapshot: AuditSnapshot): AuditReport {
           "AUDIT_REQUIRED_CHECK_MISSING",
           "integrity",
           "A policy-required check is absent from the protected configuration.",
-          `policy.requiredChecks.${requiredCheck.name}`
+          `policy.requiredChecks[${String(index)}]`
         ),
         true
       );
@@ -566,15 +672,15 @@ function auditSnapshot(snapshot: AuditSnapshot): AuditReport {
           "AUDIT_CHECK_PROVENANCE_MISMATCH",
           "provenance",
           "A policy-required check is supplied by a different provider identity.",
-          `policy.requiredChecks.${requiredCheck.name}`
+          `policy.requiredChecks[${String(index)}]`
         )
       );
     }
   }
 
-  for (const ruleset of snapshot.rulesets) {
+  for (const ruleset of relevantRulesets) {
     const path = `rulesets.${String(ruleset.id)}`;
-    if (ruleset.bypassActorsKnown === false) {
+    if (ruleset.bypassActorsKnown !== true) {
       add(
         auditFinding(
           "AUDIT_RULESET_BYPASS_UNKNOWN",
@@ -730,7 +836,7 @@ function auditSnapshot(snapshot: AuditSnapshot): AuditReport {
     }
   }
 
-  findings.sort(compareFindings);
+  findings.sort(compareAuditFindings);
   if (findings.length > MAX_AUDIT_FINDINGS) {
     findings.length = MAX_AUDIT_FINDINGS - 1;
     findings.push(
@@ -743,7 +849,7 @@ function auditSnapshot(snapshot: AuditSnapshot): AuditReport {
     );
     hasIncomplete = true;
   }
-  findings.sort(compareFindings);
+  findings.sort(compareAuditFindings);
   const status: AuditStatus = hasIncomplete ? "incomplete" : findings.length > 0 ? "fail" : "pass";
   return {
     auditVersion: AUDIT_VERSION,
@@ -772,17 +878,19 @@ function addWorkflowFinding(
   });
 }
 
-function compareFindings(left: AuditFinding, right: AuditFinding): number {
+export function compareAuditFindings(left: AuditFinding, right: AuditFinding): number {
   const codeOrder = compareStrings(left.code, right.code);
   const pathOrder = compareStrings(left.path ?? "", right.path ?? "");
   const lineOrder = (left.line ?? 0) - (right.line ?? 0);
   const severityOrder = compareStrings(left.severity, right.severity);
+  const categoryOrder = compareStrings(left.category, right.category);
   return (
     codeOrder ||
     pathOrder ||
     lineOrder ||
     severityOrder ||
-    compareStrings(left.message, right.message)
+    compareStrings(left.message, right.message) ||
+    categoryOrder
   );
 }
 
@@ -821,7 +929,7 @@ export function renderAuditSarif(report: AuditReport): string {
         : [
             {
               physicalLocation: {
-                artifactLocation: { uri: finding.path },
+                artifactLocation: { uri: sarifUri(finding.path) },
                 ...(finding.line === undefined ? {} : { region: { startLine: finding.line } })
               }
             }

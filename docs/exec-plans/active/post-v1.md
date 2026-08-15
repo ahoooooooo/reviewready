@@ -1,8 +1,9 @@
 # ReviewReady post-v1 trust roadmap
 
-Status: **PL-0 complete on 2026-08-13; TA-1 local exit evidence is complete on
-the codex/ta-1-hardening branch.** The branch still requires normal GitHub
-integration review; no promotion to TA-2 has occurred.
+Status: **PL-0, TA-1, and the TA-2 evidence-bundle implementation/local gate are
+complete on `codex/ta-2-hardening`; TA-2 dogfood evidence and promotion review
+remain pending.**
+TA-2 has not passed its promotion gate.
 
 This is the forward execution plan after the verified v1.0.7 release. It does
 not authorize product implementation, repository-setting changes, publication,
@@ -181,6 +182,39 @@ check as advisory; it does not manufacture an authority claim.
 
 ### TA-2 — reproducible live audit and dogfood evidence
 
+The current TA-2 hardening batch covers bounded root inputs and nested API
+collections, immutable repository identity, default-branch-only ref semantics,
+ruleset pagination, bounded unpaginated workflow-directory collection, and duplicate identity rejection, exact API status,
+bounded headers and raw response streams, late deadlines, a 768-attempt total
+request budget, per-request bounded transport for every API read (with a bounded
+Octokit/global-fetch fallback and no unbounded path), inherited
+branch/tag/push/repository ruleset collection, explicit repository-target scope
+and enforcement validation, unsupported conditions and ruleset-scope rejection,
+active tag-ruleset incomplete findings,
+source-size parity, safe audit/SARIF locations,
+deterministic ordering, and audit-schema/CLI regressions. Repeated non-empty
+unlinked pages remain incomplete rather than being treated as complete. It now
+implements a replayable evidence bundle, but local tests are not a real remote
+dogfood artifact. Canonical serialization, bundle privacy/source retention,
+exact caller-supplied revision semantics, stable double observation of settings,
+and
+independent provider authority were explicit SOL MAX design gates.
+
+The TA-2 evidence-bundle decision is now approved in
+[ADR 0009](../../adr/0009-replayable-audit-evidence-bundle.md), with its
+[normative v1 bundle contract](../../audit-evidence-bundle-v1.md),
+[threat model](../../threat-model-ta2-evidence-bundle.md) and
+[implementation plan](ta-2-evidence-bundle.md). GitHub exposes no documented
+cross-endpoint transaction for repository settings, so the approved contract
+uses two complete equal bounded observations and explicitly does not claim an
+atomic settings snapshot. Exact policy/workflow source is bound to a
+caller-supplied full default-branch SHA. Independent provider authority remains
+TA-3 work; caller root assertions cannot manufacture it. The v1 projection also
+rejects official ruleset review and extra status-enforcement semantics that it
+cannot preserve, rather than accepting and discarding them; this is a deliberate
+no-bundle boundary until a separately versioned contract is designed. Actions
+repository permission settings are not silently included in TA-2 v1 evidence.
+
 Objective: produce a deterministic, read-only, replayable audit of ReviewReady at
 one exact revision. Tracked by #55.
 
@@ -322,6 +356,8 @@ Exit:
   minimum Node runtime, and packed consumer behavior;
 - npm tarball/integrity/provenance, semantic-version tag, GitHub Release, stable
   Action ref, source commit, Action bundle, schemas, Marketplace, and docs agree;
+  release evidence uses the canonical artifact profile and generated root/Action
+  dist parity gate;
 - GitHub release immutability protects future releases; historical limitations
   remain documented rather than rewritten;
 - one consented external OSS pilot has reproducible sanitized evidence, including

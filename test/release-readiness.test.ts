@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -11,8 +12,10 @@ import {
   assertActionBundleSynchronized,
   assertReleaseMetadata,
   assertReleaseProvenance,
+  fetchBounded,
   main as runReleasePreflightCli,
   normalizePackagedPath,
+  readBoundedFile,
   runReleasePreflight,
   sha1Hex,
   sha512Hex,
@@ -20,6 +23,98 @@ import {
 } from "../scripts/release-preflight.mjs";
 
 describe("release readiness metadata", () => {
+  it("rejects a provenance response redirected to an untrusted host", async () => {
+    const response = new Response("trusted-looking body");
+    Object.defineProperty(response, "url", { value: "https://attacker.example/redirected" });
+
+    await expect(
+      fetchBounded("https://registry.npmjs.org/metadata", "registry.npmjs.org", 1024, () =>
+        Promise.resolve(response)
+      )
+    ).rejects.toThrow("redirect");
+  });
+
+  it("rejects a release verification endpoint on a non-default port", async () => {
+    await expect(
+      fetchBounded("https://registry.npmjs.org:444/metadata", "registry.npmjs.org", 1024, () =>
+        Promise.resolve(new Response("trusted-looking body"))
+      )
+    ).rejects.toThrow("not trusted");
+
+    const response = new Response("trusted-looking body");
+    Object.defineProperty(response, "url", {
+      value: "https://registry.npmjs.org:444/metadata"
+    });
+    await expect(
+      fetchBounded("https://registry.npmjs.org/metadata", "registry.npmjs.org", 1024, () =>
+        Promise.resolve(response)
+      )
+    ).rejects.toThrow("redirect");
+  });
+
+  it("bounds the number of release verification response chunks", async () => {
+    let reads = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        reads += 1;
+        if (reads > 65_537) {
+          controller.close();
+          return;
+        }
+        controller.enqueue(new Uint8Array([0x61]));
+      }
+    });
+
+    await expect(
+      fetchBounded("https://registry.npmjs.org/metadata", "registry.npmjs.org", 1024 * 1024, () =>
+        Promise.resolve(new Response(body))
+      )
+    ).rejects.toThrow("chunk count");
+    expect(reads).toBeLessThanOrEqual(65_538);
+  });
+
+  it("rejects a release file replaced after its descriptor is opened", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "reviewready-stable-file-test-"));
+    const path = join(directory, "artifact.tgz");
+    try {
+      await writeFile(path, "trusted");
+      expect(() =>
+        readBoundedFile(path, 1024, "release artifact", () => {
+          rmSync(path, { force: true });
+          writeFileSync(path, "tampered");
+        })
+      ).toThrow("changed");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps release subprocesses bounded by a hard timeout", async () => {
+    const source = await readFile("scripts/release-preflight.mjs", "utf8");
+
+    expect(source).toContain("const MAX_CHILD_PROCESS_MS =");
+    expect(source).toContain("timeout: MAX_CHILD_PROCESS_MS");
+  });
+
+  it("validates tarball entries before bounded member reads", async () => {
+    const source = await readFile("scripts/release-preflight.mjs", "utf8");
+
+    expect(source).toContain("assertTarballEntryTypes(snapshotPath);");
+    expect(source).toContain("readTarballFile");
+    expect(source).not.toContain("extractTarball(snapshotPath, extractionRoot);");
+  });
+
+  it("bounds tarball listing and extracted package resources", async () => {
+    const source = await readFile("scripts/release-preflight.mjs", "utf8");
+
+    expect(source).toContain("MAX_TARBALL_ENTRIES");
+    expect(source).toContain("MAX_TARBALL_PATH_BYTES");
+    expect(source).toContain("MAX_TAR_LISTING_BYTES");
+    expect(source).toContain("MAX_EXTRACTED_PACKAGE_BYTES");
+    expect(source).toContain("maxBuffer: MAX_TAR_LISTING_BYTES");
+    expect(source).toContain("isSymbolicLink()");
+  });
+
   it("keeps the publish workflow OIDC-only and exact-artifact based", async () => {
     const workflow = await readFile(".github/workflows/release-publish.yml", "utf8");
 
@@ -35,6 +130,12 @@ describe("release readiness metadata", () => {
     expect(workflow).not.toContain("actions: write");
     expect(workflow).toContain("actions: read");
     expect(workflow).not.toMatch(/\n {6}GH_TOKEN: \$\{\{ github\.token \}\}/u);
+  });
+
+  it("bounds the inline npm signature verification subprocess", async () => {
+    const workflow = await readFile(".github/workflows/release-publish.yml", "utf8");
+
+    expect(workflow).toContain("timeout: 180_000");
   });
 
   it("does not give audited tooling Actions mutation permission", async () => {

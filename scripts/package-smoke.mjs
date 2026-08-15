@@ -2,12 +2,18 @@
 // @ts-check
 
 import { execFileSync, spawnSync } from "node:child_process";
+import { Buffer } from "node:buffer";
 import {
+  closeSync,
+  constants,
+  fstatSync,
   existsSync,
   lstatSync,
   mkdtempSync,
+  openSync,
   readFileSync,
   readdirSync,
+  readSync,
   rmSync,
   writeFileSync
 } from "node:fs";
@@ -17,6 +23,8 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 const MAX_ARTIFACT_BYTES = 20 * 1024 * 1024;
+const MAX_CHILD_PROCESS_MS = 180_000;
+const NO_FOLLOW = typeof constants.O_NOFOLLOW === "number" ? constants.O_NOFOLLOW : 0;
 
 /**
  * @param {string[]} argv
@@ -46,6 +54,80 @@ function artifactDirectory(argv, projectRoot) {
 }
 
 /**
+ * Read an artifact through one stable descriptor before handing it to npm.
+ *
+ * @param {string} path
+ * @param {() => void} [afterOpen]
+ * @returns {Buffer}
+ */
+export function readStableArtifact(path, afterOpen) {
+  let before;
+  try {
+    before = lstatSync(path);
+  } catch (error) {
+    throw new Error("package artifact is unavailable", { cause: error });
+  }
+  if (before.isSymbolicLink() || !before.isFile() || before.size > MAX_ARTIFACT_BYTES) {
+    throw new Error("package artifact is too large or not a regular file");
+  }
+  let descriptor;
+  try {
+    descriptor = openSync(path, constants.O_RDONLY | NO_FOLLOW);
+  } catch (error) {
+    throw new Error("package artifact cannot be opened safely", { cause: error });
+  }
+  try {
+    const opened = fstatSync(descriptor);
+    if (
+      opened.isSymbolicLink() ||
+      !opened.isFile() ||
+      opened.dev !== before.dev ||
+      opened.ino !== before.ino ||
+      opened.size !== before.size ||
+      opened.mtimeMs !== before.mtimeMs ||
+      opened.ctimeMs !== before.ctimeMs
+    ) {
+      throw new Error("package artifact changed during read");
+    }
+    afterOpen?.();
+    const bytes = Buffer.alloc(opened.size);
+    let offset = 0;
+    while (offset < bytes.byteLength) {
+      const count = readSync(descriptor, bytes, offset, bytes.byteLength - offset, null);
+      if (count <= 0) {
+        throw new Error("package artifact changed during read");
+      }
+      offset += count;
+    }
+    const extra = Buffer.alloc(1);
+    if (readSync(descriptor, extra, 0, 1, null) > 0) {
+      throw new Error("package artifact changed during read");
+    }
+    const afterDescriptor = fstatSync(descriptor);
+    const afterPath = lstatSync(path);
+    if (
+      afterDescriptor.dev !== opened.dev ||
+      afterDescriptor.ino !== opened.ino ||
+      afterDescriptor.size !== opened.size ||
+      afterDescriptor.mtimeMs !== opened.mtimeMs ||
+      afterDescriptor.ctimeMs !== opened.ctimeMs ||
+      afterPath.isSymbolicLink() ||
+      !afterPath.isFile() ||
+      afterPath.dev !== opened.dev ||
+      afterPath.ino !== opened.ino ||
+      afterPath.size !== opened.size ||
+      afterPath.mtimeMs !== opened.mtimeMs ||
+      afterPath.ctimeMs !== opened.ctimeMs
+    ) {
+      throw new Error("package artifact changed during read");
+    }
+    return bytes;
+  } finally {
+    closeSync(descriptor);
+  }
+}
+
+/**
  * @param {string} directory
  * @returns {string}
  */
@@ -60,10 +142,6 @@ function findArtifact(directory) {
     throw new Error("package artifact filename is missing");
   }
   const artifact = join(directory, filename);
-  const stats = lstatSync(artifact);
-  if (!stats.isFile() || stats.size > MAX_ARTIFACT_BYTES) {
-    throw new Error("package artifact is too large or not a regular file");
-  }
   return artifact;
 }
 
@@ -106,7 +184,8 @@ function runCli(executable, arguments_, cwd, expectedStatus) {
   const result = spawnSync(process.execPath, [executable, ...arguments_], {
     cwd,
     encoding: "utf8",
-    windowsHide: true
+    windowsHide: true,
+    timeout: MAX_CHILD_PROCESS_MS
   });
   if (result.error) {
     throw result.error;
@@ -133,7 +212,8 @@ function runNpm(arguments_, cwd) {
     execFileSync(process.execPath, [npmExecPath, ...arguments_], {
       cwd,
       stdio: ["ignore", "ignore", "inherit"],
-      windowsHide: true
+      windowsHide: true,
+      timeout: MAX_CHILD_PROCESS_MS
     });
     return;
   }
@@ -143,7 +223,8 @@ function runNpm(arguments_, cwd) {
       execFileSync(process.execPath, [bundledNpm, ...arguments_], {
         cwd,
         stdio: ["ignore", "ignore", "inherit"],
-        windowsHide: true
+        windowsHide: true,
+        timeout: MAX_CHILD_PROCESS_MS
       });
       return;
     }
@@ -151,7 +232,8 @@ function runNpm(arguments_, cwd) {
   execFileSync(process.platform === "win32" ? "npm.cmd" : "npm", arguments_, {
     cwd,
     stdio: ["ignore", "ignore", "inherit"],
-    windowsHide: true
+    windowsHide: true,
+    timeout: MAX_CHILD_PROCESS_MS
   });
 }
 
@@ -165,6 +247,11 @@ function runSmoke(projectRoot) {
     const artifact = findArtifact(artifactLocation.directory);
     const installRoot = mkdtempSync(join(tmpdir(), "reviewready-package-smoke-"));
     try {
+      const artifactSnapshot = join(installRoot, "package.tgz");
+      writeFileSync(artifactSnapshot, readStableArtifact(artifact), {
+        flag: "wx",
+        mode: 0o600
+      });
       runNpm(
         [
           "install",
@@ -174,7 +261,7 @@ function runSmoke(projectRoot) {
           "--no-fund",
           "--prefix",
           installRoot,
-          artifact
+          artifactSnapshot
         ],
         projectRoot
       );
@@ -196,6 +283,19 @@ function runSmoke(projectRoot) {
         existsSync(join(packageRoot, "node_modules"))
       ) {
         throw new Error("installed package contains development-only files");
+      }
+      const evidenceSchemaPath = join(packageRoot, "reviewready.audit-evidence.schema.json");
+      if (!existsSync(evidenceSchemaPath)) {
+        throw new Error("packaged evidence schema is missing");
+      }
+      const evidenceSchema = /** @type {unknown} */ (
+        JSON.parse(readFileSync(evidenceSchemaPath, "utf8"))
+      );
+      if (
+        !isRecord(evidenceSchema) ||
+        evidenceSchema.$schema !== "https://json-schema.org/draft/2020-12/schema"
+      ) {
+        throw new Error("packaged evidence schema is not Draft 2020-12");
       }
 
       const fixtureRoot = join(projectRoot, "fixtures", "basic");
@@ -241,6 +341,16 @@ function runSmoke(projectRoot) {
         );
         if (!invalidRun.stderr.includes("[INPUT_SCHEMA_INVALID]")) {
           throw new Error("packaged CLI invalid-input diagnostic was not stable");
+        }
+        const evidenceFixture = join(projectRoot, "fixtures", "audit", "evidence-bundle-v1.json");
+        const replayRun = runCli(
+          cli,
+          ["audit", "replay", "--bundle", evidenceFixture, "--json"],
+          projectRoot,
+          0
+        );
+        if (cliStatus(replayRun.stdout) !== "pass") {
+          throw new Error("packaged CLI evidence replay was not pass");
         }
       } finally {
         rmSync(smokeRoot, { recursive: true, force: true });

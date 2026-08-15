@@ -5,12 +5,17 @@ import { createHash } from "node:crypto";
 import { Buffer } from "node:buffer";
 import { execFileSync } from "node:child_process";
 import {
+  closeSync,
+  constants,
+  fstatSync,
   existsSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readdirSync,
   readFileSync,
+  readSync,
   rmSync,
   writeFileSync
 } from "node:fs";
@@ -22,8 +27,15 @@ import { fileURLToPath } from "node:url";
 import { auditPackageEntries, extractPackResult } from "./verify-package.mjs";
 
 const MAX_TARBALL_BYTES = 20 * 1024 * 1024;
+const MAX_TARBALL_ENTRIES = 512;
+const MAX_TARBALL_PATH_BYTES = 4 * 1024;
+const MAX_TAR_LISTING_BYTES = 4 * 1024 * 1024;
+const MAX_EXTRACTED_PACKAGE_BYTES = 20 * 1024 * 1024;
 const MAX_PROVENANCE_BYTES = 128 * 1024;
 const MAX_SIGNATURE_OUTPUT_BYTES = 8 * 1024 * 1024;
+const MAX_RESPONSE_CHUNKS = 65_536;
+const MAX_CHILD_PROCESS_MS = 180_000;
+const NO_FOLLOW = typeof constants.O_NOFOLLOW === "number" ? constants.O_NOFOLLOW : 0;
 const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u;
 const COMMIT = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/iu;
 const SHA512_HEX = /^[0-9a-f]{128}$/iu;
@@ -58,6 +70,88 @@ function record(value) {
  */
 function readJson(path) {
   return /** @type {unknown} */ (JSON.parse(readFileSync(path, "utf8")));
+}
+
+/**
+ * Read one bounded regular file through a stable descriptor.
+ *
+ * @param {string} path
+ * @param {number} limit
+ * @param {string} label
+ * @param {() => void} [afterOpen]
+ * @returns {Buffer}
+ */
+export function readBoundedFile(path, limit, label, afterOpen) {
+  let before;
+  try {
+    before = lstatSync(path);
+  } catch (error) {
+    throw new Error(label + " is unavailable", { cause: error });
+  }
+  if (before.isSymbolicLink() || !before.isFile() || before.size > limit) {
+    throw new Error(label + " is too large or not a regular file");
+  }
+  let descriptor;
+  try {
+    descriptor = openSync(path, constants.O_RDONLY | NO_FOLLOW);
+  } catch (error) {
+    throw new Error(label + " cannot be opened safely", { cause: error });
+  }
+  try {
+    const opened = fstatSync(descriptor);
+    if (
+      opened.isSymbolicLink() ||
+      !opened.isFile() ||
+      opened.dev !== before.dev ||
+      opened.ino !== before.ino ||
+      opened.size !== before.size ||
+      opened.mtimeMs !== before.mtimeMs ||
+      opened.ctimeMs !== before.ctimeMs ||
+      opened.size > limit
+    ) {
+      throw new Error(label + " changed during read");
+    }
+    afterOpen?.();
+    const bytes = Buffer.alloc(opened.size);
+    let offset = 0;
+    while (offset < bytes.byteLength) {
+      const count = readSync(descriptor, bytes, offset, bytes.byteLength - offset, null);
+      if (count <= 0) {
+        throw new Error(label + " changed during read");
+      }
+      offset += count;
+    }
+    const extra = Buffer.alloc(1);
+    if (readSync(descriptor, extra, 0, 1, null) > 0) {
+      throw new Error(label + " changed during read");
+    }
+    const afterDescriptor = fstatSync(descriptor);
+    let afterPath;
+    try {
+      afterPath = lstatSync(path);
+    } catch (error) {
+      throw new Error(label + " changed during read", { cause: error });
+    }
+    if (
+      afterDescriptor.dev !== opened.dev ||
+      afterDescriptor.ino !== opened.ino ||
+      afterDescriptor.size !== opened.size ||
+      afterDescriptor.mtimeMs !== opened.mtimeMs ||
+      afterDescriptor.ctimeMs !== opened.ctimeMs ||
+      afterPath.isSymbolicLink() ||
+      !afterPath.isFile() ||
+      afterPath.dev !== opened.dev ||
+      afterPath.ino !== opened.ino ||
+      afterPath.size !== opened.size ||
+      afterPath.mtimeMs !== opened.mtimeMs ||
+      afterPath.ctimeMs !== opened.ctimeMs
+    ) {
+      throw new Error(label + " changed during read");
+    }
+    return bytes;
+  } finally {
+    closeSync(descriptor);
+  }
 }
 
 /**
@@ -225,9 +319,9 @@ export function assertReleaseProvenance(value) {
  * @param {ReleaseFetch} fetchImpl
  * @returns {Promise<Buffer>}
  */
-async function fetchBounded(url, host, limit, fetchImpl) {
+export async function fetchBounded(url, host, limit, fetchImpl) {
   const parsed = new globalThis.URL(url);
-  if (parsed.protocol !== "https:" || parsed.hostname !== host) {
+  if (parsed.protocol !== "https:" || parsed.hostname !== host || parsed.port !== "") {
     throw new Error("release verification endpoint is not trusted");
   }
   const response = await fetchImpl(url, {
@@ -236,6 +330,12 @@ async function fetchBounded(url, host, limit, fetchImpl) {
   });
   if (!response.ok) {
     throw new Error("release verification endpoint returned an unexpected status");
+  }
+  if (response.url !== "") {
+    const finalUrl = new globalThis.URL(response.url);
+    if (finalUrl.protocol !== "https:" || finalUrl.hostname !== host || finalUrl.port !== "") {
+      throw new Error("release verification endpoint redirected to an untrusted host");
+    }
   }
   const contentLength = response.headers.get("content-length");
   if (contentLength !== null && (!/^\d+$/u.test(contentLength) || Number(contentLength) > limit)) {
@@ -262,6 +362,10 @@ async function fetchBounded(url, host, limit, fetchImpl) {
     if (total > limit) {
       await reader.cancel();
       throw new Error("release verification response exceeds the bounded size");
+    }
+    if (chunks.length >= MAX_RESPONSE_CHUNKS) {
+      await reader.cancel();
+      throw new Error("release verification response exceeds the bounded chunk count");
     }
     chunks.push(Buffer.from(chunk));
   }
@@ -541,11 +645,7 @@ function verifyNpmProvenance(provenance, cwd, npmRunner) {
  */
 export async function verifyReleaseProvenance(value, artifactPath, options = {}) {
   assertReleaseProvenance(value);
-  const stats = lstatSync(artifactPath);
-  if (!stats.isFile() || stats.size > MAX_TARBALL_BYTES) {
-    throw new Error("release provenance artifact is too large or not a regular file");
-  }
-  const bytes = readFileSync(artifactPath);
+  const bytes = readBoundedFile(artifactPath, MAX_TARBALL_BYTES, "release provenance artifact");
   const provenance = /** @type {Record<string, unknown>} */ (value);
   if (sha512Hex(bytes) !== provenance.localSha512) {
     throw new Error("local tarball SHA-512 does not match release provenance");
@@ -609,7 +709,7 @@ function actionBundleStatus(projectRoot) {
       "--",
       "dist/action"
     ]),
-    { cwd: projectRoot, encoding: "utf8" }
+    { cwd: projectRoot, encoding: "utf8", timeout: MAX_CHILD_PROCESS_MS }
   );
   return status;
 }
@@ -677,6 +777,7 @@ function runNpm(args, cwd) {
       cwd,
       encoding: "utf8",
       maxBuffer: MAX_SIGNATURE_OUTPUT_BYTES,
+      timeout: MAX_CHILD_PROCESS_MS,
       stdio: ["ignore", "pipe", "inherit"]
     });
   }
@@ -692,6 +793,7 @@ function runNpm(args, cwd) {
       return execFileSync(process.execPath, [bundledNpmCli, ...args], {
         cwd,
         encoding: "utf8",
+        timeout: MAX_CHILD_PROCESS_MS,
         maxBuffer: MAX_SIGNATURE_OUTPUT_BYTES,
         stdio: ["ignore", "pipe", "inherit"]
       });
@@ -700,6 +802,7 @@ function runNpm(args, cwd) {
   return execFileSync(process.platform === "win32" ? "npm.cmd" : "npm", args, {
     cwd,
     encoding: "utf8",
+    timeout: MAX_CHILD_PROCESS_MS,
     maxBuffer: MAX_SIGNATURE_OUTPUT_BYTES,
     stdio: ["ignore", "pipe", "inherit"]
   });
@@ -714,6 +817,7 @@ function runNode(args, cwd) {
   return execFileSync(process.execPath, args, {
     cwd,
     encoding: "utf8",
+    timeout: MAX_CHILD_PROCESS_MS,
     stdio: ["ignore", "pipe", "inherit"]
   });
 }
@@ -751,18 +855,34 @@ function packFilename(parsed) {
  */
 function listTarballFiles(tarballPath) {
   const tar = process.platform === "win32" ? "tar.exe" : "tar";
-  const output = execFileSync(tar, ["-tzf", tarballPath], { encoding: "utf8" });
+  const output = execFileSync(tar, ["-tzf", tarballPath], {
+    encoding: "utf8",
+    timeout: MAX_CHILD_PROCESS_MS,
+    maxBuffer: MAX_TAR_LISTING_BYTES
+  });
   const files = [];
+  let entryCount = 0;
   for (const rawLine of output.split(/\r?\n/u)) {
-    if (rawLine.length === 0 || rawLine.endsWith("/")) {
+    if (rawLine.length === 0) {
       continue;
     }
-    const entry = normalizePackagedPath(rawLine);
+    if (Buffer.byteLength(rawLine, "utf8") > MAX_TARBALL_PATH_BYTES) {
+      throw new Error("tarball entry path is too long");
+    }
+    entryCount += 1;
+    if (entryCount > MAX_TARBALL_ENTRIES) {
+      throw new Error("tarball contains too many entries");
+    }
+    const directory = rawLine.endsWith("/");
+    const entry = normalizePackagedPath(directory ? rawLine.slice(0, -1) : rawLine);
+    if (entry === "package" && directory) {
+      continue;
+    }
     if (!entry.startsWith("package/")) {
       throw new Error("tarball entry is outside package root");
     }
     const path = entry.slice("package/".length);
-    if (path.length === 0) {
+    if (path.length === 0 || directory) {
       throw new Error("tarball file path is empty");
     }
     files.push(path);
@@ -772,18 +892,49 @@ function listTarballFiles(tarballPath) {
 
 /**
  * @param {string} tarballPath
- * @param {string} extractionRoot
  * @returns {void}
  */
-function extractTarball(tarballPath, extractionRoot) {
-  mkdirSync(extractionRoot, { recursive: true });
+function assertTarballEntryTypes(tarballPath) {
   const tar = process.platform === "win32" ? "tar.exe" : "tar";
-  execFileSync(tar, ["-xzf", tarballPath, "-C", extractionRoot], {
-    stdio: ["ignore", "ignore", "inherit"]
+  const output = execFileSync(tar, ["-tvzf", tarballPath], {
+    encoding: "utf8",
+    timeout: MAX_CHILD_PROCESS_MS,
+    maxBuffer: MAX_TAR_LISTING_BYTES
   });
-  const packageRoot = resolve(extractionRoot, "package");
-  if (!existsSync(packageRoot) || !lstatSync(packageRoot).isDirectory()) {
-    throw new Error("tarball has no package root");
+  for (const rawLine of output.split(/\r?\n/u)) {
+    if (rawLine.length === 0) {
+      continue;
+    }
+    const type = rawLine[0];
+    if (type !== "-" && type !== "d") {
+      throw new Error("tarball contains a link or special entry");
+    }
+  }
+}
+
+/**
+ * @param {string} tarballPath
+ * @param {string} path
+ * @param {number} remainingBytes
+ * @returns {Buffer}
+ */
+function readTarballFile(tarballPath, path, remainingBytes) {
+  if (remainingBytes <= 0) {
+    throw new Error("tarball extracted package is too large");
+  }
+  const tar = process.platform === "win32" ? "tar.exe" : "tar";
+  try {
+    const bytes = execFileSync(tar, ["-xOf", tarballPath, "package/" + path], {
+      timeout: MAX_CHILD_PROCESS_MS,
+      maxBuffer: Math.min(MAX_TARBALL_BYTES + 1, remainingBytes + 1),
+      stdio: ["ignore", "pipe", "inherit"]
+    });
+    if (bytes.byteLength > remainingBytes) {
+      throw new Error("tarball extracted package is too large");
+    }
+    return bytes;
+  } catch (error) {
+    throw new Error("tarball member could not be read within bounds: " + path, { cause: error });
   }
 }
 
@@ -806,31 +957,40 @@ function verifyExactTarball(projectRoot, artifactRoot) {
   if (!packResult || filename === undefined) {
     throw new Error("npm pack returned an unexpected artifact manifest");
   }
+  if (packResult.files.length > MAX_TARBALL_ENTRIES) {
+    throw new Error("npm pack returned too many package files");
+  }
   const tarballPath = resolve(artifactAbsolute, basename(filename));
   if (!tarballPath.startsWith(`${artifactAbsolute}${sep}`) || !existsSync(tarballPath)) {
     throw new Error("npm pack returned an unsafe artifact path");
   }
-  const tarballBytes = readFileSync(tarballPath);
-  if (tarballBytes.byteLength > MAX_TARBALL_BYTES) {
-    throw new Error("release tarball exceeds the bounded artifact size");
-  }
-  const extractionRoot = mkdtempSync(join(artifactAbsolute, "extract-"));
+  const tarballBytes = readBoundedFile(tarballPath, MAX_TARBALL_BYTES, "release tarball");
+  const memberRoot = mkdtempSync(join(artifactAbsolute, "members-"));
   try {
-    extractTarball(tarballPath, extractionRoot);
-    const tarFiles = listTarballFiles(tarballPath);
-    const manifestFiles = packResult.files.map((file) => normalizePackagedPath(file.path)).sort();
+    const snapshotPath = join(memberRoot, "audited-release.tgz");
+    writeFileSync(snapshotPath, tarballBytes, { mode: 0o600 });
+    assertTarballEntryTypes(snapshotPath);
+    const tarFiles = listTarballFiles(snapshotPath);
+    const manifestFiles = packResult.files
+      .map((file) => {
+        const path = normalizePackagedPath(file.path);
+        if (Buffer.byteLength(path, "utf8") > MAX_TARBALL_PATH_BYTES) {
+          throw new Error("npm pack returned an overlong package path");
+        }
+        return path;
+      })
+      .sort();
     if (JSON.stringify(tarFiles) !== JSON.stringify(manifestFiles)) {
       throw new Error("npm pack manifest does not match the exact tarball contents");
     }
-    const packageRoot = resolve(extractionRoot, "package");
-    const packagePrefix = `${packageRoot}${sep}`;
-    const entries = tarFiles.map((path) => {
-      const absolutePath = resolve(packageRoot, path);
-      if (!absolutePath.startsWith(packagePrefix) || !lstatSync(absolutePath).isFile()) {
-        throw new Error(`tarball entry is not a regular file: ${path}`);
-      }
-      return { path, content: readFileSync(absolutePath, "utf8") };
-    });
+    const entries = [];
+    let totalBytes = 0;
+    for (const path of tarFiles) {
+      const remainingBytes = MAX_EXTRACTED_PACKAGE_BYTES - totalBytes;
+      const content = readTarballFile(snapshotPath, path, remainingBytes);
+      totalBytes += content.byteLength;
+      entries.push({ path, content: content.toString("utf8") });
+    }
     const errors = auditPackageEntries(entries);
     if (errors.length > 0) {
       throw new Error(`package audit failed: ${errors.join("; ")}`);
@@ -842,18 +1002,25 @@ function verifyExactTarball(projectRoot, artifactRoot) {
       fileCount: entries.length
     };
   } finally {
-    rmSync(extractionRoot, { recursive: true, force: true });
+    rmSync(memberRoot, { recursive: true, force: true });
   }
 }
 
 /**
  * @param {string} projectRoot
  * @param {string} tarballPath
+ * @param {string} expectedSha512
  * @returns {void}
  */
-function verifyCleanRoom(projectRoot, tarballPath) {
+function verifyCleanRoom(projectRoot, tarballPath, expectedSha512) {
   const temporaryRoot = mkdtempSync(join(tmpdir(), "reviewready-clean-room-"));
   try {
+    const tarballBytes = readBoundedFile(tarballPath, MAX_TARBALL_BYTES, "release tarball");
+    if (sha512Hex(tarballBytes) !== expectedSha512) {
+      throw new Error("release tarball changed after exact artifact verification");
+    }
+    const snapshotPath = join(temporaryRoot, "audited-release.tgz");
+    writeFileSync(snapshotPath, tarballBytes, { mode: 0o600 });
     runNpm(
       [
         "install",
@@ -863,7 +1030,7 @@ function verifyCleanRoom(projectRoot, tarballPath) {
         "--no-fund",
         "--prefix",
         temporaryRoot,
-        tarballPath
+        snapshotPath
       ],
       projectRoot
     );
@@ -871,6 +1038,14 @@ function verifyCleanRoom(projectRoot, tarballPath) {
     const cli = join(installedRoot, "dist", "cli.js");
     if (!existsSync(cli)) {
       throw new Error("clean-room installation did not contain the CLI");
+    }
+    const evidenceSchemaPath = join(installedRoot, "reviewready.audit-evidence.schema.json");
+    if (!existsSync(evidenceSchemaPath)) {
+      throw new Error("clean-room installation did not contain the evidence schema");
+    }
+    const evidenceSchema = record(readJson(evidenceSchemaPath));
+    if (evidenceSchema.$schema !== "https://json-schema.org/draft/2020-12/schema") {
+      throw new Error("clean-room evidence schema is not Draft 2020-12");
     }
     const policy = join(projectRoot, "fixtures", "basic", ".reviewready.yml");
     const readyInput = join(projectRoot, "fixtures", "basic", "ready.json");
@@ -887,6 +1062,15 @@ function verifyCleanRoom(projectRoot, tarballPath) {
       /** @type {{ status?: unknown }} */ (report).status !== "ready"
     ) {
       throw new Error("clean-room CLI smoke test did not produce a ready result");
+    }
+    const evidenceFixture = join(projectRoot, "fixtures", "audit", "evidence-bundle-v1.json");
+    const replayOutput = runNode(
+      [cli, "audit", "replay", "--bundle", evidenceFixture, "--json"],
+      projectRoot
+    );
+    const replayReport = record(JSON.parse(replayOutput));
+    if (replayReport.status !== "pass") {
+      throw new Error("clean-room evidence replay did not produce a pass result");
     }
   } finally {
     rmSync(temporaryRoot, { recursive: true, force: true });
@@ -924,7 +1108,7 @@ export function runReleasePreflight(projectRoot, requestedArtifactRoot) {
     runNpm(["run", "bundle"], projectRoot);
     assertActionBundleSynchronized(bundleBefore, actionBundleState(projectRoot));
     const result = verifyExactTarball(projectRoot, artifactRoot);
-    verifyCleanRoom(projectRoot, result.tarballPath);
+    verifyCleanRoom(projectRoot, result.tarballPath, result.sha512);
     return result;
   } finally {
     if (ownsArtifactRoot) {
@@ -955,11 +1139,15 @@ export async function main() {
     }
     const absoluteEvidencePath = resolve(process.cwd(), evidencePath);
     const absoluteArtifactPath = resolve(process.cwd(), artifactPath);
-    const evidenceStats = lstatSync(absoluteEvidencePath);
-    if (!evidenceStats.isFile() || evidenceStats.size > MAX_PROVENANCE_BYTES) {
-      throw new Error("release provenance evidence is too large or not a file");
-    }
-    const evidence = readJson(absoluteEvidencePath);
+    const evidence = /** @type {unknown} */ (
+      JSON.parse(
+        readBoundedFile(
+          absoluteEvidencePath,
+          MAX_PROVENANCE_BYTES,
+          "release provenance evidence"
+        ).toString("utf8")
+      )
+    );
     await verifyReleaseProvenance(evidence, absoluteArtifactPath, { cwd: projectRoot });
     process.stdout.write("Release provenance passed.\n");
     return;

@@ -13,8 +13,18 @@
       "additionalProperties": false,
       "required": ["owner", "name", "baseSha"],
       "properties": {
-        "owner": { "type": "string", "minLength": 1, "maxLength": 512 },
-        "name": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "owner": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^[^\\p{Cc}\\p{Cf}\\p{Cs}\\u2028\\u2029]*$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^[^\\p{Cc}\\p{Cf}\\p{Cs}\\u2028\\u2029]*$"
+        },
         "baseSha": { "type": "string", "pattern": "^[0-9a-fA-F]{40}$" }
       }
     },

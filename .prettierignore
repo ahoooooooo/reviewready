@@ -2,3 +2,4 @@ dist/
 coverage/
 node_modules/
 package-lock.json
+fixtures/audit/evidence-bundle-v1.json

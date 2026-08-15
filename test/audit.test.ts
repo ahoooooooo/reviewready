@@ -1,13 +1,22 @@
 import { readFile } from "node:fs/promises";
 
+import Ajv2020Module from "ajv/dist/2020.js";
 import { describe, expect, it } from "vitest";
 
 import {
   auditRepository,
+  compareAuditFindings,
   renderAuditJson,
   renderAuditSarif,
+  type AuditFinding,
   type AuditSnapshot
 } from "../src/audit.js";
+
+type Draft2020Constructor = new (options?: { readonly allErrors?: boolean }) => {
+  compile: (schema: object) => (data: unknown) => boolean;
+};
+
+const Ajv2020 = Ajv2020Module as unknown as Draft2020Constructor;
 
 const shaA = "a".repeat(40);
 const shaB = "b".repeat(40);
@@ -42,7 +51,11 @@ function validSnapshot(): AuditSnapshot {
       allowForcePushes: false,
       allowDeletions: false,
       requiredStatusChecks: { strict: true, checks: [check] },
-      requiredPullRequestReviews: { requiredApprovingReviewCount: 1, bypassActors: [] }
+      requiredPullRequestReviews: {
+        requiredApprovingReviewCount: 1,
+        bypassActors: [],
+        bypassActorsKnown: true
+      }
     },
     rulesets: [
       {
@@ -52,6 +65,7 @@ function validSnapshot(): AuditSnapshot {
         refPatterns: ["refs/heads/main"],
         enforcement: "active",
         bypassActors: [],
+        bypassActorsKnown: true,
         allowForcePushes: false,
         allowDeletions: false,
         requiredChecks: [check]
@@ -77,6 +91,51 @@ describe("repository audit", () => {
     expect(report).toMatchObject({ auditVersion: 1, status: "pass", findings: [] });
   });
 
+  it("fails closed for invalid or contradictory check provider identity", () => {
+    const cases: readonly { readonly appId?: number; readonly appSlug?: string }[] = [
+      { appId: 0 },
+      { appId: 123, appSlug: "spoofed-slug" }
+    ];
+
+    for (const provider of cases) {
+      const snapshot = validSnapshot();
+      const branchProtection = snapshot.branchProtection;
+      const ruleset = snapshot.rulesets[0];
+      if (branchProtection === null || ruleset === undefined) {
+        throw new Error("fixture protection and ruleset are required");
+      }
+      const check = { name: "ReviewReady", ...provider };
+      snapshot.policy.requiredChecks = [check];
+      branchProtection.requiredStatusChecks = { strict: true, checks: [check] };
+      ruleset.requiredChecks = [check];
+
+      const report = auditRepository(snapshot);
+
+      expect(report.status).toBe("incomplete");
+      expect(report.findings.map((finding) => finding.code)).toContain("AUDIT_INPUT_INVALID");
+    }
+  });
+
+  it("fails closed for non-positive or duplicate normalized ruleset identifiers", () => {
+    const cases = [[0], [1, 1]];
+
+    for (const ids of cases) {
+      const rawSnapshot = validSnapshot() as unknown as {
+        rulesets: Array<Record<string, unknown>>;
+      };
+      const ruleset = rawSnapshot.rulesets[0];
+      if (ruleset === undefined) {
+        throw new Error("fixture ruleset is required");
+      }
+      rawSnapshot.rulesets = ids.map((id) => ({ ...ruleset, id }));
+
+      const report = auditRepository(rawSnapshot);
+
+      expect(report.status).toBe("incomplete");
+      expect(report.findings.map((finding) => finding.code)).toContain("AUDIT_INPUT_INVALID");
+    }
+  });
+
   it("accepts a push ruleset without treating it as branch protection", () => {
     const rawSnapshot = validSnapshot() as unknown as {
       rulesets: Array<Record<string, unknown>>;
@@ -97,6 +156,82 @@ describe("repository audit", () => {
     ];
 
     const report = auditRepository(rawSnapshot);
+
+    expect(report).toMatchObject({ auditVersion: 1, status: "pass", findings: [] });
+  });
+
+  it("rejects contradictory target-specific ruleset facts", () => {
+    const base = validSnapshot().rulesets[0];
+    if (base === undefined) {
+      throw new Error("fixture ruleset is required");
+    }
+    const cases: Record<string, unknown>[] = [
+      {
+        ...base,
+        target: "repository",
+        enforcement: "evaluate",
+        refPatterns: [],
+        repositoryPatterns: ["~ALL"],
+        allowForcePushes: undefined,
+        allowDeletions: undefined
+      },
+      {
+        ...base,
+        target: "repository",
+        enforcement: "active",
+        refPatterns: ["refs/heads/main"],
+        repositoryPatterns: ["~ALL"],
+        allowForcePushes: undefined,
+        allowDeletions: undefined
+      },
+      {
+        ...base,
+        target: "repository",
+        enforcement: "active",
+        refPatterns: [],
+        repositoryPatterns: undefined,
+        allowForcePushes: undefined,
+        allowDeletions: undefined
+      },
+      {
+        ...base,
+        target: "push",
+        enforcement: "active",
+        refPatterns: ["refs/heads/main"],
+        allowForcePushes: undefined,
+        allowDeletions: undefined
+      }
+    ];
+
+    for (const ruleset of cases) {
+      const snapshot = validSnapshot() as unknown as { rulesets: Record<string, unknown>[] };
+      snapshot.rulesets = [ruleset];
+      const report = auditRepository(snapshot);
+
+      expect(report.status).toBe("incomplete");
+      expect(report.findings.map((finding) => finding.code)).toContain("AUDIT_INPUT_INVALID");
+    }
+  });
+
+  it("does not audit a branch ruleset outside the evaluated default branch", () => {
+    const snapshot = validSnapshot();
+    const ruleset = snapshot.rulesets[0];
+    if (ruleset === undefined) {
+      throw new Error("fixture ruleset is required");
+    }
+    snapshot.rulesets = [
+      {
+        ...ruleset,
+        refPatterns: ["refs/heads/release/*"],
+        enforcement: "disabled",
+        bypassActors: [{ id: "release-bypass", type: "user" }],
+        allowForcePushes: true,
+        allowDeletions: true,
+        requiredChecks: []
+      }
+    ];
+
+    const report = auditRepository(snapshot);
 
     expect(report).toMatchObject({ auditVersion: 1, status: "pass", findings: [] });
   });
@@ -196,6 +331,39 @@ describe("repository audit", () => {
     );
   });
 
+  it("keeps hostile required-check names out of finding paths and SARIF URIs", () => {
+    const snapshot = validSnapshot();
+    const branchProtection = snapshot.branchProtection;
+    if (branchProtection === null) {
+      throw new Error("fixture protection is required");
+    }
+    const hostileName = "../required\\check?%";
+    snapshot.policy.requiredChecks = [{ name: hostileName }];
+    branchProtection.requiredStatusChecks = { strict: true, checks: [] };
+
+    const report = auditRepository(snapshot);
+    const finding = report.findings.find(
+      (candidate) => candidate.code === "AUDIT_REQUIRED_CHECK_MISSING"
+    );
+    const sarif = JSON.parse(renderAuditSarif(report)) as {
+      runs?: Array<{
+        results?: Array<{
+          ruleId?: string;
+          locations?: Array<{ physicalLocation?: { artifactLocation?: { uri?: string } } }>;
+        }>;
+      }>;
+    };
+    const sarifFinding = sarif.runs?.[0]?.results?.find(
+      (candidate) => candidate.ruleId === "AUDIT_REQUIRED_CHECK_MISSING"
+    );
+
+    expect(finding?.path).toBe("policy.requiredChecks[0]");
+    expect(sarifFinding?.locations?.[0]?.physicalLocation?.artifactLocation?.uri).toBe(
+      "policy.requiredChecks%5B0%5D"
+    );
+    expect(JSON.stringify(report)).not.toContain(hostileName);
+  });
+
   it("does not use an active tag ruleset as default-branch protection", () => {
     const snapshot = validSnapshot();
     const branchProtection = snapshot.branchProtection;
@@ -247,6 +415,41 @@ describe("repository audit", () => {
     expect(report.status).toBe("pass");
   });
 
+  it("applies ~ALL repository scope to branch rulesets", () => {
+    const snapshot = validSnapshot();
+    const ruleset = snapshot.rulesets[0];
+    if (ruleset === undefined) {
+      throw new Error("fixture ruleset is required");
+    }
+    ruleset.repositoryPatterns = ["~ALL"];
+    ruleset.allowForcePushes = true;
+    ruleset.allowDeletions = true;
+
+    const report = auditRepository(snapshot);
+
+    expect(report.findings.map((finding) => finding.code)).toEqual(
+      expect.arrayContaining(["AUDIT_FORCE_PUSH_ALLOWED", "AUDIT_BRANCH_DELETION_ALLOWED"])
+    );
+  });
+
+  it("does not ignore ~ALL repository scope on active tag rulesets", () => {
+    const snapshot = validSnapshot();
+    const ruleset = snapshot.rulesets[0];
+    if (ruleset === undefined) {
+      throw new Error("fixture ruleset is required");
+    }
+    ruleset.target = "tag";
+    ruleset.refPatterns = ["~ALL"];
+    ruleset.repositoryPatterns = ["~ALL"];
+
+    const report = auditRepository(snapshot);
+
+    expect(report.status).toBe("incomplete");
+    expect(report.findings.map((finding) => finding.code)).toContain(
+      "AUDIT_RULESET_SCOPE_UNSUPPORTED"
+    );
+  });
+
   it("fails closed when an active ruleset scope cannot be evaluated", () => {
     const snapshot = validSnapshot();
     const ruleset = snapshot.rulesets[0];
@@ -296,6 +499,40 @@ describe("repository audit", () => {
 
     expect(report.status).toBe("incomplete");
     expect(report.findings.map((finding) => finding.code)).toContain("AUDIT_REVIEW_BYPASS_UNKNOWN");
+  });
+
+  it("fails closed when bypass authority fields are omitted rather than false", () => {
+    const base = validSnapshot();
+    const branchProtection = base.branchProtection;
+    if (branchProtection === null) {
+      throw new Error("fixture branch protection is required");
+    }
+    const reviews = branchProtection.requiredPullRequestReviews;
+    if (reviews === null) {
+      throw new Error("fixture review rules are required");
+    }
+    const snapshot = {
+      ...base,
+      branchProtection: {
+        ...branchProtection,
+        requiredPullRequestReviews: {
+          requiredApprovingReviewCount: reviews.requiredApprovingReviewCount,
+          bypassActors: reviews.bypassActors
+        }
+      },
+      rulesets: base.rulesets.map((ruleset) => {
+        const { bypassActorsKnown, ...withoutAuthority } = ruleset;
+        void bypassActorsKnown;
+        return withoutAuthority;
+      })
+    } as unknown;
+
+    const report = auditRepository(snapshot);
+
+    expect(report.findings.map((finding) => finding.code)).toEqual(
+      expect.arrayContaining(["AUDIT_REVIEW_BYPASS_UNKNOWN", "AUDIT_RULESET_BYPASS_UNKNOWN"])
+    );
+    expect(report.status).toBe("incomplete");
   });
 
   it("does not apply a parent ruleset scoped to another repository", () => {
@@ -376,7 +613,9 @@ describe("repository audit", () => {
         id: 4,
         target: "repository",
         refPatterns: [],
-        repositoryPatterns: ["other-owner/*"]
+        repositoryPatterns: ["other-owner/*"],
+        allowForcePushes: undefined,
+        allowDeletions: undefined
       },
       {
         ...baseRuleset,
@@ -501,6 +740,62 @@ describe("repository audit", () => {
     expect(sarif.runs).toHaveLength(1);
   });
 
+  it("rejects control and format characters in public repository identity fields", () => {
+    const snapshot = validSnapshot();
+    snapshot.repository.owner = "octocat\u2028";
+
+    const report = auditRepository(snapshot);
+
+    expect(report.status).toBe("incomplete");
+    expect(report.findings[0]?.code).toBe("AUDIT_INPUT_INVALID");
+    expect(report.repository.owner).toBe("unknown");
+  });
+
+  it("keeps every audit status inside the published Draft 2020-12 schema", async () => {
+    const schema = JSON.parse(await readFile("reviewready.audit.schema.json", "utf8")) as object;
+    const validate = new Ajv2020({ allErrors: true }).compile(schema);
+
+    const failedSnapshot = validSnapshot();
+    const workflow = failedSnapshot.workflows[0];
+    if (workflow === undefined) {
+      throw new Error("fixture workflow is required");
+    }
+    workflow.trustedRoot = false;
+
+    for (const report of [
+      auditRepository(validSnapshot()),
+      auditRepository(failedSnapshot),
+      auditRepository({})
+    ]) {
+      expect(validate(JSON.parse(renderAuditJson(report)))).toBe(true);
+    }
+  });
+
+  it("rejects evidence-bundle fields in the unchanged public audit schema", async () => {
+    const schema = JSON.parse(await readFile("reviewready.audit.schema.json", "utf8")) as object;
+    const validate = new Ajv2020({ allErrors: true }).compile(schema);
+    const report = JSON.parse(renderAuditJson(auditRepository(validSnapshot()))) as Record<
+      string,
+      unknown
+    >;
+
+    report.bundleVersion = 1;
+    report.assertions = {};
+
+    expect(validate(report)).toBe(false);
+  });
+
+  it("keeps the published schema aligned with runtime unsafe-text rejection", async () => {
+    const schema = JSON.parse(await readFile("reviewready.audit.schema.json", "utf8")) as object;
+    const validate = new Ajv2020({ allErrors: true }).compile(schema);
+    const report = JSON.parse(renderAuditJson(auditRepository(validSnapshot()))) as {
+      repository: { owner: string };
+    };
+    report.repository.owner = "octocat\u200b";
+
+    expect(validate(report)).toBe(false);
+  });
+
   it("keeps malformed audit JSON inside the public schema shape", () => {
     const report = auditRepository({});
     const json = JSON.parse(renderAuditJson(report)) as {
@@ -542,6 +837,152 @@ describe("repository audit", () => {
 
     expect(location?.artifactLocation?.uri).toBe(".github/workflows/reviewready.yml");
     expect(location?.region?.startLine).toBe(12);
+  });
+
+  it("URI-encodes untrusted workflow path segments in SARIF", () => {
+    const snapshot = validSnapshot();
+    const path = ".github/workflows/a#b?c%.yml";
+    const workflow = snapshot.workflows[0];
+    if (workflow === undefined) {
+      throw new Error("fixture workflow is required");
+    }
+    workflow.path = path;
+    snapshot.policy.workflowPaths = [path];
+    workflow.source = "on: pull_request_target";
+
+    const report = auditRepository(snapshot);
+    const sarif = JSON.parse(renderAuditSarif(report)) as {
+      runs?: Array<{
+        results?: Array<{
+          ruleId?: string;
+          locations?: Array<{ physicalLocation?: { artifactLocation?: { uri?: string } } }>;
+        }>;
+      }>;
+    };
+    const result = sarif.runs?.[0]?.results?.find(
+      (candidate) => candidate.ruleId === "PULL_REQUEST_TARGET_WORKFLOW"
+    );
+
+    expect(result?.locations?.[0]?.physicalLocation?.artifactLocation?.uri).toBe(
+      ".github/workflows/a%23b%3Fc%25.yml"
+    );
+  });
+
+  it("URI-encodes hostile single-segment SARIF paths", () => {
+    const report: Parameters<typeof renderAuditSarif>[0] = {
+      auditVersion: 1,
+      status: "fail",
+      repository: { owner: "octocat", name: "demo", baseSha: shaA },
+      findings: [
+        {
+          code: "TEST_HOSTILE_PATH",
+          category: "integrity",
+          severity: "error",
+          path: "a#b?c%",
+          message: "hostile path"
+        }
+      ],
+      checked: []
+    };
+
+    const sarif = JSON.parse(renderAuditSarif(report)) as {
+      runs?: Array<{
+        results?: Array<{
+          locations?: Array<{ physicalLocation?: { artifactLocation?: { uri?: string } } }>;
+        }>;
+      }>;
+    };
+
+    expect(
+      sarif.runs?.[0]?.results?.[0]?.locations?.[0]?.physicalLocation?.artifactLocation?.uri
+    ).toBe("a%23b%3Fc%25");
+  });
+
+  it("does not report branch controls for tag-only rulesets", () => {
+    const snapshot = validSnapshot();
+    const ruleset = snapshot.rulesets[0];
+    if (ruleset === undefined) {
+      throw new Error("fixture ruleset is required");
+    }
+    ruleset.target = "tag";
+    ruleset.refPatterns = ["refs/tags/*"];
+    ruleset.allowForcePushes = true;
+    ruleset.allowDeletions = true;
+
+    const report = auditRepository(snapshot);
+
+    expect(report.findings.map((finding) => finding.code)).not.toEqual(
+      expect.arrayContaining(["AUDIT_FORCE_PUSH_ALLOWED", "AUDIT_BRANCH_DELETION_ALLOWED"])
+    );
+    expect(report.findings.map((finding) => finding.code)).toContain(
+      "AUDIT_RULESET_SCOPE_UNSUPPORTED"
+    );
+  });
+
+  it("URI-encodes structural brackets in SARIF paths", () => {
+    const report: Parameters<typeof renderAuditSarif>[0] = {
+      auditVersion: 1,
+      status: "fail",
+      repository: { owner: "octocat", name: "demo", baseSha: shaA },
+      findings: [
+        {
+          code: "TEST_STRUCTURAL_PATH",
+          category: "integrity",
+          severity: "error",
+          path: "policy.requiredChecks[0]",
+          message: "structural path"
+        }
+      ],
+      checked: []
+    };
+    const sarif = JSON.parse(renderAuditSarif(report)) as {
+      runs?: Array<{
+        results?: Array<{
+          locations?: Array<{ physicalLocation?: { artifactLocation?: { uri?: string } } }>;
+        }>;
+      }>;
+    };
+
+    expect(
+      sarif.runs?.[0]?.results?.[0]?.locations?.[0]?.physicalLocation?.artifactLocation?.uri
+    ).toBe("policy.requiredChecks%5B0%5D");
+  });
+
+  it("uses finding category as a deterministic tie-breaker", () => {
+    const workflow: AuditFinding = {
+      code: "SAME",
+      category: "workflow",
+      severity: "error",
+      message: "same"
+    };
+    const integrity: AuditFinding = {
+      code: "SAME",
+      category: "integrity",
+      severity: "error",
+      message: "same"
+    };
+
+    expect(compareAuditFindings(workflow, integrity)).not.toBe(0);
+    expect([workflow, integrity].sort(compareAuditFindings)[0]?.category).toBe("integrity");
+  });
+
+  it("orders finding paths before categories", () => {
+    const laterPath: AuditFinding = {
+      code: "SAME",
+      category: "integrity",
+      path: "z.yml",
+      severity: "error",
+      message: "same"
+    };
+    const earlierPath: AuditFinding = {
+      code: "SAME",
+      category: "workflow",
+      path: "a.yml",
+      severity: "error",
+      message: "same"
+    };
+
+    expect([laterPath, earlierPath].sort(compareAuditFindings)[0]?.path).toBe("a.yml");
   });
 
   it("keeps capped findings deterministic when workflow input order changes", () => {

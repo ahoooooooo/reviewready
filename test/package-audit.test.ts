@@ -1,4 +1,7 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -7,6 +10,9 @@ import {
   extractPackResult,
   loadPlannedPackageEntries
 } from "../scripts/verify-package.mjs";
+import { readStableArtifact } from "../scripts/package-smoke.mjs";
+import { hydrateAuditEvidenceBundle } from "../src/audit-evidence-bundle.js";
+import { parseCanonicalJsonBytes } from "../src/audit-evidence.js";
 
 interface PackageAuditEntry {
   path: string;
@@ -29,6 +35,7 @@ const requiredEntries = (): PackageAuditEntry[] => [
   },
   { path: "reviewready.schema.json", content: "{}" },
   { path: "reviewready.audit.schema.json", content: "{}" },
+  { path: "reviewready.audit-evidence.schema.json", content: "{}" },
   { path: "reviewready.result.schema.json", content: "{}" },
   { path: "dist/cli.js", content: "console.log('safe');" },
   { path: "dist/cli.d.ts", content: "export {};" }
@@ -64,13 +71,78 @@ describe("auditPackageEntries", () => {
 
     const checkSteps = checkScript.split(" && ").map((step) => step.trim());
     const buildStep = checkSteps.indexOf("npm run bundle");
+    const distVerificationSteps = checkSteps.reduce<number[]>((indexes, step, index) => {
+      if (step === "npm run verify:dist") {
+        indexes.push(index);
+      }
+      return indexes;
+    }, []);
     const packageAuditStep = checkSteps.indexOf("npm run test:coverage");
+    const packageVerificationStep = checkSteps.indexOf("npm run verify:package");
     expect(checkSteps).toEqual(
-      expect.arrayContaining(["npm run bundle", "npm run test:coverage", "npm run verify:package"])
+      expect.arrayContaining([
+        "npm run bundle",
+        "npm run verify:dist",
+        "npm run test:coverage",
+        "npm run verify:package"
+      ])
     );
     expect(buildStep).toBeGreaterThanOrEqual(0);
+    expect(distVerificationSteps).toHaveLength(1);
+    expect(distVerificationSteps[0]).toBeGreaterThan(buildStep);
     expect(packageAuditStep).toBeGreaterThanOrEqual(0);
+    expect(packageVerificationStep).toBeGreaterThan(packageAuditStep);
     expect(buildStep).toBeLessThan(packageAuditStep);
+    expect(distVerificationSteps[0]).toBeLessThan(packageAuditStep);
+    expect(buildStep).toBeLessThan(packageVerificationStep);
+  });
+
+  it("keeps generated dist parity owned by the complete gate", async () => {
+    const packageJson = JSON.parse(await readFile("package.json", "utf8")) as {
+      scripts?: { check?: string; [key: string]: unknown };
+    };
+    const workflow = await readFile(".github/workflows/ci.yml", "utf8");
+
+    expect(packageJson.scripts?.["verify:dist"]).toBe("node scripts/verify-dist.mjs");
+    expect(packageJson.scripts?.check).toContain("npm run verify:dist");
+    expect(workflow).not.toContain("run: npm run verify:dist");
+  });
+
+  it("keeps the compatibility gate from rebuilding generated parity", async () => {
+    const packageJson = JSON.parse(await readFile("package.json", "utf8")) as {
+      scripts?: { check?: string; ["check:compat"]?: string };
+    };
+    const workflow = await readFile(".github/workflows/ci.yml", "utf8");
+    const compatibility = packageJson.scripts?.["check:compat"];
+
+    expect(workflow).toContain("run: npm run check:compat");
+    expect(compatibility).toContain("npm run bundle");
+    expect(compatibility).toContain("npm run verify:dist");
+  });
+
+  it("gives the TA-2 collector explicit read-only scopes for sampled GitHub data", async () => {
+    const workflow = await readFile(".github/workflows/reviewready-ta2-promotion.yml", "utf8");
+
+    expect(workflow).toContain(
+      "permissions:\n  contents: read\n  pull-requests: read\n  checks: read\n  statuses: read\n  issues: read"
+    );
+    expect(workflow).not.toMatch(
+      /^\s+(?:contents|pull-requests|checks|statuses|issues):\s+write$/mu
+    );
+  });
+
+  it("includes every TA-2 runtime module in the coverage gate", async () => {
+    const config = await readFile("vitest.config.ts", "utf8");
+
+    for (const module of [
+      "src/audit-evidence.ts",
+      "src/audit-evidence-bundle.ts",
+      "src/audit-evidence-collection.ts",
+      "src/cli.ts",
+      "src/file-reader.ts"
+    ]) {
+      expect(config).toContain(`"${module}"`);
+    }
   });
 
   it("defines a narrow CLI package surface and pins runtime dependencies", async () => {
@@ -87,11 +159,90 @@ describe("auditPackageEntries", () => {
       "./package.json": "./package.json",
       "./reviewready.schema.json": "./reviewready.schema.json",
       "./reviewready.audit.schema.json": "./reviewready.audit.schema.json",
+      "./reviewready.audit-evidence.schema.json": "./reviewready.audit-evidence.schema.json",
       "./reviewready.result.schema.json": "./reviewready.result.schema.json"
     });
     expect(
       Object.values(packageJson.dependencies ?? {}).every((value) => /^\d+\.\d+\.\d+$/u.test(value))
     ).toBe(true);
+  });
+
+  it("labels the TA-2 evidence commands as unreleased while package version is 1.0.7", async () => {
+    const packageJson = JSON.parse(await readFile("package.json", "utf8")) as {
+      version?: unknown;
+    };
+    const readme = await readFile("README.md", "utf8");
+
+    expect(packageJson.version).toBe("1.0.7");
+    expect(readme).toContain("current development branch");
+    expect(readme).toMatch(/published 1\.0\.7 package does not\s+contain/u);
+  });
+
+  it("keeps a canonical TA-2 evidence fixture replayable", async () => {
+    const bytes = await readFile("fixtures/audit/evidence-bundle-v1.json");
+    const bundle = parseCanonicalJsonBytes(bytes);
+    expect(hydrateAuditEvidenceBundle(bundle).report.status).toBe("pass");
+  });
+
+  it("exercises the TA-2 public surface in clean-room smoke scripts", async () => {
+    const packageSmoke = await readFile("scripts/package-smoke.mjs", "utf8");
+    const releasePreflight = await readFile("scripts/release-preflight.mjs", "utf8");
+
+    expect(packageSmoke).toContain("audit");
+    expect(packageSmoke).toContain("reviewready.audit-evidence.schema.json");
+    expect(releasePreflight).toContain("audit");
+    expect(releasePreflight).toContain("reviewready.audit-evidence.schema.json");
+  });
+
+  it("bounds package smoke and package manifest subprocesses", async () => {
+    const packageSmoke = await readFile("scripts/package-smoke.mjs", "utf8");
+    const verifyPackage = await readFile("scripts/verify-package.mjs", "utf8");
+
+    expect(packageSmoke).toContain("const MAX_CHILD_PROCESS_MS =");
+    expect(packageSmoke).toContain("timeout: MAX_CHILD_PROCESS_MS");
+    expect(verifyPackage).toContain("const MAX_CHILD_PROCESS_MS =");
+    expect(verifyPackage).toContain("timeout: MAX_CHILD_PROCESS_MS");
+  });
+
+  it("bounds package manifest file count, path length, and content bytes", async () => {
+    const verifyPackage = await readFile("scripts/verify-package.mjs", "utf8");
+
+    expect(verifyPackage).toContain("MAX_PACKAGE_ENTRIES");
+    expect(verifyPackage).toContain("MAX_PACKAGE_PATH_BYTES");
+    expect(verifyPackage).toContain("MAX_PACKAGE_FILE_BYTES");
+    expect(verifyPackage).toContain("MAX_PACKAGE_TOTAL_BYTES");
+  });
+
+  it("rejects a package artifact replaced after its descriptor is opened", () => {
+    const root = mkdtempSync(join(tmpdir(), "reviewready-package-artifact-race-test-"));
+    const artifact = join(root, "package.tgz");
+    try {
+      writeFileSync(artifact, "trusted");
+      expect(() =>
+        readStableArtifact(artifact, () => {
+          rmSync(artifact, { force: true });
+          writeFileSync(artifact, "tampered");
+        })
+      ).toThrow("changed");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("describes TA-2 settings sampling as stable observation rather than atomic", async () => {
+    const plan = await readFile("docs/exec-plans/active/post-v1.md", "utf8");
+
+    expect(plan).toContain("stable double observation");
+    expect(plan).not.toContain("atomic settings sampling");
+  });
+
+  it("uses the checked-in trusted workflow in live audit examples", async () => {
+    const readme = await readFile("README.md", "utf8");
+
+    expect(readme).toContain("--protected-workflow .github/workflows/reviewready-trusted.yml");
+    expect(readme).toContain("--trusted-workflow .github/workflows/reviewready-trusted.yml");
+    expect(readme).not.toContain("--protected-workflow .github/workflows/reviewready.yml");
+    expect(readme).not.toContain("--trusted-workflow .github/workflows/reviewready.yml");
   });
 
   it("accepts the documented package surface without private metadata", () => {
