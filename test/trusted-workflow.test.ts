@@ -7,7 +7,7 @@ const workflow = await readFile(".github/workflows/reviewready-trusted.yml", "ut
 const readme = await readFile("README.md", "utf8");
 const changelog = await readFile("CHANGELOG.md", "utf8");
 const canonicalRepository = `ah${"o".repeat(8)}/reviewready`;
-const publishedReleaseCommit = "5c165cfa87ca94990487c1910e061377c0dd3b73";
+const publishedReleaseCommit = "4e31bca93116e0de737d6792fd32a8a5211fdbf5";
 const documentedAdvisoryCommit = "f21ed2e94efedb01f73e518c39765cef72c58e1c";
 
 describe("trusted ReviewReady workflow", () => {
@@ -36,8 +36,8 @@ describe("trusted ReviewReady workflow", () => {
     );
   });
 
-  it("pins the trusted root to v1.0.8 and keeps the published advisory example immutable", () => {
-    expect(workflow).toContain(`uses: ${canonicalRepository}@${publishedReleaseCommit} # v1.0.8`);
+  it("pins the trusted root to the published v1.0.9 release and keeps the published advisory example immutable", () => {
+    expect(workflow).toContain(`uses: ${canonicalRepository}@${publishedReleaseCommit} # v1.0.9`);
     expect(readme).toContain(`uses: ${canonicalRepository}@${documentedAdvisoryCommit} # v1.0.7`);
     expect(workflow).not.toContain("main v1.0.6 candidate");
     expect(readme).not.toContain("v1.0.5 bootstrap pin");
