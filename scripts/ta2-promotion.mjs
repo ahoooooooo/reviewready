@@ -79,6 +79,14 @@ function isRecord(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+/** @param {unknown} value @returns {Buffer | undefined} */
+function asBuffer(value) {
+  if (Buffer.isBuffer(value)) {
+    return value;
+  }
+  return value instanceof Uint8Array ? Buffer.from(value) : undefined;
+}
+
 /** @param {string} detail @returns {never} */
 function promotionFailure(detail) {
   throw new Error("trusted TA-2 promotion environment: " + detail);
@@ -161,10 +169,11 @@ function runNode(
       timeout: MAX_CHILD_PROCESS_MS,
       maxBuffer: maxOutputBytes
     });
-    if (!Buffer.isBuffer(output)) {
+    const outputBuffer = asBuffer(output);
+    if (outputBuffer === undefined) {
       throw new Error("child output type is invalid");
     }
-    return { output, exitCode: 0 };
+    return { output: outputBuffer, exitCode: 0 };
   } catch (error) {
     if (
       isRecord(error) &&
@@ -173,16 +182,18 @@ function runNode(
     ) {
       throw new Error("trusted TA-2 child output is out of bounds", { cause: error });
     }
+    const stdout = isRecord(error) ? asBuffer(error.stdout) : undefined;
     if (
       isRecord(error) &&
       typeof error.status === "number" &&
       allowedExitCodes.includes(error.status) &&
-      Buffer.isBuffer(error.stdout)
+      stdout !== undefined
     ) {
+      const stderr = asBuffer(error.stderr);
       return {
-        output: error.stdout,
+        output: stdout,
         exitCode: error.status,
-        ...(Buffer.isBuffer(error.stderr) ? { stderr: error.stderr } : {})
+        ...(stderr === undefined ? {} : { stderr })
       };
     }
     throw new Error("trusted TA-2 command failed closed", { cause: error });
@@ -197,18 +208,21 @@ function normalizeCommandResult(result) {
   if (Buffer.isBuffer(result)) {
     return { output: result, exitCode: 0 };
   }
+  const output = isRecord(result) ? asBuffer(result.output) : undefined;
+  const stderr =
+    isRecord(result) && result.stderr !== undefined ? asBuffer(result.stderr) : undefined;
   if (
     isRecord(result) &&
-    Buffer.isBuffer(result.output) &&
+    output !== undefined &&
     typeof result.exitCode === "number" &&
     Number.isInteger(result.exitCode) &&
     AUDIT_EXIT_CODES.includes(result.exitCode) &&
-    (result.stderr === undefined || Buffer.isBuffer(result.stderr))
+    (result.stderr === undefined || stderr !== undefined)
   ) {
     return {
-      output: result.output,
+      output,
       exitCode: result.exitCode,
-      ...(Buffer.isBuffer(result.stderr) ? { stderr: result.stderr } : {})
+      ...(stderr === undefined ? {} : { stderr })
     };
   }
   throw new Error("trusted TA-2 command result is invalid");
