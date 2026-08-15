@@ -1895,6 +1895,29 @@ describe("createGitHubGateway", () => {
     ).resolves.toHaveLength(100);
   });
 
+  it("accepts a canonical last-page header on an empty extra files page", async () => {
+    const client = fakeOctokit();
+    vi.mocked(client.rest.pulls.listFiles).mockImplementation((arguments_) => {
+      const page = (arguments_ as { readonly page?: number }).page ?? 1;
+      return Promise.resolve(
+        page === 1
+          ? { data: [{ filename: "src/index.ts" }], headers: {} }
+          : {
+              data: [],
+              headers: {
+                link: '<https://api.github.test?page=1>; rel="prev", <https://api.github.test?page=1>; rel="last", <https://api.github.test?page=1>; rel="first"'
+              }
+            }
+      ) as never;
+    });
+    vi.mocked(getOctokit).mockReturnValue(client);
+    const api = createGitHubGateway("secret");
+
+    await expect(
+      api.listPullRequestFiles({ owner: "octocat", repo: "demo", pullNumber: 42 })
+    ).resolves.toEqual(["src/index.ts"]);
+  });
+
   it("fails closed when a partial status page claims a later last page without a next link", async () => {
     const client = fakeOctokit();
     vi.mocked(client.rest.checks.listForRef).mockResolvedValueOnce({

@@ -757,14 +757,24 @@ async function collectApiPages<T>(
     }
     if (items.length < pageSize) {
       const extraPage = await fetchPage(page + 1);
-      if (extraPage.items.length > 0 || extraPage.hasNext || extraPage.hasLast) {
+      const validEmptyExtraPage =
+        extraPage.items.length === 0 &&
+        !extraPage.hasNext &&
+        extraPage.nextPage === undefined &&
+        (!extraPage.hasLast || extraPage.lastPage === page);
+      if (!validEmptyExtraPage) {
         throw incompleteEvidence(kind, maxItems);
       }
       return result;
     }
 
     const extraPage = await fetchPage(page + 1);
-    if (extraPage.items.length > 0 || extraPage.hasNext || extraPage.hasLast) {
+    const validEmptyExtraPage =
+      extraPage.items.length === 0 &&
+      !extraPage.hasNext &&
+      extraPage.nextPage === undefined &&
+      (!extraPage.hasLast || extraPage.lastPage === page);
+    if (!validEmptyExtraPage) {
       throw incompleteEvidence(kind, maxItems);
     }
     return result;
