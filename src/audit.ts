@@ -59,6 +59,37 @@ const checkSchema = z
   });
 const checksSchema = z.array(checkSchema).max(MAX_AUDIT_CHECKS);
 
+const rulesetPullRequestSchema = z
+  .object({
+    allowedMergeMethods: z
+      .array(z.enum(["merge", "squash", "rebase"]))
+      .min(1)
+      .max(3),
+    dismissStaleReviewsOnPush: z.boolean(),
+    requireCodeOwnerReview: z.boolean(),
+    requireLastPushApproval: z.boolean(),
+    requiredApprovingReviewCount: z.number().int().nonnegative().max(100),
+    requiredReviewThreadResolution: z.boolean(),
+    requiredReviewers: z.array(z.never()).max(100)
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (new Set(value.allowedMergeMethods).size !== value.allowedMergeMethods.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["allowedMergeMethods"],
+        message: "allowed merge methods must be unique"
+      });
+    }
+  });
+
+const requiredStatusChecksPolicySchema = z
+  .object({
+    doNotEnforceOnCreate: z.boolean(),
+    strictRequiredStatusChecksPolicy: z.boolean()
+  })
+  .strict();
+
 const branchProtectionSchema = z
   .object({
     branch: TEXT,
@@ -93,7 +124,9 @@ const rulesetSchema = z
     bypassActorsKnown: z.boolean().optional(),
     allowForcePushes: z.boolean().optional(),
     allowDeletions: z.boolean().optional(),
-    requiredChecks: checksSchema
+    requiredChecks: checksSchema,
+    pullRequest: rulesetPullRequestSchema.optional(),
+    requiredStatusChecksPolicy: requiredStatusChecksPolicySchema.optional()
   })
   .strict()
   .superRefine((value, context) => {

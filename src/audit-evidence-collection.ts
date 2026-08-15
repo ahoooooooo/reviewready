@@ -328,6 +328,38 @@ function rulesetBypassSummaries(
     });
 }
 
+function projectRulesetPullRequest(
+  value: NonNullable<AuditSnapshot["rulesets"][number]["pullRequest"]>
+): JsonValue {
+  const allowedMergeMethods = sortedUniqueStrings(value.allowedMergeMethods);
+  if (
+    allowedMergeMethods.some(
+      (method) => method !== "merge" && method !== "squash" && method !== "rebase"
+    )
+  ) {
+    fail("evidence-ruleset-review-semantics");
+  }
+  if (value.requiredReviewers.length !== 0) {
+    fail("evidence-ruleset-reviewers-unsupported");
+  }
+  return {
+    allowedMergeMethods,
+    dismissStaleReviewsOnPush: value.dismissStaleReviewsOnPush,
+    requireCodeOwnerReview: value.requireCodeOwnerReview,
+    requireLastPushApproval: value.requireLastPushApproval,
+    requiredApprovingReviewCount: value.requiredApprovingReviewCount,
+    requiredReviewThreadResolution: value.requiredReviewThreadResolution,
+    requiredReviewers: []
+  };
+}
+
+function hasVersionedRulesetSemantics(snapshot: AuditEvidenceSnapshot): boolean {
+  return snapshot.rulesets.some(
+    (ruleset) =>
+      ruleset.pullRequest !== undefined || ruleset.requiredStatusChecksPolicy !== undefined
+  );
+}
+
 function projectBranchProtection(value: AuditSnapshot["branchProtection"]): JsonValue | null {
   if (value === null) {
     return null;
@@ -373,7 +405,13 @@ function projectRulesets(snapshot: Pick<AuditEvidenceSnapshot, "rulesets">): Jso
     bypassActorSummaries: rulesetBypassSummaries(value.bypassActors),
     ...(value.allowForcePushes === undefined ? {} : { allowForcePushes: value.allowForcePushes }),
     ...(value.allowDeletions === undefined ? {} : { allowDeletions: value.allowDeletions }),
-    requiredChecks: checkArray(value.requiredChecks)
+    requiredChecks: checkArray(value.requiredChecks),
+    ...(value.pullRequest === undefined
+      ? {}
+      : { pullRequest: projectRulesetPullRequest(value.pullRequest) }),
+    ...(value.requiredStatusChecksPolicy === undefined
+      ? {}
+      : { requiredStatusChecksPolicy: value.requiredStatusChecksPolicy })
   }));
   result.sort((left, right) => left.id - right.id);
   return result;
@@ -460,7 +498,8 @@ function artifact(
 
 function projectSnapshot(
   input: BuildAuditEvidenceBundleInput,
-  workflowArtifacts: readonly JsonValue[]
+  workflowArtifacts: readonly JsonValue[],
+  snapshotVersion: 1 | 2
 ): JsonValue {
   const snapshot = input.snapshot;
   const policySha256 = snapshot.baseRevision.policySha256;
@@ -469,7 +508,7 @@ function projectSnapshot(
   }
   const completeness = projectEvidenceCompleteness(snapshot);
   return {
-    snapshotVersion: 1,
+    snapshotVersion,
     repository: {
       owner: snapshot.repository.owner,
       name: snapshot.repository.name,
@@ -654,7 +693,8 @@ export function buildAuditEvidenceBundle(input: BuildAuditEvidenceBundleInput): 
   }
   const evidenceCompleteness = projectEvidenceCompleteness(input.snapshot);
   assertCompleteAuthority(input.snapshot, evidenceCompleteness.complete);
-  const snapshot = projectSnapshot(input, workflowArtifacts);
+  const bundleVersion: 1 | 2 = hasVersionedRulesetSemantics(input.snapshot) ? 2 : 1;
+  const snapshot = projectSnapshot(input, workflowArtifacts, bundleVersion);
   const reportSnapshot: AuditSnapshot = {
     ...input.snapshot,
     completeness: {
@@ -672,7 +712,7 @@ export function buildAuditEvidenceBundle(input: BuildAuditEvidenceBundleInput): 
     fail("evidence-findings-limit");
   }
   const bundle = {
-    bundleVersion: 1,
+    bundleVersion,
     canonicalization: "RFC8785",
     subject: {
       repositoryId: input.repository.id,

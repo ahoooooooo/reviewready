@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/ahoooooooo/reviewready/blob/main/reviewready.audit-evidence.schema.json",
-  "title": "ReviewReady audit evidence bundle v1",
+  "title": "ReviewReady audit evidence bundle v1/v2",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -16,7 +16,7 @@
     "integrity"
   ],
   "properties": {
-    "bundleVersion": { "const": 1 },
+    "bundleVersion": { "enum": [1, 2] },
     "canonicalization": { "const": "RFC8785" },
     "subject": { "$ref": "#/$defs/subject" },
     "collection": { "$ref": "#/$defs/collection" },
@@ -27,6 +27,79 @@
     "integrity": { "$ref": "#/$defs/integrity" }
   },
   "allOf": [
+    {
+      "if": {
+        "type": "object",
+        "required": ["bundleVersion"],
+        "properties": { "bundleVersion": { "const": 1 } }
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "snapshot": {
+            "type": "object",
+            "required": ["snapshotVersion"],
+            "properties": {
+              "snapshotVersion": { "const": 1 },
+              "rulesets": {
+                "type": "array",
+                "items": {
+                  "not": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "required": ["pullRequest"],
+                        "properties": { "pullRequest": {} }
+                      },
+                      {
+                        "type": "object",
+                        "required": ["requiredStatusChecksPolicy"],
+                        "properties": { "requiredStatusChecksPolicy": {} }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "required": ["bundleVersion"],
+        "properties": { "bundleVersion": { "const": 2 } }
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "snapshot": {
+            "type": "object",
+            "required": ["snapshotVersion"],
+            "properties": {
+              "snapshotVersion": { "const": 2 },
+              "rulesets": {
+                "type": "array",
+                "contains": {
+                  "type": "object",
+                  "anyOf": [
+                    {
+                      "required": ["pullRequest"],
+                      "properties": { "pullRequest": {} }
+                    },
+                    {
+                      "required": ["requiredStatusChecksPolicy"],
+                      "properties": { "requiredStatusChecksPolicy": {} }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     {
       "if": {
         "type": "object",
@@ -334,7 +407,7 @@
         "workflows"
       ],
       "properties": {
-        "snapshotVersion": { "const": 1 },
+        "snapshotVersion": { "enum": [1, 2] },
         "repository": { "$ref": "#/$defs/snapshotRepository" },
         "baseRevision": { "$ref": "#/$defs/baseRevision" },
         "policy": { "$ref": "#/$defs/policyProjection" },
@@ -546,7 +619,9 @@
           "uniqueItems": true,
           "maxItems": 100,
           "items": { "$ref": "#/$defs/checkEvidence" }
-        }
+        },
+        "pullRequest": { "$ref": "#/$defs/rulesetPullRequest" },
+        "requiredStatusChecksPolicy": { "$ref": "#/$defs/requiredStatusChecksPolicy" }
       },
       "allOf": [
         {
@@ -627,6 +702,51 @@
           }
         }
       ]
+    },
+    "rulesetPullRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "allowedMergeMethods",
+        "dismissStaleReviewsOnPush",
+        "requireCodeOwnerReview",
+        "requireLastPushApproval",
+        "requiredApprovingReviewCount",
+        "requiredReviewThreadResolution",
+        "requiredReviewers"
+      ],
+      "properties": {
+        "allowedMergeMethods": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": { "enum": ["merge", "squash", "rebase"] }
+        },
+        "dismissStaleReviewsOnPush": { "type": "boolean" },
+        "requireCodeOwnerReview": { "type": "boolean" },
+        "requireLastPushApproval": { "type": "boolean" },
+        "requiredApprovingReviewCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "requiredReviewThreadResolution": { "type": "boolean" },
+        "requiredReviewers": {
+          "type": "array",
+          "maxItems": 0,
+          "$comment": "Non-empty required reviewer identities are intentionally unsupported until their provenance and file-pattern semantics have a separately versioned model."
+        }
+      }
+    },
+    "requiredStatusChecksPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["doNotEnforceOnCreate", "strictRequiredStatusChecksPolicy"],
+      "properties": {
+        "doNotEnforceOnCreate": { "type": "boolean" },
+        "strictRequiredStatusChecksPolicy": { "type": "boolean" }
+      }
     },
     "tagProtection": {
       "type": "object",

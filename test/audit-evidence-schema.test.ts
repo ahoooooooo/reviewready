@@ -289,7 +289,139 @@ function richBundle(): EvidenceBundle {
   }) as EvidenceBundle;
 }
 
+function versionedRuleset(): Record<string, unknown> {
+  return {
+    id: 1,
+    name: "main-protection",
+    target: "branch",
+    refPatterns: ["~DEFAULT_BRANCH"],
+    enforcement: "active",
+    bypassActorsKnown: true,
+    bypassActorSummaries: [],
+    allowForcePushes: false,
+    allowDeletions: false,
+    requiredChecks: [],
+    pullRequest: {
+      allowedMergeMethods: ["merge", "rebase", "squash"],
+      dismissStaleReviewsOnPush: false,
+      requireCodeOwnerReview: false,
+      requireLastPushApproval: false,
+      requiredApprovingReviewCount: 0,
+      requiredReviewThreadResolution: true,
+      requiredReviewers: []
+    },
+    requiredStatusChecksPolicy: {
+      doNotEnforceOnCreate: false,
+      strictRequiredStatusChecksPolicy: true
+    }
+  };
+}
+
+function firstRuleset(bundle: EvidenceBundle): Record<string, unknown> {
+  const ruleset = (bundle.snapshot.rulesets as Array<Record<string, unknown>>)[0];
+  if (ruleset === undefined) {
+    throw new Error("fixture ruleset is required");
+  }
+  return ruleset;
+}
+
 describe("audit evidence bundle schema", () => {
+  it("accepts v2 ruleset semantics and rejects those semantics in v1", async () => {
+    const validator = new Ajv2020({ allErrors: true, strict: true }).compile(await loadSchema());
+    const version2 = validBundle();
+    version2.bundleVersion = 2;
+    version2.snapshot.snapshotVersion = 2;
+    version2.snapshot.rulesets = [versionedRuleset()];
+    version2.integrity = computeAuditEvidenceIntegrity(version2);
+
+    expect(validator(version2)).toBe(true);
+    expect(() => {
+      validateAuditEvidenceBundle(version2);
+    }).not.toThrow();
+
+    const emptyVersion2 = validBundle();
+    emptyVersion2.bundleVersion = 2;
+    emptyVersion2.snapshot.snapshotVersion = 2;
+    emptyVersion2.integrity = computeAuditEvidenceIntegrity(emptyVersion2);
+    expect(validator(emptyVersion2)).toBe(false);
+    expectCode(() => {
+      validateAuditEvidenceBundle(emptyVersion2);
+    }, "bundle-version");
+
+    const version1 = validBundle();
+    version1.snapshot.rulesets = [versionedRuleset()];
+    version1.integrity = computeAuditEvidenceIntegrity(version1);
+    expect(validator(version1)).toBe(false);
+    expectCode(() => {
+      validateAuditEvidenceBundle(version1);
+    }, "bundle-version");
+  });
+
+  it("normalizes and rejects v2 semantic edge cases without lossy coercion", () => {
+    const unsorted = validBundle();
+    unsorted.bundleVersion = 2;
+    unsorted.snapshot.snapshotVersion = 2;
+    const unsortedRuleset = versionedRuleset();
+    (unsortedRuleset.pullRequest as Record<string, unknown>).allowedMergeMethods = [
+      "squash",
+      "merge",
+      "rebase"
+    ];
+    unsorted.snapshot.rulesets = [unsortedRuleset];
+    const normalized = normalizeAuditEvidenceBundle(unsorted);
+    const normalizedRuleset = (normalized.snapshot.rulesets as Array<Record<string, unknown>>)[0];
+    expect((normalizedRuleset?.pullRequest as Record<string, unknown>).allowedMergeMethods).toEqual(
+      ["merge", "rebase", "squash"]
+    );
+
+    const lossyReviewerInput = validBundle();
+    lossyReviewerInput.bundleVersion = 2;
+    lossyReviewerInput.snapshot.snapshotVersion = 2;
+    const reviewerRuleset = versionedRuleset();
+    (reviewerRuleset.pullRequest as Record<string, unknown>).requiredReviewers = [{}];
+    lossyReviewerInput.snapshot.rulesets = [reviewerRuleset];
+    expect(() => {
+      normalizeAuditEvidenceBundle(lossyReviewerInput);
+    }).toThrow("bundle-ruleset-reviewers-unsupported");
+
+    const cases: readonly [(bundle: EvidenceBundle) => void, string][] = [
+      [
+        (bundle) => {
+          const ruleset = firstRuleset(bundle);
+          (ruleset.pullRequest as Record<string, unknown>).allowedMergeMethods = [];
+          bundle.integrity = computeAuditEvidenceIntegrity(bundle);
+        },
+        "bundle-ruleset-review"
+      ],
+      [
+        (bundle) => {
+          const ruleset = firstRuleset(bundle);
+          (ruleset.pullRequest as Record<string, unknown>).requiredReviewers = [{}];
+          bundle.integrity = computeAuditEvidenceIntegrity(bundle);
+        },
+        "bundle-ruleset-reviewers-unsupported"
+      ],
+      [
+        (bundle) => {
+          const ruleset = firstRuleset(bundle);
+          (ruleset.requiredStatusChecksPolicy as Record<string, unknown>).extra = true;
+          bundle.integrity = computeAuditEvidenceIntegrity(bundle);
+        },
+        "bundle-ruleset-status"
+      ]
+    ];
+    for (const [mutate, code] of cases) {
+      const invalid = validBundle();
+      invalid.bundleVersion = 2;
+      invalid.snapshot.snapshotVersion = 2;
+      invalid.snapshot.rulesets = [versionedRuleset()];
+      mutate(invalid);
+      expectCode(() => {
+        validateAuditEvidenceBundle(invalid);
+      }, code);
+    }
+  });
+
   it("is a closed Draft 2020-12 schema with the frozen version surface", async () => {
     const schema = await loadSchema();
     expect(schema.$schema).toBe("https://json-schema.org/draft/2020-12/schema");
@@ -1134,7 +1266,18 @@ describe("audit evidence bundle schema", () => {
       }, code);
     };
 
-    expectInvalid((bundle) => (bundle.bundleVersion = 2), "bundle-version");
+    expectInvalid((bundle) => (bundle.bundleVersion = 3), "bundle-version");
+    expectInvalid((bundle) => {
+      (bundle.report as Record<string, unknown>).findings = Array.from({ length: 501 }, () => ({
+        code: "too-many",
+        category: "integrity",
+        severity: "error",
+        message: "too-many"
+      }));
+    }, "bundle-findings-limit");
+    expectInvalid((bundle) => {
+      (bundle.integrity as Record<string, unknown>).snapshotSha256 = "invalid";
+    }, "bundle-integrity");
     expectInvalid(
       (bundle) => ((bundle.subject as Record<string, unknown>).owner = "bad\u0000owner"),
       "bundle-subject"
