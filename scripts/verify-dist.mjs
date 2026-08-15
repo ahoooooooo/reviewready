@@ -99,9 +99,26 @@ function isValidSourceMap(value, depth = 0) {
   });
 }
 
-/** @param {string} source @param {string} projectRoot @returns {string} */
-function normalizeSourceIdentity(source, projectRoot) {
+/**
+ * @param {string} source
+ * @param {string} projectRoot
+ * @param {string} [sourceBase]
+ * @returns {string}
+ */
+function normalizeSourceIdentity(source, projectRoot, sourceBase) {
   const normalized = source.replaceAll("\\", "/");
+  if (sourceBase !== undefined && !normalized.startsWith("file://")) {
+    try {
+      const sourcePath = resolve(sourceBase, normalized);
+      const projectRelative = relative(resolve(projectRoot), sourcePath).replaceAll("\\", "/");
+      if (projectRelative === "src" || projectRelative.startsWith("src/")) {
+        return projectRelative;
+      }
+    } catch {
+      return normalized;
+    }
+    return normalized;
+  }
   if (normalized.startsWith("../src/")) {
     const candidate = normalized.slice("../".length);
     return candidate.split("/").includes("..") ? normalized : candidate;
@@ -299,9 +316,10 @@ function scanJsonObject(text, start, depth, ranges, mode) {
  *
  * @param {Buffer} bytes
  * @param {string} projectRoot
+ * @param {string} [sourceBase]
  * @returns {Buffer}
  */
-export function normalizeSourceMapBytes(bytes, projectRoot) {
+export function normalizeSourceMapBytes(bytes, projectRoot, sourceBase) {
   try {
     if (bytes.byteLength > MAX_SOURCE_MAP_BYTES) {
       return bytes;
@@ -323,7 +341,9 @@ export function normalizeSourceMapBytes(bytes, projectRoot) {
     for (const range of ranges) {
       const source = /** @type {unknown} */ (JSON.parse(text.slice(range.start, range.end)));
       if (typeof source === "string") {
-        range.replacement = JSON.stringify(normalizeSourceIdentity(source, projectRoot));
+        range.replacement = JSON.stringify(
+          normalizeSourceIdentity(source, projectRoot, sourceBase)
+        );
       }
     }
     const chunks = /** @type {string[]} */ ([]);
@@ -426,7 +446,9 @@ export function readStableFile(absolute, expected) {
  */
 function digestFile(absolute, name, projectRoot, stats) {
   const bytes = readStableFile(absolute, stats);
-  const comparable = name.endsWith(".map") ? normalizeSourceMapBytes(bytes, projectRoot) : bytes;
+  const comparable = name.endsWith(".map")
+    ? normalizeSourceMapBytes(bytes, projectRoot, dirname(absolute))
+    : bytes;
   return createHash("sha256").update(comparable).digest("hex");
 }
 

@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { lstatSync, mkdirSync, utimesSync, writeFileSync } from "node:fs";
 import { truncate } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 
 import { describe, expect, it } from "vitest";
 import { vi } from "vitest";
@@ -181,6 +181,77 @@ describe("generated dist verification", () => {
     const bytes = Buffer.from(sourceMap, "utf8");
 
     expect(normalizeSourceMapBytes(bytes, process.cwd())).toEqual(bytes);
+  });
+
+  it("normalizes source paths that traverse from a clean output root into project src", () => {
+    const projectRoot = join(tmpdir(), "reviewready-source-map-project");
+    const outputRoot = join(tmpdir(), "reviewready-source-map-clean", "root");
+    const source = relative(outputRoot, join(projectRoot, "src", "nested.ts")).replaceAll(
+      "\\",
+      "/"
+    );
+    const sourceMap = JSON.stringify({
+      version: 3,
+      sources: [source],
+      names: [],
+      mappings: ""
+    });
+
+    const normalized = JSON.parse(
+      normalizeSourceMapBytes(Buffer.from(sourceMap, "utf8"), projectRoot, outputRoot).toString(
+        "utf8"
+      )
+    ) as { sources: string[] };
+
+    expect(normalized.sources).toEqual(["src/nested.ts"]);
+  });
+
+  it("preserves source paths whose resolved target is outside project src", () => {
+    const projectRoot = join(tmpdir(), "reviewready-source-map-project");
+    const outputRoot = join(tmpdir(), "reviewready-source-map-output");
+    const source = relative(outputRoot, join(tmpdir(), "src", "outside.ts")).replaceAll("\\", "/");
+    const sourceMap = JSON.stringify({
+      version: 3,
+      sources: [source],
+      names: [],
+      mappings: ""
+    });
+    const bytes = Buffer.from(sourceMap, "utf8");
+
+    expect(normalizeSourceMapBytes(bytes, projectRoot, outputRoot)).toEqual(bytes);
+  });
+
+  it("uses each generated map directory when comparing clean output roots", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "reviewready-source-map-project-"));
+    const currentRoot = join(projectRoot, "dist");
+    const expectedRoot = join(projectRoot, "clean", "root");
+    const sourcePath = join(projectRoot, "src", "nested.ts");
+    try {
+      await mkdir(join(projectRoot, "src"), { recursive: true });
+      await mkdir(currentRoot);
+      await mkdir(expectedRoot, { recursive: true });
+
+      const currentMap = JSON.stringify({
+        version: 3,
+        sources: ["../src/nested.ts"],
+        names: [],
+        mappings: ""
+      });
+      const expectedMap = JSON.stringify({
+        version: 3,
+        sources: [relative(expectedRoot, sourcePath).replaceAll("\\", "/")],
+        names: [],
+        mappings: ""
+      });
+      await writeFile(join(currentRoot, "output.map"), currentMap);
+      await writeFile(join(expectedRoot, "output.map"), expectedMap);
+
+      expect(collectFiles(currentRoot, "", projectRoot).get("output.map")).toBe(
+        collectFiles(expectedRoot, "", projectRoot).get("output.map")
+      );
+    } finally {
+      await rm(projectRoot, { recursive: true, force: true });
+    }
   });
 
   it("leaves duplicate source-map keys byte-identical", () => {
