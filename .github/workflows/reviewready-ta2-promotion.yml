@@ -52,3 +52,48 @@ jobs:
         run: node scripts/ta2-promotion.mjs
         env:
           GITHUB_TOKEN: ${{ steps.audit-app-token.outputs.token }}
+
+      - name: Persist bounded TA-2 evidence for independent review
+        if: success()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: reviewready-ta2-evidence-${{ github.sha }}
+          path: ${{ runner.temp }}/reviewready-ta2
+          if-no-files-found: error
+          retention-days: 30
+
+  review:
+    if: ${{ github.repository == 'ahoooooooo/reviewready' && github.ref == 'refs/heads/main' }}
+    needs: promotion
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Check out the exact main revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Install locked dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Compile trusted source without package scripts
+        run: node node_modules/typescript/bin/tsc -p tsconfig.build.json --outDir dist
+
+      - name: Download the saved TA-2 evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: reviewready-ta2-evidence-${{ github.sha }}
+          path: ${{ runner.temp }}/reviewready-ta2
+
+      - name: Independently replay the saved TA-2 evidence
+        run: node scripts/ta2-artifact-review.mjs --directory "$RUNNER_TEMP/reviewready-ta2" --repository "$GITHUB_REPOSITORY" --revision "$GITHUB_SHA"

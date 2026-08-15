@@ -212,6 +212,14 @@ produce branch force-push/deletion findings. Tag-only rulesets are not converted
 into branch findings; an active tag ruleset remains an explicit incomplete
 finding until tag-ruleset semantics are covered by the audit contract.
 
+The trusted TA-2 promotion workflow keeps collection output in runner temporary
+storage while the token is present, then persists exactly the bounded bundle,
+replay report, and manifest as a 30-day, run-scoped Actions artifact. A separate
+read-only job downloads that artifact and performs another offline replay with a
+credential-free environment. This is durable workflow evidence, not a signature
+or independent provider authority; artifact access, retention, and deletion are
+still GitHub-hosted controls and must not be confused with TA-3 storage.
+
 Webhook verification is limited to exact raw-body HMAC-SHA256 validation,
 configured hook identity, a bounded verifier clock, an atomic replay namespace
 supplied by an external durable store, and SHA/policy/workflow binding. Delivery

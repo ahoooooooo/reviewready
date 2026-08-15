@@ -35,10 +35,13 @@ or workflow-authority decision.
 
 The checked-in TA-2 promotion workflow runs only on the exact main revision,
 fixes the repository, policy, and workflow roots in a trusted script, and
-replays the bundle without a token. It keeps raw evidence in runner temporary
-storage only. The main-bound promotion run at
+replays the bundle without a token. It stages only the bounded bundle, replay,
+and manifest in runner temporary storage, then uploads those exact files to a
+30-day, run-scoped Actions artifact. A separate least-privilege job downloads
+that artifact and replays it offline again. The main-bound promotion run at
 a4689c7f05c6bdc0870db91dbfe6d19c5ccb2e96 passed with a repository-scoped
-read-only GitHub App token; durable acceptance evidence remains tracked in #55.
+read-only GitHub App token; the follow-up durable acceptance run for #55 must
+still be completed and reviewed before TA-2 is described as exited.
 
 Issue [#54](https://github.com/ahoooooooo/reviewready/issues/54) tracks live
 repository governance. The current required check selects the GitHub Actions

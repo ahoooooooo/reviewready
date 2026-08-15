@@ -1,8 +1,9 @@
 # TA-2 replayable audit evidence implementation plan
 
 Status: **v1 contract frozen; modeled ruleset-semantics v2 extension, local
-gates, and main-bound live promotion are verified; durable acceptance artifact
-and final promotion review remain pending.**
+gates, and main-bound live promotion are verified; the bounded durable-artifact
+and independent-review workflow is implemented, but a new main-bound artifact
+inspection remains pending.**
 
 This plan implements [ADR 0009](../../adr/0009-replayable-audit-evidence-bundle.md)
 and the [TA-2 threat model](../../threat-model-ta2-evidence-bundle.md) for
@@ -39,9 +40,11 @@ start until the remaining dogfood and promotion gates exit.
   is a platform limitation, not an independent trusted-root claim.
 
 - A base-owned promotion entrypoint now fixes the repository, exact main SHA,
-  policy path, and workflow roots; it bounds child output and replay and keeps
-  raw evidence in runner temporary storage only. This is an execution path, not
-  accepted live evidence.
+  policy path, and workflow roots; it bounds child output and replay. After
+  successful replay it exposes exactly the bundle, replay report, and manifest
+  to a pinned 30-day Actions artifact, and a separate job downloads and checks
+  the same bytes offline. This is an execution path until one main-bound run is
+  inspected and recorded as acceptance evidence.
 - The first authenticated dogfood attempt reached the real repository ruleset
   but correctly stopped without bundle output: its official detail includes a
   `pull_request` review rule and additional required-status enforcement fields
@@ -61,9 +64,9 @@ start until the remaining dogfood and promotion gates exit.
 - The subsequent main-bound promotion run at
   [a4689c7](https://github.com/ahoooooooo/reviewready/commit/a4689c7f05c6bdc0870db91dbfe6d19c5ccb2e96)
   succeeded with the repository-scoped read-only App token and completed
-  collection plus two offline replays. The workflow intentionally retains raw
-  evidence in runner temporary storage only, so the durable saved bundle and
-  independent artifact review for #55 remain pending.
+  collection plus two offline replays. That historical run predates the
+  durable-artifact follow-up; its runner-temporary output is not treated as the
+  #55 acceptance artifact.
 - The main-bound promotion workflow now mints a repository-only, read-only
   GitHub App installation token from the two repository secrets
   `REVIEWREADY_AUDIT_APP_ID` and `REVIEWREADY_AUDIT_PRIVATE_KEY`. It binds the
