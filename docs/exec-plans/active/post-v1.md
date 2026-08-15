@@ -5,7 +5,7 @@ durable-artifact workflow and independent replay were verified on the main
 revision used for collection. TA-3-I production implementation has not started.
 The resulting audit is intentionally 'incomplete' because governance and
 workflow authority remain unproven; that is a correct fail-closed outcome, not
-a release or readiness pass. TA-3 design is the next node.
+a release or readiness pass. TA-3-D is complete; TA-3-I is the next node.
 
 This is the forward execution plan after the verified v1 release line. It does
 not authorize product implementation, repository-setting changes, publication,
