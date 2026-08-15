@@ -10,7 +10,10 @@ import {
 } from "../src/audit-evidence-collection.js";
 import { parseCanonicalJsonBytes } from "../src/audit-evidence.js";
 import type { JsonValue } from "../src/audit-evidence.js";
-import { validateAuditEvidenceBundle } from "../src/audit-evidence-bundle.js";
+import {
+  hydrateAuditEvidenceBundle,
+  validateAuditEvidenceBundle
+} from "../src/audit-evidence-bundle.js";
 import type { AuditSnapshot } from "../src/audit.js";
 
 const sha = "a".repeat(40);
@@ -482,6 +485,53 @@ describe("audit evidence collection projection", () => {
     expect(() => {
       validateAuditEvidenceBundle(bundle);
     }).not.toThrow();
+  });
+
+  it("emits a versioned evidence bundle when ruleset review semantics are present", () => {
+    const value: AuditSnapshot = {
+      ...snapshot(),
+      rulesets: [
+        {
+          id: 1,
+          name: "main-protection",
+          target: "branch",
+          refPatterns: ["~DEFAULT_BRANCH"],
+          enforcement: "active",
+          bypassActorsKnown: true,
+          bypassActors: [],
+          allowForcePushes: false,
+          allowDeletions: false,
+          requiredChecks: [{ name: "check", appId: 15368 }],
+          pullRequest: {
+            allowedMergeMethods: ["merge", "rebase", "squash"],
+            dismissStaleReviewsOnPush: false,
+            requireCodeOwnerReview: false,
+            requireLastPushApproval: false,
+            requiredApprovingReviewCount: 0,
+            requiredReviewThreadResolution: true,
+            requiredReviewers: []
+          },
+          requiredStatusChecksPolicy: {
+            doNotEnforceOnCreate: false,
+            strictRequiredStatusChecksPolicy: true
+          }
+        }
+      ]
+    };
+
+    const bundle = buildAuditEvidenceBundle(buildInput(value));
+    const object = bundle as Record<string, JsonValue>;
+    const projectedSnapshot = object.snapshot as Record<string, JsonValue>;
+    expect(object.bundleVersion).toBe(2);
+    expect(projectedSnapshot.snapshotVersion).toBe(2);
+    expect(() => {
+      validateAuditEvidenceBundle(bundle);
+    }).not.toThrow();
+    const hydrated = hydrateAuditEvidenceBundle(bundle);
+    expect(hydrated.snapshot.rulesets[0]?.pullRequest).toEqual(value.rulesets[0]?.pullRequest);
+    expect(hydrated.snapshot.rulesets[0]?.requiredStatusChecksPolicy).toEqual(
+      value.rulesets[0]?.requiredStatusChecksPolicy
+    );
   });
 
   it("fails closed on collection bounds, revision, policy, workflow, and authority violations", () => {

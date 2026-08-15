@@ -1,6 +1,6 @@
 # ADR 0009: Replayable repository-audit evidence bundle
 
-- Status: accepted; TA-2 implementation complete, final dogfood/review gate pending
+- Status: accepted; v1 frozen, v2 semantic extension governed by ADR 0010, final dogfood/review gate pending
 - Date: 2026-08-13
 
 ## Context
@@ -126,8 +126,10 @@ The v1 normalized ruleset projection is intentionally closed. A GitHub ruleset
 review or enforcement semantics that this snapshot and bundle do not preserve.
 The collector rejects those shapes with a stable unsupported-semantics failure;
 it must not accept them and discard the fields, and it must not emit a complete
-bundle. Modeling those facts requires a separately reviewed contract/version
-extension. Repository Actions permission settings are likewise outside the v1
+bundle. Modeling the currently supported subset is governed by the separately
+reviewed [ADR 0010](0010-ruleset-semantics-evidence-v2.md) and
+[v2 extension](../audit-evidence-bundle-v2.md). Repository Actions permission
+settings are likewise outside the v1
 bundle projection; TA-2 must not describe `allowed_actions`, SHA pinning, or
 workflow token permissions as evidence in this bundle.
 

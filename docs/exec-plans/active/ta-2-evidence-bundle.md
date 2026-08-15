@@ -1,7 +1,8 @@
 # TA-2 replayable audit evidence implementation plan
 
-Status: **implementation complete; local replay evidence is verified; live dogfood
-and final promotion review remain pending.**
+Status: **v1 contract frozen; modeled ruleset-semantics v2 extension and local
+replay evidence are verified; live dogfood and final promotion review remain
+pending.**
 
 This plan implements [ADR 0009](../../adr/0009-replayable-audit-evidence-bundle.md)
 and the [TA-2 threat model](../../threat-model-ta2-evidence-bundle.md) for
@@ -48,6 +49,10 @@ start until the remaining dogfood and promotion gates exit.
   regression tests now record this as unsupported semantics. Actions repository
   permission settings remain outside the v1 bundle projection; they must not be
   silently claimed as collected evidence.
+- The modeled subset is now emitted as bundle/snapshot v2 under
+  [ADR 0010](../../adr/0010-ruleset-semantics-evidence-v2.md). v1 fixtures and
+  consumers remain unchanged; non-empty required reviewers and unmodeled
+  parameters still stop collection closed.
 - The official main-bound promotion run at
   [9f0ef9c](https://github.com/ahoooooooo/reviewready/commit/9f0ef9c45b214b82eaf052678b62f8441de1e5d9)
   stopped closed without an evidence bundle with the stable collection-failed

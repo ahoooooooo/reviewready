@@ -567,12 +567,14 @@ describe("GitHub repository audit API adapter", () => {
       {
         type: "pull_request",
         parameters: {
+          allowed_merge_methods: ["merge"],
           dismiss_stale_reviews_on_push: false,
           require_code_owner_review: false,
           require_last_push_approval: false,
           required_approving_review_count: 0,
           required_review_thread_resolution: true,
-          required_reviewers: []
+          required_reviewers: [],
+          dismissal_restriction: {}
         }
       },
       "ruleset-review-semantics-unsupported"
@@ -581,9 +583,8 @@ describe("GitHub repository audit API adapter", () => {
       {
         type: "required_status_checks",
         parameters: {
-          do_not_enforce_on_create: false,
           required_status_checks: [{ context: "check", integration_id: 15368 }],
-          strict_required_status_checks_policy: true
+          unexpected_status_semantics: true
         }
       },
       "ruleset-status-semantics-unsupported"
@@ -620,6 +621,199 @@ describe("GitHub repository audit API adapter", () => {
       ).rejects.toThrow(code);
     }
   );
+
+  it("normalizes currently modeled GitHub ruleset review and status semantics", async () => {
+    const request = vi.fn((route: string, params: Record<string, unknown>) => {
+      if (route === "GET /repos/{owner}/{repo}/rulesets") {
+        return Promise.resolve(params.page === 1 ? response([{ id: 14 }]) : response([]));
+      }
+      if (route === "GET /repos/{owner}/{repo}/rulesets/{ruleset_id}") {
+        return Promise.resolve(
+          response({
+            id: 14,
+            name: "main-protection",
+            target: "branch",
+            enforcement: "active",
+            conditions: { ref_name: { include: ["~DEFAULT_BRANCH"] } },
+            bypass_actors: [],
+            rules: [
+              {
+                type: "pull_request",
+                parameters: {
+                  allowed_merge_methods: ["merge", "squash", "rebase"],
+                  dismiss_stale_reviews_on_push: false,
+                  require_code_owner_review: false,
+                  require_last_push_approval: false,
+                  required_approving_review_count: 0,
+                  required_review_thread_resolution: true,
+                  required_reviewers: []
+                }
+              },
+              {
+                type: "required_status_checks",
+                parameters: {
+                  do_not_enforce_on_create: false,
+                  required_status_checks: [{ context: "check", integration_id: 15368 }],
+                  strict_required_status_checks_policy: true
+                }
+              }
+            ]
+          })
+        );
+      }
+      return Promise.reject(Object.assign(new Error("unexpected"), { status: 500 }));
+    });
+    vi.mocked(getOctokit).mockReturnValue(octokitWithTransport(request));
+
+    await expect(
+      createGitHubAuditClient("secret", { sleep: () => Promise.resolve() }).listRulesets({
+        owner: "octocat",
+        repo: "demo"
+      })
+    ).resolves.toMatchObject([
+      {
+        id: 14,
+        pullRequest: {
+          allowedMergeMethods: ["merge", "squash", "rebase"],
+          dismissStaleReviewsOnPush: false,
+          requireCodeOwnerReview: false,
+          requireLastPushApproval: false,
+          requiredApprovingReviewCount: 0,
+          requiredReviewThreadResolution: true,
+          requiredReviewers: []
+        },
+        requiredStatusChecksPolicy: {
+          doNotEnforceOnCreate: false,
+          strictRequiredStatusChecksPolicy: true
+        },
+        requiredChecks: [{ name: "check", appId: 15368 }]
+      }
+    ]);
+  });
+
+  it("rejects duplicate status rules even when the legacy policy fields are absent", async () => {
+    const request = vi.fn((route: string, params: Record<string, unknown>) => {
+      if (route === "GET /repos/{owner}/{repo}/rulesets") {
+        return Promise.resolve(params.page === 1 ? response([{ id: 15 }]) : response([]));
+      }
+      if (route === "GET /repos/{owner}/{repo}/rulesets/{ruleset_id}") {
+        return Promise.resolve(
+          response({
+            id: 15,
+            name: "duplicate-status-rules",
+            target: "push",
+            enforcement: "active",
+            conditions: {},
+            bypass_actors: [],
+            rules: [
+              {
+                type: "required_status_checks",
+                parameters: { required_status_checks: [{ context: "check" }] }
+              },
+              {
+                type: "required_status_checks",
+                parameters: { required_status_checks: [{ context: "other-check" }] }
+              }
+            ]
+          })
+        );
+      }
+      return Promise.reject(Object.assign(new Error("unexpected"), { status: 500 }));
+    });
+    vi.mocked(getOctokit).mockReturnValue(octokitWithTransport(request));
+
+    await expect(
+      createGitHubAuditClient("secret", { sleep: () => Promise.resolve() }).listRulesets({
+        owner: "octocat",
+        repo: "demo"
+      })
+    ).rejects.toThrow("ruleset-status-duplicate");
+  });
+
+  it.each([
+    [
+      {
+        type: "pull_request",
+        parameters: {
+          allowed_merge_methods: ["merge", "merge"],
+          dismiss_stale_reviews_on_push: false,
+          require_code_owner_review: false,
+          require_last_push_approval: false,
+          required_approving_review_count: 0,
+          required_review_thread_resolution: true,
+          required_reviewers: []
+        }
+      },
+      "ruleset-review-semantics-invalid"
+    ],
+    [
+      {
+        type: "pull_request",
+        parameters: {
+          allowed_merge_methods: ["merge"],
+          dismiss_stale_reviews_on_push: false,
+          require_code_owner_review: false,
+          require_last_push_approval: false,
+          required_approving_review_count: 0,
+          required_review_thread_resolution: true
+        }
+      },
+      "ruleset-review-semantics-invalid"
+    ],
+    [
+      {
+        type: "pull_request",
+        parameters: {
+          allowed_merge_methods: ["merge"],
+          dismiss_stale_reviews_on_push: false,
+          require_code_owner_review: false,
+          require_last_push_approval: false,
+          required_approving_review_count: 0,
+          required_review_thread_resolution: true,
+          required_reviewers: [{ id: 1 }]
+        }
+      },
+      "ruleset-reviewers-unsupported"
+    ],
+    [
+      {
+        type: "required_status_checks",
+        parameters: {
+          do_not_enforce_on_create: false,
+          required_status_checks: [{ context: "check" }]
+        }
+      },
+      "ruleset-status-semantics-invalid"
+    ]
+  ] as const)("rejects malformed modeled ruleset semantics", async (rule, code) => {
+    const request = vi.fn((route: string, params: Record<string, unknown>) => {
+      if (route === "GET /repos/{owner}/{repo}/rulesets") {
+        return Promise.resolve(params.page === 1 ? response([{ id: 16 }]) : response([]));
+      }
+      if (route === "GET /repos/{owner}/{repo}/rulesets/{ruleset_id}") {
+        return Promise.resolve(
+          response({
+            id: 16,
+            name: "malformed-semantics",
+            target: "branch",
+            enforcement: "active",
+            conditions: { ref_name: { include: ["~DEFAULT_BRANCH"] } },
+            bypass_actors: [],
+            rules: [rule]
+          })
+        );
+      }
+      return Promise.reject(Object.assign(new Error("unexpected"), { status: 500 }));
+    });
+    vi.mocked(getOctokit).mockReturnValue(octokitWithTransport(request));
+
+    await expect(
+      createGitHubAuditClient("secret", { sleep: () => Promise.resolve() }).listRulesets({
+        owner: "octocat",
+        repo: "demo"
+      })
+    ).rejects.toThrow(code);
+  });
 
   it("rejects unmodeled ruleset top-level fields instead of ignoring provenance", async () => {
     const request = vi.fn((route: string, params: Record<string, unknown>) => {

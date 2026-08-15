@@ -355,7 +355,23 @@ function canonicalMutableSettings(value: MutableAuditSettings): string {
         ? {}
         : { allowForcePushes: ruleset.allowForcePushes }),
       ...(ruleset.allowDeletions === undefined ? {} : { allowDeletions: ruleset.allowDeletions }),
-      requiredChecks: sortJson(ruleset.requiredChecks)
+      requiredChecks: sortJson(ruleset.requiredChecks),
+      ...(ruleset.pullRequest === undefined
+        ? {}
+        : {
+            pullRequest: {
+              allowedMergeMethods: sortText(ruleset.pullRequest.allowedMergeMethods),
+              dismissStaleReviewsOnPush: ruleset.pullRequest.dismissStaleReviewsOnPush,
+              requireCodeOwnerReview: ruleset.pullRequest.requireCodeOwnerReview,
+              requireLastPushApproval: ruleset.pullRequest.requireLastPushApproval,
+              requiredApprovingReviewCount: ruleset.pullRequest.requiredApprovingReviewCount,
+              requiredReviewThreadResolution: ruleset.pullRequest.requiredReviewThreadResolution,
+              requiredReviewers: sortJson(ruleset.pullRequest.requiredReviewers)
+            }
+          }),
+      ...(ruleset.requiredStatusChecksPolicy === undefined
+        ? {}
+        : { requiredStatusChecksPolicy: ruleset.requiredStatusChecksPolicy })
     }))
     .sort((left, right) => left.id - right.id);
   const tagProtection = {

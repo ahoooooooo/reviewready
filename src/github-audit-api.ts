@@ -1142,11 +1142,68 @@ function mapBranchProtection(value: unknown, branch: string): AuditBranchProtect
   };
 }
 
-function rulesetChecks(value: unknown): { readonly name: string; readonly appId?: number }[] {
+function rulesetPullRequest(value: unknown): NonNullable<AuditRuleset["pullRequest"]> {
   const parameters = record(value);
-  if (Object.keys(parameters).some((key) => key !== "required_status_checks")) {
-    throw new AuditApiFailure("ruleset-status-semantics-unsupported");
+  rejectUnknownFields(
+    parameters,
+    [
+      "allowed_merge_methods",
+      "dismiss_stale_reviews_on_push",
+      "require_code_owner_review",
+      "require_last_push_approval",
+      "required_approving_review_count",
+      "required_review_thread_resolution",
+      "required_reviewers"
+    ],
+    "ruleset-review-semantics-unsupported"
+  );
+  const rawMethods = parameters.allowed_merge_methods;
+  if (!Array.isArray(rawMethods) || rawMethods.length === 0 || rawMethods.length > 3) {
+    throw new AuditApiFailure("ruleset-review-semantics-invalid");
   }
+  const allowedMergeMethods: ("merge" | "squash" | "rebase")[] = [];
+  const methods = new Set<string>();
+  for (const rawMethod of rawMethods as readonly unknown[]) {
+    if (rawMethod !== "merge" && rawMethod !== "squash" && rawMethod !== "rebase") {
+      throw new AuditApiFailure("ruleset-review-semantics-invalid");
+    }
+    if (methods.has(rawMethod)) {
+      throw new AuditApiFailure("ruleset-review-semantics-invalid");
+    }
+    methods.add(rawMethod);
+    allowedMergeMethods.push(rawMethod);
+  }
+  const rawReviewers = parameters.required_reviewers;
+  if (!Array.isArray(rawReviewers)) {
+    throw new AuditApiFailure("ruleset-review-semantics-invalid");
+  }
+  if (rawReviewers.length > MAX_NESTED_ITEMS) {
+    throw new AuditApiFailure("ruleset-reviewers-limit");
+  }
+  if (rawReviewers.length > 0) {
+    throw new AuditApiFailure("ruleset-reviewers-unsupported");
+  }
+  return {
+    allowedMergeMethods,
+    dismissStaleReviewsOnPush: booleanField(parameters.dismiss_stale_reviews_on_push),
+    requireCodeOwnerReview: booleanField(parameters.require_code_owner_review),
+    requireLastPushApproval: booleanField(parameters.require_last_push_approval),
+    requiredApprovingReviewCount: integerField(parameters.required_approving_review_count),
+    requiredReviewThreadResolution: booleanField(parameters.required_review_thread_resolution),
+    requiredReviewers: []
+  };
+}
+
+function rulesetChecks(value: unknown): {
+  readonly checks: readonly { readonly name: string; readonly appId?: number }[];
+  readonly policy?: NonNullable<AuditRuleset["requiredStatusChecksPolicy"]>;
+} {
+  const parameters = record(value);
+  rejectUnknownFields(
+    parameters,
+    ["required_status_checks", "do_not_enforce_on_create", "strict_required_status_checks_policy"],
+    "ruleset-status-semantics-unsupported"
+  );
   const values = parameters.required_status_checks;
   if (!Array.isArray(values)) {
     throw new AuditApiFailure("ruleset-checks-invalid");
@@ -1154,7 +1211,31 @@ function rulesetChecks(value: unknown): { readonly name: string; readonly appId?
   if (values.length > MAX_NESTED_ITEMS) {
     throw new AuditApiFailure("ruleset-checks-limit");
   }
-  return values.map((entry) => check(entry, "integration_id"));
+  const checks = values.map((entry) => check(entry, "integration_id"));
+  const hasDoNotEnforceOnCreate = Object.prototype.hasOwnProperty.call(
+    parameters,
+    "do_not_enforce_on_create"
+  );
+  const hasStrictPolicy = Object.prototype.hasOwnProperty.call(
+    parameters,
+    "strict_required_status_checks_policy"
+  );
+  if (hasDoNotEnforceOnCreate !== hasStrictPolicy) {
+    throw new AuditApiFailure("ruleset-status-semantics-invalid");
+  }
+  return {
+    checks,
+    ...(hasDoNotEnforceOnCreate
+      ? {
+          policy: {
+            doNotEnforceOnCreate: booleanField(parameters.do_not_enforce_on_create),
+            strictRequiredStatusChecksPolicy: booleanField(
+              parameters.strict_required_status_checks_policy
+            )
+          }
+        }
+      : {})
+  };
 }
 
 function validateRulesetMetadata(
@@ -1351,6 +1432,9 @@ function mapRuleset(
   }
   let allowForcePushes: boolean | undefined;
   let allowDeletions: boolean | undefined;
+  let pullRequest: AuditRuleset["pullRequest"];
+  let requiredStatusChecksPolicy: AuditRuleset["requiredStatusChecksPolicy"];
+  let hasRequiredStatusChecksRule = false;
   if (target === "branch" || target === "tag") {
     allowForcePushes = true;
     allowDeletions = true;
@@ -1360,7 +1444,17 @@ function mapRuleset(
     const rule = record(rawRule);
     const ruleType = rule.type;
     if (ruleType === "pull_request") {
-      throw new AuditApiFailure("ruleset-review-semantics-unsupported");
+      if (
+        Object.keys(rule).some((key) => key !== "type" && key !== "parameters") ||
+        !Object.prototype.hasOwnProperty.call(rule, "parameters") ||
+        pullRequest !== undefined
+      ) {
+        throw new AuditApiFailure(
+          pullRequest === undefined ? "ruleset-rule-parameters" : "ruleset-review-duplicate"
+        );
+      }
+      pullRequest = rulesetPullRequest(rule.parameters);
+      continue;
     }
     if (
       ruleType !== "non_fast_forward" &&
@@ -1387,11 +1481,16 @@ function mapRuleset(
       ) {
         throw new AuditApiFailure("ruleset-rule-parameters");
       }
-      const checks = rulesetChecks(rule.parameters);
-      if (requiredChecks.length + checks.length > MAX_NESTED_ITEMS) {
+      const status = rulesetChecks(rule.parameters);
+      if (requiredChecks.length + status.checks.length > MAX_NESTED_ITEMS) {
         throw new AuditApiFailure("ruleset-checks-limit");
       }
-      requiredChecks.push(...checks);
+      if (hasRequiredStatusChecksRule) {
+        throw new AuditApiFailure("ruleset-status-duplicate");
+      }
+      hasRequiredStatusChecksRule = true;
+      requiredChecks.push(...status.checks);
+      requiredStatusChecksPolicy = status.policy;
     }
   }
   const rawBypass = item.bypass_actors;
@@ -1452,7 +1551,9 @@ function mapRuleset(
     bypassActorsKnown,
     allowForcePushes,
     allowDeletions,
-    requiredChecks
+    requiredChecks,
+    ...(pullRequest === undefined ? {} : { pullRequest }),
+    ...(requiredStatusChecksPolicy === undefined ? {} : { requiredStatusChecksPolicy })
   };
 }
 

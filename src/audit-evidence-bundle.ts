@@ -736,6 +736,24 @@ function normalizeRulesets(value: JsonValue): JsonValue[] {
         ruleset.bypassActorSummaries as JsonValue
       );
     }
+    const pullRequest = recordAt(ruleset, "pullRequest");
+    if (pullRequest !== undefined) {
+      if (hasOwn(pullRequest, "allowedMergeMethods")) {
+        pullRequest.allowedMergeMethods = normalizeStrings(
+          pullRequest.allowedMergeMethods as JsonValue,
+          "bundle-ruleset-review"
+        );
+      }
+      if (hasOwn(pullRequest, "requiredReviewers")) {
+        if (!Array.isArray(pullRequest.requiredReviewers)) {
+          fail("bundle-ruleset-review");
+        }
+        if (pullRequest.requiredReviewers.length !== 0) {
+          fail("bundle-ruleset-reviewers-unsupported");
+        }
+        pullRequest.requiredReviewers = [];
+      }
+    }
   }
   result.sort((left, right) => {
     if (!isRecord(left) || !isRecord(right)) {
@@ -1247,10 +1265,62 @@ function assertRulesetBypasses(value: unknown, target: string): void {
   }
 }
 
+function validateRulesetPullRequest(value: JsonValue): void {
+  const pullRequest = requiredRecord(value, "bundle-ruleset-review");
+  assertClosed(
+    pullRequest,
+    [
+      "allowedMergeMethods",
+      "dismissStaleReviewsOnPush",
+      "requireCodeOwnerReview",
+      "requireLastPushApproval",
+      "requiredApprovingReviewCount",
+      "requiredReviewThreadResolution",
+      "requiredReviewers"
+    ],
+    "bundle-ruleset-review"
+  );
+  const methods = assertSortedUniqueStrings(
+    pullRequest.allowedMergeMethods,
+    (entry) => entry === "merge" || entry === "squash" || entry === "rebase",
+    "bundle-ruleset-review"
+  );
+  if (methods.length === 0 || methods.length > 3) {
+    fail("bundle-ruleset-review");
+  }
+  requiredBoolean(pullRequest.dismissStaleReviewsOnPush, "bundle-ruleset-review");
+  requiredBoolean(pullRequest.requireCodeOwnerReview, "bundle-ruleset-review");
+  requiredBoolean(pullRequest.requireLastPushApproval, "bundle-ruleset-review");
+  const requiredApprovingReviewCount = requiredSafeInteger(
+    pullRequest.requiredApprovingReviewCount,
+    "bundle-ruleset-review"
+  );
+  if (requiredApprovingReviewCount > 100) {
+    fail("bundle-ruleset-review");
+  }
+  requiredBoolean(pullRequest.requiredReviewThreadResolution, "bundle-ruleset-review");
+  const requiredReviewers = requiredArray(pullRequest.requiredReviewers, "bundle-ruleset-review");
+  if (requiredReviewers.length !== 0) {
+    fail("bundle-ruleset-reviewers-unsupported");
+  }
+}
+
+function validateRequiredStatusChecksPolicy(value: JsonValue): void {
+  const policy = requiredRecord(value, "bundle-ruleset-status");
+  assertClosed(
+    policy,
+    ["doNotEnforceOnCreate", "strictRequiredStatusChecksPolicy"],
+    "bundle-ruleset-status"
+  );
+  requiredBoolean(policy.doNotEnforceOnCreate, "bundle-ruleset-status");
+  requiredBoolean(policy.strictRequiredStatusChecksPolicy, "bundle-ruleset-status");
+}
+
 function validateRuleset(
   value: JsonValue,
   ownerType: string,
-  previousId: number | undefined
+  previousId: number | undefined,
+  snapshotVersion: 1 | 2
 ): number {
   const ruleset = requiredRecord(value, "bundle-ruleset");
   const allowed = [
@@ -1264,7 +1334,9 @@ function validateRuleset(
     "bypassActorSummaries",
     "allowForcePushes",
     "allowDeletions",
-    "requiredChecks"
+    "requiredChecks",
+    "pullRequest",
+    "requiredStatusChecksPolicy"
   ] as const;
   if (Object.keys(ruleset).some((key) => !allowed.includes(key as (typeof allowed)[number]))) {
     fail("bundle-ruleset");
@@ -1324,6 +1396,18 @@ function validateRuleset(
   requiredBoolean(ruleset.bypassActorsKnown, "bundle-ruleset");
   assertRulesetBypasses(ruleset.bypassActorSummaries, target);
   validateCheckProjection(ruleset.requiredChecks, "bundle-ruleset");
+  if (
+    snapshotVersion === 1 &&
+    (hasOwn(ruleset, "pullRequest") || hasOwn(ruleset, "requiredStatusChecksPolicy"))
+  ) {
+    fail("bundle-version");
+  }
+  if (hasOwn(ruleset, "pullRequest")) {
+    validateRulesetPullRequest(ruleset.pullRequest as JsonValue);
+  }
+  if (hasOwn(ruleset, "requiredStatusChecksPolicy")) {
+    validateRequiredStatusChecksPolicy(ruleset.requiredStatusChecksPolicy as JsonValue);
+  }
   if (ownerType === "user" && Array.isArray(ruleset.bypassActorSummaries)) {
     for (const summary of ruleset.bypassActorSummaries) {
       if (isRecord(summary) && summary.actorType === "organization_admin") {
@@ -1339,6 +1423,7 @@ function validateSnapshot(
   subject: Record<string, JsonValue>,
   requestedBaseSha: string,
   policyPath: string,
+  expectedBundleVersion: 1 | 2,
   collectionStatus: string,
   collectionMissing: readonly string[]
 ): Record<string, JsonValue> {
@@ -1358,7 +1443,7 @@ function validateSnapshot(
     ],
     "bundle-snapshot"
   );
-  if (snapshot.snapshotVersion !== 1) {
+  if (snapshot.snapshotVersion !== expectedBundleVersion) {
     fail("bundle-version");
   }
   const repository = requiredRecord(snapshot.repository, "bundle-snapshot");
@@ -1425,18 +1510,27 @@ function validateSnapshot(
     fail("bundle-rulesets-limit");
   }
   let previousId: number | undefined;
+  let hasVersionedSemantics = false;
   for (const ruleset of rulesets) {
     previousId = validateRuleset(
       ruleset,
       requiredText(subject.ownerType, "bundle-subject"),
-      previousId
+      previousId,
+      expectedBundleVersion
     );
+    const object = requiredRecord(ruleset, "bundle-ruleset");
+    hasVersionedSemantics =
+      hasVersionedSemantics ||
+      hasOwn(object, "pullRequest") ||
+      hasOwn(object, "requiredStatusChecksPolicy");
     if (collectionStatus === "complete") {
-      const object = requiredRecord(ruleset, "bundle-ruleset");
       if (object.bypassActorsKnown !== true) {
         fail("bundle-authority-incomplete");
       }
     }
+  }
+  if (expectedBundleVersion === 2 && !hasVersionedSemantics) {
+    fail("bundle-version");
   }
   if (isObservationMismatch && rulesets.length !== 0) {
     fail("bundle-mismatch-projection");
@@ -1743,7 +1837,55 @@ function hydrateBranchProtection(value: JsonValue): AuditSnapshot["branchProtect
   };
 }
 
-function hydrateRulesets(value: JsonValue): AuditSnapshot["rulesets"] {
+function hydrateRulesetPullRequest(
+  value: JsonValue
+): NonNullable<AuditSnapshot["rulesets"][number]["pullRequest"]> {
+  const pullRequest = requiredRecord(value, "bundle-ruleset-review");
+  const allowedMergeMethods = assertSortedUniqueStrings(
+    pullRequest.allowedMergeMethods,
+    (entry) => entry === "merge" || entry === "squash" || entry === "rebase",
+    "bundle-ruleset-review"
+  ) as ("merge" | "squash" | "rebase")[];
+  return {
+    allowedMergeMethods,
+    dismissStaleReviewsOnPush: requiredBoolean(
+      pullRequest.dismissStaleReviewsOnPush,
+      "bundle-ruleset-review"
+    ),
+    requireCodeOwnerReview: requiredBoolean(
+      pullRequest.requireCodeOwnerReview,
+      "bundle-ruleset-review"
+    ),
+    requireLastPushApproval: requiredBoolean(
+      pullRequest.requireLastPushApproval,
+      "bundle-ruleset-review"
+    ),
+    requiredApprovingReviewCount: requiredSafeInteger(
+      pullRequest.requiredApprovingReviewCount,
+      "bundle-ruleset-review"
+    ),
+    requiredReviewThreadResolution: requiredBoolean(
+      pullRequest.requiredReviewThreadResolution,
+      "bundle-ruleset-review"
+    ),
+    requiredReviewers: []
+  };
+}
+
+function hydrateRequiredStatusChecksPolicy(
+  value: JsonValue
+): NonNullable<AuditSnapshot["rulesets"][number]["requiredStatusChecksPolicy"]> {
+  const policy = requiredRecord(value, "bundle-ruleset-status");
+  return {
+    doNotEnforceOnCreate: requiredBoolean(policy.doNotEnforceOnCreate, "bundle-ruleset-status"),
+    strictRequiredStatusChecksPolicy: requiredBoolean(
+      policy.strictRequiredStatusChecksPolicy,
+      "bundle-ruleset-status"
+    )
+  };
+}
+
+function hydrateRulesets(value: JsonValue, snapshotVersion: 1 | 2): AuditSnapshot["rulesets"] {
   return requiredArray(value, "bundle-rulesets").map((entry) => {
     const ruleset = requiredRecord(entry, "bundle-ruleset");
     return {
@@ -1771,7 +1913,17 @@ function hydrateRulesets(value: JsonValue): AuditSnapshot["rulesets"] {
       ...(hasOwn(ruleset, "allowDeletions")
         ? { allowDeletions: requiredBoolean(ruleset.allowDeletions, "bundle-ruleset") }
         : {}),
-      requiredChecks: hydrateChecks(ruleset.requiredChecks as JsonValue, "bundle-ruleset")
+      requiredChecks: hydrateChecks(ruleset.requiredChecks as JsonValue, "bundle-ruleset"),
+      ...(snapshotVersion === 2 && hasOwn(ruleset, "pullRequest")
+        ? { pullRequest: hydrateRulesetPullRequest(ruleset.pullRequest as JsonValue) }
+        : {}),
+      ...(snapshotVersion === 2 && hasOwn(ruleset, "requiredStatusChecksPolicy")
+        ? {
+            requiredStatusChecksPolicy: hydrateRequiredStatusChecksPolicy(
+              ruleset.requiredStatusChecksPolicy as JsonValue
+            )
+          }
+        : {})
     };
   });
 }
@@ -1854,7 +2006,10 @@ function hydrateAuditSnapshot(
       )
     },
     branchProtection: hydrateBranchProtection(snapshot.branchProtection as JsonValue),
-    rulesets: hydrateRulesets(snapshot.rulesets as JsonValue),
+    rulesets: hydrateRulesets(
+      snapshot.rulesets as JsonValue,
+      requiredSafeInteger(snapshot.snapshotVersion, "bundle-snapshot") as 1 | 2
+    ),
     tagProtection: {
       known: requiredBoolean(tagProtection.known, "bundle-tag-protection"),
       allowsDeletion: requiredBoolean(tagProtection.allowsDeletion, "bundle-tag-protection"),
@@ -1980,9 +2135,13 @@ function validateAuditEvidenceBundleCore(value: unknown): {
     ],
     "bundle-shape"
   );
-  if (bundle.bundleVersion !== 1 || bundle.canonicalization !== "RFC8785") {
+  if (
+    (bundle.bundleVersion !== 1 && bundle.bundleVersion !== 2) ||
+    bundle.canonicalization !== "RFC8785"
+  ) {
     fail("bundle-version");
   }
+  const bundleVersion = bundle.bundleVersion;
   const { subject, requestedBaseSha } = validateSubject(bundle);
   const collection = validateCollection(bundle);
   const { policyPath } = validateAssertions(bundle);
@@ -1991,6 +2150,7 @@ function validateAuditEvidenceBundleCore(value: unknown): {
     subject,
     requestedBaseSha,
     policyPath,
+    bundleVersion,
     requiredText(collection.status, "bundle-collection"),
     assertSortedUniqueStrings(
       collection.missing,
