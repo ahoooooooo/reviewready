@@ -13,6 +13,7 @@ import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
 
 import { describe, expect, it } from "vitest";
+import YAML from "yaml";
 
 import {
   PROMOTION_EVENT_NAMES,
@@ -124,13 +125,46 @@ describe("trusted TA-2 promotion entrypoint", () => {
   it("keeps the production workflow base-only and fixes the policy/workflow roots", async () => {
     const workflow = await readFile(".github/workflows/reviewready-ta2-promotion.yml", "utf8");
     const promotion = await readFile("scripts/ta2-promotion.mjs", "utf8");
+    const parsedWorkflow = YAML.parse(workflow) as {
+      permissions?: Record<string, string>;
+      jobs?: { promotion?: { if?: string; steps?: Array<Record<string, unknown>> } };
+    };
+    const promotionJob = parsedWorkflow.jobs?.promotion;
+    const steps = promotionJob?.steps ?? [];
+    const tokenStep = steps.find((step) => step.id === "audit-app-token");
+    const collectStep = steps.find(
+      (step) => step.name === "Collect and replay bounded TA-2 evidence in runner temp only"
+    );
 
     expect(workflow).toContain("branches: [main]");
     expect(workflow).not.toContain("pull_request");
     expect(workflow).toContain("node scripts/ta2-promotion.mjs");
-    expect(workflow).toContain("GITHUB_TOKEN: " + "$" + "{{ secrets.GITHUB_TOKEN }}");
+    expect(parsedWorkflow.permissions).toEqual({ contents: "read" });
+    expect(promotionJob?.if).toBe(
+      "${{ github.repository == 'ahoooooooo/reviewready' && github.ref == 'refs/heads/main' }}"
+    );
+    expect(tokenStep?.uses).toBe(
+      "actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349"
+    );
+    expect(tokenStep?.with).toEqual({
+      "app-id": "${{ secrets.REVIEWREADY_AUDIT_APP_ID }}",
+      "private-key": "${{ secrets.REVIEWREADY_AUDIT_PRIVATE_KEY }}",
+      owner: "ahoooooooo",
+      repositories: "reviewready",
+      "permission-administration": "read",
+      "permission-contents": "read",
+      "permission-metadata": "read"
+    });
+    expect(steps.indexOf(tokenStep as Record<string, unknown>)).toBeGreaterThanOrEqual(0);
+    expect(steps.indexOf(tokenStep as Record<string, unknown>)).toBeLessThan(
+      steps.indexOf(collectStep as Record<string, unknown>)
+    );
+    expect(tokenStep?.env).toBeUndefined();
+    expect(collectStep?.env).toEqual({
+      GITHUB_TOKEN: "${{ steps.audit-app-token.outputs.token }}"
+    });
+    expect(workflow).not.toContain("GITHUB_TOKEN: " + "$" + "{{ secrets.GITHUB_TOKEN }}");
     expect(promotion).toContain(PROMOTION_TRUSTED_WORKFLOW);
-    expect(workflow).toContain("contents: read");
     for (const event of PROMOTION_EVENT_NAMES) {
       expect(workflow).toContain(event);
     }
