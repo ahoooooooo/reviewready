@@ -467,7 +467,11 @@ function assertDirectory(root) {
     throw error;
   }
   if (stats.isSymbolicLink() || !stats.isDirectory()) {
-    throw new Error("generated output root is not a regular directory: " + root);
+    throw new Error(
+      stats.isSymbolicLink()
+        ? "generated output root is a symlink: " + root
+        : "generated output root is not a regular directory: " + root
+    );
   }
   return stats;
 }

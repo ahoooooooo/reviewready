@@ -9,7 +9,7 @@ import {
   writeFileSync
 } from "node:fs";
 import { createHash } from "node:crypto";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
 
 import { describe, expect, it } from "vitest";
@@ -68,6 +68,17 @@ function reportBytes(status: "pass" | "fail" | "incomplete" = "pass"): Buffer {
     }) + "\n",
     "utf8"
   );
+}
+
+function parentVisibleChildPath(path: string, childEnvironment: NodeJS.ProcessEnv): string {
+  const childDescriptorPrefix = "/proc/self/fd/3/";
+  if (!path.startsWith(childDescriptorPrefix)) {
+    return path;
+  }
+  if (typeof childEnvironment.RUNNER_TEMP !== "string") {
+    throw new Error("runner temp is missing");
+  }
+  return join(childEnvironment.RUNNER_TEMP, "reviewready-ta2", basename(path));
 }
 
 describe("trusted TA-2 promotion entrypoint", () => {
@@ -316,7 +327,7 @@ describe("trusted TA-2 promotion entrypoint", () => {
           [],
           process.cwd(),
           {
-            runNode: (_projectRoot, args) => {
+            runNode: (_projectRoot, args, childEnvironment) => {
               if (args.includes("collect")) {
                 return bundleBytes();
               }
@@ -327,7 +338,10 @@ describe("trusted TA-2 promotion entrypoint", () => {
                 if (typeof bundlePath !== "string") {
                   throw new Error("bundle path was not passed");
                 }
-                writeFileSync(bundlePath, bundleBytes("tampered"));
+                writeFileSync(
+                  parentVisibleChildPath(bundlePath, childEnvironment),
+                  bundleBytes("tampered")
+                );
               }
               return reportBytes();
             }
@@ -351,7 +365,7 @@ describe("trusted TA-2 promotion entrypoint", () => {
           [],
           process.cwd(),
           {
-            runNode: (_projectRoot, args) => {
+            runNode: (_projectRoot, args, childEnvironment) => {
               if (args.includes("collect")) {
                 return bundleBytes();
               }
@@ -360,8 +374,9 @@ describe("trusted TA-2 promotion entrypoint", () => {
               if (typeof bundlePath !== "string") {
                 throw new Error("bundle path was not passed");
               }
+              const parentBundlePath = parentVisibleChildPath(bundlePath, childEnvironment);
               const alternate = bundleBytes("alternate");
-              writeFileSync(bundlePath, alternate);
+              writeFileSync(parentBundlePath, alternate);
               try {
                 const digestArgumentIndex = args.indexOf("--bundle-sha256");
                 const expectedDigest = args[digestArgumentIndex + 1];
@@ -372,7 +387,7 @@ describe("trusted TA-2 promotion entrypoint", () => {
                   }
                 }
               } finally {
-                writeFileSync(bundlePath, bundleBytes());
+                writeFileSync(parentBundlePath, bundleBytes());
               }
               return reportBytes();
             }
