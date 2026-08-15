@@ -10,6 +10,7 @@ import {
   type DurableResultStore,
   type DurableWebhookStore
 } from "../src/webhook.js";
+import { receiveTrustedGitHubWebhook } from "../src/ta3-ingress.js";
 import { MAX_REPLAY_AGE_MS, type EvaluationBinding } from "../src/trust.js";
 
 const secret = "It's a Secret to Everybody";
@@ -116,6 +117,90 @@ describe("GitHub webhook ingress", () => {
     expect(captured.replayKey).toMatch(/^123:hook-5:17:[0-9a-f]{64}$/u);
     expect(captured.bodySha256).toMatch(/^[0-9a-f]{64}$/u);
     expect(captured.receivedAtMs).toBe(1_000);
+  });
+
+  it("rejects installation and repository identities outside the configured allowlist", async () => {
+    const rawBody = body();
+    const record = vi.fn<DurableWebhookStore["record"]>(() => Promise.resolve("new"));
+    const durable: DurableWebhookStore = { record };
+
+    await expect(
+      receiveGitHubWebhook(
+        { rawBody, headers: headers(rawBody), receivedAtMs: 1_000, nowMs: 1_000 },
+        {
+          appId: 123,
+          webhookSecret: secret,
+          hookId: "hook-5",
+          allowedInstallationIds: [18],
+          allowedRepositoryIds: [99]
+        },
+        durable
+      )
+    ).resolves.toMatchObject({ accepted: false, reason: "invalid" });
+    await expect(
+      receiveGitHubWebhook(
+        { rawBody, headers: headers(rawBody), receivedAtMs: 1_000, nowMs: 1_000 },
+        {
+          appId: 123,
+          webhookSecret: secret,
+          hookId: "hook-5",
+          allowedInstallationIds: [17],
+          allowedRepositoryIds: [100]
+        },
+        durable
+      )
+    ).resolves.toMatchObject({ accepted: false, reason: "invalid" });
+    expect(record).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed allowlist configuration before durable access", async () => {
+    const rawBody = body();
+    const record = vi.fn<DurableWebhookStore["record"]>(() => Promise.resolve("new"));
+    const durable: DurableWebhookStore = { record };
+
+    await expect(
+      receiveGitHubWebhook(
+        { rawBody, headers: headers(rawBody), receivedAtMs: 1_000, nowMs: 1_000 },
+        {
+          appId: 123,
+          webhookSecret: secret,
+          hookId: "hook-5",
+          allowedInstallationIds: [17, 17]
+        },
+        durable
+      )
+    ).resolves.toMatchObject({ accepted: false, reason: "invalid" });
+    expect(record).not.toHaveBeenCalled();
+  });
+
+  it("requires both bounded allowlists on the TA-3 trusted webhook entrypoint", async () => {
+    const rawBody = body();
+    const record = vi.fn<DurableWebhookStore["record"]>(() => Promise.resolve("new"));
+    const durable: DurableWebhookStore = { record };
+    const request = {
+      rawBody,
+      headers: headers(rawBody),
+      receivedAtMs: 1_000,
+      nowMs: 1_000
+    };
+
+    const baseConfig = { appId: 123, webhookSecret: secret, hookId: "hook-5" };
+    await expect(receiveTrustedGitHubWebhook(request, baseConfig, durable)).resolves.toMatchObject({
+      accepted: false,
+      reason: "invalid"
+    });
+    await expect(
+      receiveTrustedGitHubWebhook(
+        request,
+        {
+          ...baseConfig,
+          allowedInstallationIds: [17],
+          allowedRepositoryIds: [99]
+        },
+        durable
+      )
+    ).resolves.toMatchObject({ accepted: true, reason: "accepted" });
+    expect(record).toHaveBeenCalledTimes(1);
   });
 
   it("distinguishes duplicate and same-id body conflicts", async () => {

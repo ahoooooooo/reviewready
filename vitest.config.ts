@@ -19,7 +19,8 @@ export default defineConfig({
         "src/audit-evidence-bundle.ts",
         "src/audit-evidence-collection.ts",
         "src/cli.ts",
-        "src/file-reader.ts"
+        "src/file-reader.ts",
+        "src/ta3-ingress.ts"
       ],
       thresholds: {
         perFile: true,

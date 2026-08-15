@@ -1,11 +1,15 @@
 # ReviewReady post-v1 trust roadmap
 
-Status: **PL-0, TA-1, TA-2, and TA-3-D are complete.** The bounded
-durable-artifact workflow and independent replay were verified on the main
-revision used for collection. TA-3-I production implementation has not started.
-The resulting audit is intentionally 'incomplete' because governance and
-workflow authority remain unproven; that is a correct fail-closed outcome, not
-a release or readiness pass. TA-3-D is complete; TA-3-I is the next node.
+Status: **PL-0, TA-1, TA-2, TA-3-D, and the TA-3-I local core implementation
+slice are complete.** The bounded durable-artifact workflow and independent
+replay were verified on the main revision used for collection. The provider-
+neutral ingress state machine, trusted webhook allowlist entrypoint, replay
+aliases, leases, generation fencing, outbox contract, provider reconciliation,
+and profile-drift gate now have executable local regressions. A production
+HTTPS host, transactional durable deployment, secret manager, and live GitHub
+enforcement have not started. The resulting audit is intentionally
+'incomplete' because governance and workflow authority remain unproven; that
+is a correct fail-closed outcome, not a release or readiness pass.
 
 This is the forward execution plan after the verified v1 release line. It does
 not authorize product implementation, repository-setting changes, publication,
@@ -297,6 +301,18 @@ The design review closed the following authority gaps before implementation:
 - the GitHub remote Check Run write is explicitly non-transactional with the
   durable store, so live race evidence is a promotion blocker rather than an
   implied guarantee.
+
+The TA-3-I local core implementation is recorded in
+`src/ta3-ingress.ts`, `src/webhook.ts`, `test/ta3-ingress.test.ts`, and the
+allowlist regressions in `test/webhook.test.ts`. It is intentionally a
+provider-neutral contract/reference boundary: the in-memory store exists to
+execute the state machine deterministically and is not presented as durable
+production storage. The trusted webhook wrapper requires both bounded
+installation and repository allowlists before the existing raw-body/HMAC
+ingress can write a record. The local gate passes, but the implementation
+successor remains open until a real HTTPS transport, transactional store,
+versioned secret manager, bounded Checks adapter, privacy/retention controls,
+and their deployment evidence are selected and tested.
 
 TA-3-D does not select or deploy the hosting runtime, durable store, secret
 manager, TLS/proxy, or retention provider. Those choices belong to the
