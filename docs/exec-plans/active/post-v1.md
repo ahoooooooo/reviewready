@@ -1,9 +1,11 @@
 # ReviewReady post-v1 trust roadmap
 
-Status: **PL-0, TA-1, and the TA-2 evidence-bundle implementation/local gate
-are complete; the bounded durable-artifact and independent-review workflow is
-implemented. A new main-bound run and artifact inspection remain pending.**
-TA-2 has not exited until those acceptance artifacts are reviewed.
+Status: **PL-0, TA-1, and TA-2 are complete.** The bounded durable-artifact
+workflow and independent replay were verified on the main revision used for
+collection.
+The resulting audit is intentionally 'incomplete' because governance and
+workflow authority remain unproven; that is a correct fail-closed outcome, not
+a release or readiness pass. TA-3 design is the next node.
 
 This is the forward execution plan after the verified v1 release line. It does
 not authorize product implementation, repository-setting changes, publication,
@@ -184,20 +186,30 @@ check as advisory; it does not manufacture an authority claim.
 
 The current TA-2 hardening batch covers bounded root inputs and nested API
 collections, immutable repository identity, default-branch-only ref semantics,
-ruleset pagination, bounded unpaginated workflow-directory collection, and duplicate identity rejection, exact API status,
-bounded headers and raw response streams, late deadlines, a 768-attempt total
-request budget, per-request bounded transport for every API read (with a bounded
-Octokit/global-fetch fallback and no unbounded path), inherited
-branch/tag/push/repository ruleset collection, explicit repository-target scope
-and enforcement validation, unsupported conditions and ruleset-scope rejection,
-active tag-ruleset incomplete findings,
-source-size parity, safe audit/SARIF locations,
-deterministic ordering, and audit-schema/CLI regressions. Repeated non-empty
-unlinked pages remain incomplete rather than being treated as complete. It now
-implements a replayable evidence bundle. The main-bound promotion run at
-a4689c7 passed collection and offline replay; the follow-up workflow now saves
-only the three bounded evidence files for 30 days and verifies them in a
-separate credential-free job, but that new artifact has not yet been inspected.
+ruleset pagination, bounded unpaginated workflow-directory collection, and
+duplicate identity rejection, exact API status, bounded headers and raw
+response streams, late deadlines, a 768-attempt total request budget,
+per-request bounded transport for every API read, inherited
+branch/tag/push/repository ruleset collection, explicit repository-target
+scope and enforcement validation, unsupported conditions and ruleset-scope
+rejection, active tag-ruleset incomplete findings, source-size parity, safe
+audit/SARIF locations, deterministic ordering, and audit-schema and CLI
+regressions. Repeated non-empty unlinked pages remain incomplete rather than
+being treated as complete. It now implements a replayable evidence bundle.
+
+The current-main promotion run
+[31898181562](https://github.com/ahoooooooo/reviewready/actions/runs/31898181562)
+was bound to 6ae4c96123aa5d377eb44fd2598fad052ea45cf8 and completed both
+collection and credential-free replay. Its run-scoped artifact contains
+exactly the bounded bundle, manifest, and replay files: 55136, 503, and 5049
+bytes. The bundle SHA-256 is
+410c3f78ed48fd6848f01e19d7910ed357dbe06bcf0ba7902d1f09c7ed21a398 and the
+replay SHA-256 is
+b41264311d78fe04bb8b5bab369ffca09be212daffe9d582efb9897904fc4949. The
+independent reviewer reproduced the same incomplete status and exit class.
+The report preserves 19 governance and provenance findings, including unknown
+branch/tag protection and the absence of independently proven trusted workflow
+roots.
 Canonical serialization, bundle privacy/source retention, exact
 caller-supplied revision semantics, stable double observation of settings, and
 independent provider authority were explicit SOL MAX design gates.
@@ -235,7 +247,9 @@ Exit:
 - the bundle contains no credential or unnecessary personal/private content;
 - audit status is not used as the readiness decision;
 - adversarial focused tests, `npm run check`, and `git diff --check` pass;
-- #55 closes with a reproducible evidence bundle.
+- #55 closes with a reproducible evidence bundle whose incomplete status and
+  findings are preserved; closing the issue does not claim that governance or
+  provider authority passed.
 
 Non-goals: no settings auto-fix, App deployment, database, model invocation, or
 claim that self-use proves broad adoption.
