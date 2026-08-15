@@ -19,7 +19,7 @@ pull-request code.
 
 ## Current status
 
-The latest published CLI and Action are v1.0.7. Its exact audited tarball, npm
+The latest published CLI and Action are v1.0.8. Its exact audited tarball, npm
 provenance, semantic-version tag target, GitHub Release target, and stable Action
 ref have all been verified against one commit. The v1.0.6 trust-core and
 live-ingress contracts are released, but a normal `pull_request` workflow is
@@ -29,16 +29,16 @@ contents from the base SHA does not by itself protect the caller workflow,
 Action pin, or `policy-path`.
 
 The `audit collect` and `audit replay` evidence-bundle commands described below
-are on the current development branch. The published 1.0.7 package does not
-contain these commands or the TA-2 bundle surface; they must not be treated as
-available from npm until a separately authorized release updates the package,
-dist, Action, schemas, and release evidence together.
+are available in the published 1.0.8 package. The TA-2 bundle surface is
+versioned, bounded, and replayed offline; it must not be treated as a readiness
+or workflow-authority decision.
 
 The checked-in TA-2 promotion workflow runs only on the exact main revision,
 fixes the repository, policy, and workflow roots in a trusted script, and
 replays the bundle without a token. It keeps raw evidence in runner temporary
-storage only; it is not live promotion evidence until a real run passes and is
-independently reviewed.
+storage only. The main-bound promotion run at
+a4689c7f05c6bdc0870db91dbfe6d19c5ccb2e96 passed with a repository-scoped
+read-only GitHub App token; durable acceptance evidence remains tracked in #55.
 
 Issue [#54](https://github.com/ahoooooooo/reviewready/issues/54) tracks live
 repository governance. The current required check selects the GitHub Actions
@@ -66,14 +66,14 @@ reviewready validate --policy .reviewready.yml
 The Action can also be used in an advisory workflow:
 
 ```yaml
-- uses: ahoooooooo/reviewready@9cb239e3b81e00b0f82239eaf43843863ab51e2d # v1.0.6
+- uses: ahoooooooo/reviewready@f21ed2e94efedb01f73e518c39765cef72c58e1c # v1.0.7
 ```
 
-Both advisory examples intentionally retain the audited v1.0.6 commit shipped
-in the published v1.0.7 package README, because published npm package bytes
-cannot be rewritten. The repository's checked-in trusted reference uses the
-verified v1.0.7 release commit; #60 tracks reconciliation of every public
-example in a future, separately authorized release.
+The advisory example retains the audited v1.0.7 commit shipped in the
+published v1.0.8 package README, because published npm package bytes cannot be
+rewritten. The repository's checked-in trusted reference is updated separately
+after each release to the exact verified release commit; #60 tracks the
+remaining public-coordinate reconciliation.
 
 The mutable `v1` tag is convenient, but an immutable verified commit is safer.
 The advisory workflow below must not be configured as the repository's only
@@ -83,8 +83,9 @@ an independent repository or organization rule.
 Version 1 keeps the policy, result, and exit-code contracts stable. v1.0.4
 restores the original v1 public requirement-key encoding after the historical
 v1.0.3 regression, v1.0.5 adds bounded webhook, App, audit, and release
-contracts, and v1.0.6 hardens the deterministic trust core. v1.0.7 synchronizes
-the published documentation. Older release output is not rewritten.
+contracts, v1.0.6 hardens the deterministic trust core, v1.0.7 synchronizes
+the published documentation, and v1.0.8 publishes the replayable audit
+evidence surface. Older release output is not rewritten.
 
 ## How it works
 

@@ -1,8 +1,8 @@
 # TA-2 replayable audit evidence implementation plan
 
-Status: **v1 contract frozen; modeled ruleset-semantics v2 extension and local
-replay evidence are verified; live dogfood and final promotion review remain
-pending.**
+Status: **v1 contract frozen; modeled ruleset-semantics v2 extension, local
+gates, and main-bound live promotion are verified; durable acceptance artifact
+and final promotion review remain pending.**
 
 This plan implements [ADR 0009](../../adr/0009-replayable-audit-evidence-bundle.md)
 and the [TA-2 threat model](../../threat-model-ta2-evidence-bundle.md) for
@@ -16,8 +16,8 @@ start until the remaining dogfood and promotion gates exit.
 - The evidence schema, canonicalizer, bundle projection/hydration, bounded
   base64 artifacts, exact-revision collector boundary, request metrics, CLI
   `audit collect`/`audit replay`, package exports, and tests are implemented.
-- The final local gate passed on 2026-08-15: 29 test files, 799 passed and
-  5 skipped (804 total), 92.63% statements, 88.17% branches, 98.50%
+- The final local gate passed on 2026-08-15: 29 test files, 809 passed and
+  5 skipped (814 total), 92.63% statements, 88.14% branches, 98.53%
   functions, and 92.53% lines.
   bundle/package smoke, clean-room replay, and the Action ncc build also passed.
 - Release preflight now reads external evidence and artifacts through bounded
@@ -58,6 +58,12 @@ start until the remaining dogfood and promotion gates exit.
   stopped closed without an evidence bundle with the stable collection-failed
   diagnostic. This confirms no false pass under the workflow token, but it is
   not an acceptance artifact and does not close #55.
+- The subsequent main-bound promotion run at
+  [a4689c7](https://github.com/ahoooooooo/reviewready/commit/a4689c7f05c6bdc0870db91dbfe6d19c5ccb2e96)
+  succeeded with the repository-scoped read-only App token and completed
+  collection plus two offline replays. The workflow intentionally retains raw
+  evidence in runner temporary storage only, so the durable saved bundle and
+  independent artifact review for #55 remain pending.
 - The main-bound promotion workflow now mints a repository-only, read-only
   GitHub App installation token from the two repository secrets
   `REVIEWREADY_AUDIT_APP_ID` and `REVIEWREADY_AUDIT_PRIVATE_KEY`. It binds the

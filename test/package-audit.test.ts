@@ -168,15 +168,15 @@ describe("auditPackageEntries", () => {
     ).toBe(true);
   });
 
-  it("labels the TA-2 evidence commands as unreleased while package version is 1.0.7", async () => {
+  it("labels the TA-2 evidence commands as released in package version 1.0.8", async () => {
     const packageJson = JSON.parse(await readFile("package.json", "utf8")) as {
       version?: unknown;
     };
     const readme = await readFile("README.md", "utf8");
 
-    expect(packageJson.version).toBe("1.0.7");
-    expect(readme).toContain("current development branch");
-    expect(readme).toMatch(/published 1\.0\.7 package does not\s+contain/u);
+    expect(packageJson.version).toBe("1.0.8");
+    expect(readme).toContain("latest published CLI and Action are v1.0.8");
+    expect(readme).toContain("available in the published 1.0.8 package");
   });
 
   it("keeps a canonical TA-2 evidence fixture replayable", async () => {
