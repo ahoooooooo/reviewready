@@ -31,7 +31,7 @@ artifact and protected release workflow.
 - [x] Move and verify the stable v1 Action tag only after npm verification.
 - [x] Record exact public coordinates in
       docs/release-evidence-v1.0.8.json.
-- [ ] Update the trusted workflow pin in a protected follow-up change to the
+- [x] Update the trusted workflow pin in a protected follow-up change to the
       verified v1.0.8 release commit.
 
 ## Known boundaries
