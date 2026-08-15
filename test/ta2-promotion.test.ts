@@ -41,10 +41,10 @@ function environment(): Record<string, string> {
   };
 }
 
-function bundleBytes(padding = ""): Buffer {
+function bundleBytes(padding = "", bundleVersion: 1 | 2 = 1): Buffer {
   return Buffer.from(
     JSON.stringify({
-      bundleVersion: 1,
+      bundleVersion,
       canonicalization: "RFC8785",
       subject: {},
       collection: { padding },
@@ -204,6 +204,23 @@ describe("trusted TA-2 promotion entrypoint", () => {
         bundleBytes().toString("utf8")
       );
       expect(manifest.status).toBe("pass");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("accepts a version 2 evidence bundle from the trusted collector", () => {
+    const root = mkdtempSync(join(tmpdir(), "reviewready-ta2-promotion-v2-test-"));
+    try {
+      const manifest = runPromotion({ ...environment(), RUNNER_TEMP: root }, [], process.cwd(), {
+        runNode: (_projectRoot, args) =>
+          args.includes("collect") ? bundleBytes("", 2) : reportBytes()
+      });
+
+      expect(manifest.status).toBe("pass");
+      expect(readFileSync(join(root, "reviewready-ta2", "evidence-bundle-v1.json"), "utf8")).toBe(
+        bundleBytes("", 2).toString("utf8")
+      );
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
