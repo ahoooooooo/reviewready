@@ -127,9 +127,17 @@ describe("trusted TA-2 promotion entrypoint", () => {
     const promotion = await readFile("scripts/ta2-promotion.mjs", "utf8");
     const parsedWorkflow = YAML.parse(workflow) as {
       permissions?: Record<string, string>;
-      jobs?: { promotion?: { if?: string; steps?: Array<Record<string, unknown>> } };
+      jobs?: {
+        promotion?: { if?: string; steps?: Array<Record<string, unknown>> };
+        review?: {
+          if?: string;
+          needs?: string | string[];
+          steps?: Array<Record<string, unknown>>;
+        };
+      };
     };
     const promotionJob = parsedWorkflow.jobs?.promotion;
+    const reviewJob = parsedWorkflow.jobs?.review;
     const steps = promotionJob?.steps ?? [];
     const tokenStep = steps.find((step) => step.id === "audit-app-token");
     const collectStep = steps.find(
@@ -168,6 +176,42 @@ describe("trusted TA-2 promotion entrypoint", () => {
     for (const event of PROMOTION_EVENT_NAMES) {
       expect(workflow).toContain(event);
     }
+
+    const persistStep = steps.find(
+      (step) => step.name === "Persist bounded TA-2 evidence for independent review"
+    );
+    expect(persistStep?.uses).toBe(
+      "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02"
+    );
+    expect(persistStep?.if).toBe("success()");
+    expect(persistStep?.with).toEqual({
+      name: "reviewready-ta2-evidence-${{ github.sha }}",
+      path: "${{ runner.temp }}/reviewready-ta2",
+      "if-no-files-found": "error",
+      "retention-days": 30
+    });
+
+    expect(reviewJob?.needs).toEqual("promotion");
+    expect(reviewJob?.if).toBe(
+      "${{ github.repository == 'ahoooooooo/reviewready' && github.ref == 'refs/heads/main' }}"
+    );
+    const reviewSteps = reviewJob?.steps ?? [];
+    const downloadStep = reviewSteps.find(
+      (step) => step.name === "Download the saved TA-2 evidence"
+    );
+    expect(downloadStep?.uses).toBe(
+      "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093"
+    );
+    expect(downloadStep?.with).toEqual({
+      name: "reviewready-ta2-evidence-${{ github.sha }}",
+      path: "${{ runner.temp }}/reviewready-ta2"
+    });
+    const independentReviewStep = reviewSteps.find(
+      (step) => step.name === "Independently replay the saved TA-2 evidence"
+    );
+    expect(independentReviewStep?.run).toBe(
+      'node scripts/ta2-artifact-review.mjs --directory "$RUNNER_TEMP/reviewready-ta2" --repository "$GITHUB_REPOSITORY" --revision "$GITHUB_SHA"'
+    );
   });
 
   it("collects once, writes bounded evidence, and replays twice without a token", () => {

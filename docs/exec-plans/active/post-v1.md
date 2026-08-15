@@ -1,8 +1,8 @@
 # ReviewReady post-v1 trust roadmap
 
 Status: **PL-0, TA-1, and the TA-2 evidence-bundle implementation/local gate
-are complete; the main-bound TA-2 promotion run also passed. The durable saved
-dogfood artifact and independent promotion review remain pending.**
+are complete; the bounded durable-artifact and independent-review workflow is
+implemented. A new main-bound run and artifact inspection remain pending.**
 TA-2 has not exited until those acceptance artifacts are reviewed.
 
 This is the forward execution plan after the verified v1 release line. It does
@@ -194,11 +194,12 @@ active tag-ruleset incomplete findings,
 source-size parity, safe audit/SARIF locations,
 deterministic ordering, and audit-schema/CLI regressions. Repeated non-empty
 unlinked pages remain incomplete rather than being treated as complete. It now
-implements a replayable evidence bundle, but local tests are not a real remote
-dogfood artifact. The main-bound promotion run at a4689c7 passed collection
-and offline replay. Canonical serialization, bundle privacy/source retention,
-exact caller-supplied revision semantics, stable double observation of settings,
-and
+implements a replayable evidence bundle. The main-bound promotion run at
+a4689c7 passed collection and offline replay; the follow-up workflow now saves
+only the three bounded evidence files for 30 days and verifies them in a
+separate credential-free job, but that new artifact has not yet been inspected.
+Canonical serialization, bundle privacy/source retention, exact
+caller-supplied revision semantics, stable double observation of settings, and
 independent provider authority were explicit SOL MAX design gates.
 
 The TA-2 evidence-bundle decision is now approved in
