@@ -70,7 +70,7 @@ const BUNDLE_KEYS = [
   "integrity"
 ];
 
-/** @typedef {{output: Buffer, exitCode: number}} CommandResult */
+/** @typedef {{output: Buffer, exitCode: number, stderr?: Buffer}} CommandResult */
 /** @typedef {(projectRoot: string, args: readonly string[], environment: NodeJS.ProcessEnv, maxOutputBytes?: number, allowedExitCodes?: readonly number[], directoryDescriptor?: number) => Buffer | CommandResult} CommandRunner */
 /** @typedef {{stats: import("node:fs").Stats, bytes: number, sha256: string}} OwnedEvidenceFile */
 
@@ -168,11 +168,22 @@ function runNode(
   } catch (error) {
     if (
       isRecord(error) &&
+      typeof error.code === "string" &&
+      ["ENOBUFS", "ERR_CHILD_PROCESS_STDIO_MAXBUFFER"].includes(error.code)
+    ) {
+      throw new Error("trusted TA-2 child output is out of bounds", { cause: error });
+    }
+    if (
+      isRecord(error) &&
       typeof error.status === "number" &&
       allowedExitCodes.includes(error.status) &&
       Buffer.isBuffer(error.stdout)
     ) {
-      return { output: error.stdout, exitCode: error.status };
+      return {
+        output: error.stdout,
+        exitCode: error.status,
+        ...(Buffer.isBuffer(error.stderr) ? { stderr: error.stderr } : {})
+      };
     }
     throw new Error("trusted TA-2 command failed closed", { cause: error });
   }
@@ -191,11 +202,37 @@ function normalizeCommandResult(result) {
     Buffer.isBuffer(result.output) &&
     typeof result.exitCode === "number" &&
     Number.isInteger(result.exitCode) &&
-    AUDIT_EXIT_CODES.includes(result.exitCode)
+    AUDIT_EXIT_CODES.includes(result.exitCode) &&
+    (result.stderr === undefined || Buffer.isBuffer(result.stderr))
   ) {
-    return { output: result.output, exitCode: result.exitCode };
+    return {
+      output: result.output,
+      exitCode: result.exitCode,
+      ...(Buffer.isBuffer(result.stderr) ? { stderr: result.stderr } : {})
+    };
   }
   throw new Error("trusted TA-2 command result is invalid");
+}
+
+/**
+ * @param {CommandResult} result
+ * @returns {string}
+ */
+function emptyCollectionMessage(result) {
+  const stderr = result.stderr?.toString("utf8") ?? "";
+  const diagnosticCode = /^\[([A-Z0-9_]+)\](?:\s|$)/u.exec(stderr)?.[1];
+  if (diagnosticCode === "AUDIT_EVIDENCE_UNSUPPORTED_SEMANTICS") {
+    return "trusted TA-2 collection stopped for unsupported semantics; no evidence bundle was emitted";
+  }
+  if (diagnosticCode === "AUDIT_EVIDENCE_REVISION_UNSTABLE") {
+    return "trusted TA-2 collection stopped for unstable revision; no evidence bundle was emitted";
+  }
+  if (diagnosticCode === "AUDIT_EVIDENCE_COLLECTION_FAILED") {
+    return "trusted TA-2 collection failed closed; no evidence bundle was emitted";
+  }
+  return result.exitCode === 2
+    ? "trusted TA-2 collection incomplete; no evidence bundle was emitted"
+    : "trusted TA-2 collection failed closed; no evidence bundle was emitted";
 }
 
 /**
@@ -823,7 +860,10 @@ export function runPromotion(
       )
     );
     const bundle = collectResult.output;
-    if (bundle.byteLength === 0 || bundle.byteLength > MAX_BUNDLE_BYTES) {
+    if (bundle.byteLength === 0) {
+      throw new Error(emptyCollectionMessage(collectResult));
+    }
+    if (bundle.byteLength > MAX_BUNDLE_BYTES) {
       throw new Error("trusted TA-2 evidence bundle is out of bounds");
     }
     validateBundleEnvelope(bundle);

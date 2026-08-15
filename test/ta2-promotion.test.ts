@@ -235,6 +235,104 @@ describe("trusted TA-2 promotion entrypoint", () => {
     }
   });
 
+  it("reports unsupported empty collection output without misclassifying it as an oversized bundle", () => {
+    const root = mkdtempSync(join(tmpdir(), "reviewready-ta2-empty-collection-test-"));
+    const projectRoot = join(root, "project");
+    mkdirSync(join(projectRoot, "dist"), { recursive: true });
+    writeFileSync(
+      join(projectRoot, "dist", "cli.js"),
+      'if (process.argv.includes("collect")) {\n' +
+        '  process.stderr.write("[AUDIT_EVIDENCE_UNSUPPORTED_SEMANTICS] stopped closed.\\n");\n' +
+        "  process.exitCode = 2;\n" +
+        "}\n"
+    );
+    try {
+      expect(() =>
+        runPromotion({ ...environment(), RUNNER_TEMP: join(root, "runner-temp") }, [], projectRoot)
+      ).toThrow(
+        "trusted TA-2 collection stopped for unsupported semantics; no evidence bundle was emitted"
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("does not accept an injected unsupported code after another stderr diagnostic", () => {
+    const root = mkdtempSync(join(tmpdir(), "reviewready-ta2-error-code-injection-test-"));
+    const projectRoot = join(root, "project");
+    mkdirSync(join(projectRoot, "dist"), { recursive: true });
+    writeFileSync(
+      join(projectRoot, "dist", "cli.js"),
+      'if (process.argv.includes("collect")) {\n' +
+        '  process.stderr.write("[INTERNAL_ERROR] [AUDIT_EVIDENCE_UNSUPPORTED_SEMANTICS]\\n");\n' +
+        "  process.exitCode = 2;\n" +
+        "}\n"
+    );
+    try {
+      expect(() =>
+        runPromotion({ ...environment(), RUNNER_TEMP: join(root, "runner-temp") }, [], projectRoot)
+      ).toThrow("trusted TA-2 collection incomplete; no evidence bundle was emitted");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("uses an incomplete fallback for an empty exit-2 collection without a stable error code", () => {
+    const root = mkdtempSync(join(tmpdir(), "reviewready-ta2-empty-fallback-test-"));
+    const projectRoot = join(root, "project");
+    mkdirSync(join(projectRoot, "dist"), { recursive: true });
+    writeFileSync(
+      join(projectRoot, "dist", "cli.js"),
+      'if (process.argv.includes("collect")) process.exitCode = 2;\n'
+    );
+    try {
+      expect(() =>
+        runPromotion({ ...environment(), RUNNER_TEMP: join(root, "runner-temp") }, [], projectRoot)
+      ).toThrow("trusted TA-2 collection incomplete; no evidence bundle was emitted");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects collection child output above the bounded limit", () => {
+    const root = mkdtempSync(join(tmpdir(), "reviewready-ta2-child-output-bound-test-"));
+    const projectRoot = join(root, "project");
+    mkdirSync(join(projectRoot, "dist"), { recursive: true });
+    writeFileSync(
+      join(projectRoot, "dist", "cli.js"),
+      'if (process.argv.includes("collect")) {\n' +
+        '  process.stdout.write("x".repeat(8 * 1024 * 1024 + 1));\n' +
+        "}\n"
+    );
+    try {
+      expect(() =>
+        runPromotion({ ...environment(), RUNNER_TEMP: join(root, "runner-temp") }, [], projectRoot)
+      ).toThrow("trusted TA-2 child output is out of bounds");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects collection child stderr above the bounded limit", () => {
+    const root = mkdtempSync(join(tmpdir(), "reviewready-ta2-child-stderr-bound-test-"));
+    const projectRoot = join(root, "project");
+    mkdirSync(join(projectRoot, "dist"), { recursive: true });
+    writeFileSync(
+      join(projectRoot, "dist", "cli.js"),
+      'if (process.argv.includes("collect")) {\n' +
+        '  process.stderr.write("x".repeat(8 * 1024 * 1024 + 1));\n' +
+        "  process.exitCode = 2;\n" +
+        "}\n"
+    );
+    try {
+      expect(() =>
+        runPromotion({ ...environment(), RUNNER_TEMP: join(root, "runner-temp") }, [], projectRoot)
+      ).toThrow("trusted TA-2 child output is out of bounds");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it.skipIf(process.platform !== "linux")(
     "passes the opened output directory to a real replay child process",
     () => {
