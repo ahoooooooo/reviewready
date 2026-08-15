@@ -19,7 +19,7 @@ pull-request code.
 
 ## Current status
 
-The latest published CLI and Action are v1.0.9. Its exact audited tarball, npm
+The latest published CLI and Action are v1.0.10. Its exact audited tarball, npm
 provenance, semantic-version tag target, GitHub Release target, and stable Action
 ref have all been verified against one commit. The v1.0.6 trust-core and
 live-ingress contracts are released, but a normal `pull_request` workflow is
@@ -29,7 +29,7 @@ contents from the base SHA does not by itself protect the caller workflow,
 Action pin, or `policy-path`.
 
 The `audit collect` and `audit replay` evidence-bundle commands described below
-are available in the published 1.0.9 package. The TA-2 bundle surface is
+are available in the published 1.0.10 package. The TA-2 bundle surface is
 versioned, bounded, and replayed offline; it must not be treated as a readiness
 or workflow-authority decision.
 
@@ -73,7 +73,7 @@ The Action can also be used in an advisory workflow:
 ```
 
 The advisory example retains the audited v1.0.7 commit shipped in the
-published v1.0.9 package README, because published npm package bytes cannot be
+published v1.0.10 package README, because published npm package bytes cannot be
 rewritten. The repository's checked-in trusted reference is updated separately
 after each release to the exact verified release commit; #60 tracks the
 remaining public-coordinate reconciliation.
@@ -87,8 +87,9 @@ Version 1 keeps the policy, result, and exit-code contracts stable. v1.0.4
 restores the original v1 public requirement-key encoding after the historical
 v1.0.3 regression, v1.0.5 adds bounded webhook, App, audit, and release
 contracts, v1.0.6 hardens the deterministic trust core, v1.0.7 synchronizes
-the published documentation, and v1.0.8 publishes the replayable audit
-evidence surface, and v1.0.9 fixes a GitHub pagination compatibility boundary.
+the published documentation, v1.0.8 publishes the replayable audit
+evidence surface, v1.0.9 fixes a GitHub pagination compatibility boundary, and
+v1.0.10 fixes a workflow action-reference parsing false positive.
 Older release output is not rewritten.
 
 ## How it works
