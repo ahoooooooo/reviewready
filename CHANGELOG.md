@@ -5,6 +5,16 @@ the project uses semantic versioning.
 
 ## [Unreleased]
 
+## [1.0.10] - 2026-08-16
+
+### Fixed
+
+- Anchor workflow action-reference detection to the YAML `uses` key so a
+  permission such as `statuses: read` cannot create a false
+  `ACTION_REF_NOT_PINNED` audit finding.
+- Add a regression test for the false-positive workflow audit boundary while
+  preserving fail-closed behavior for genuinely unpinned actions.
+
 ## [1.0.9] - 2026-08-15
 
 ### Fixed

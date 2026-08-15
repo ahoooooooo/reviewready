@@ -19,8 +19,8 @@ export interface WorkflowSecurityAnalysis {
   readonly findings: readonly WorkflowSecurityFinding[];
 }
 
-const PINNED_ACTION = /uses\s*:\s*[^\s#]+@([0-9a-f]{40})(?:\s|#|$)/iu;
-const ACTION_REFERENCE = /uses\s*:\s*([^\s#]+)/iu;
+const PINNED_ACTION = /(?:^|[ \t-])uses\s*:\s*[^\s#]+@([0-9a-f]{40})(?:\s|#|$)/iu;
+const ACTION_REFERENCE = /(?:^|[ \t-])uses\s*:\s*([^\s#]+)/iu;
 const UNTRUSTED_BODY = /github\.event\.(?:pull_request|issue|comment|review)\.(?:body|title)/iu;
 const MODEL_OUTPUT = /\$\{\{\s*(?:steps\.[\w-]+\.outputs\.|needs\.[\w-]+\.outputs\.)/iu;
 const DEPLOYMENT = /\b(?:deploy|kubectl|terraform\s+apply|npm\s+publish|git\s+push)\b/iu;

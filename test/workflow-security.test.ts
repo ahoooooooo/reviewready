@@ -24,6 +24,23 @@ describe("workflow security analysis", () => {
     expect(analyzeWorkflowSource(".github/workflows/reviewready.yml", source).findings).toEqual([]);
   });
 
+  it("does not treat a statuses permission key as an action reference", () => {
+    const source = [
+      "permissions:",
+      "  statuses: read",
+      "jobs:",
+      "  review:",
+      "    steps:",
+      "      - uses: actions/checkout@0123456789abcdef0123456789abcdef01234567"
+    ].join("\n");
+
+    const findings = analyzeWorkflowSource(
+      ".github/workflows/statuses-permission.yml",
+      source
+    ).findings;
+    expect(findings.some(({ ruleId }) => ruleId === "ACTION_REF_NOT_PINNED")).toBe(false);
+  });
+
   it("separates mutable provenance, PR-target execution, and capability findings", () => {
     const source = [
       "on: pull_request_target",
