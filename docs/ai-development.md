@@ -99,6 +99,38 @@ or scope control; a single successful replay is not proof that it is best. If
 the candidates are equivalent, keep the simpler one. Once remaining changes
 are only cosmetic, keep the current process and return to product work.
 
+## Git promotion protocol
+
+Repository work uses two explicit lanes so routine development does not wait on
+the owner for every local mutation while high-impact external changes remain
+deliberately gated.
+
+The routine branch lane covers the already authorized task scope: inspect the
+trusted checkout, edit repository files, run focused and complete validation,
+create commits, push the current feature branch, and update its existing PR or
+draft PR. The integrator may continue through those actions without requesting a
+new approval for each commit or push. This lane never authorizes protected-branch
+merges, tag movement, releases, package publication, ruleset changes, secrets,
+credentials, or deployment.
+
+The promotion lane begins only after the candidate has passed local proof and
+the owner gives one explicit authorization for the named merge or release
+batch. All verification, retry-safe reads, artifact checks, and public-coordinate
+reconciliation inside that named batch proceed without repeated approval prompts.
+GitHub environment reviewers, two-factor authentication, and other provider
+controls remain external gates; an agent must not work around them or turn a
+failed session into an implicit authorization.
+
+The CI order is part of the proof rather than a timing assumption. Untrusted
+pull-request CI may check out and test the proposed revision with read-only
+permissions. The trusted metadata-only workflow then cancels superseded runs,
+waits within a bounded budget for the latest `check` Check Run on the exact
+pull-request head from the expected GitHub Actions provider, and only then runs
+ReviewReady. Missing, oversized, incomplete, or still-pending check evidence
+fails closed; it does not trigger an unbounded wait or silently accept a stale
+result. If the bounded wait is exhausted because an external runner or provider
+is unavailable, a new trusted event may still be required.
+
 ## Human accountability
 
 The human product owner decides desired behavior, reviews visible outputs, interviews
