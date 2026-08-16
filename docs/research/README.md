@@ -37,6 +37,13 @@
   AI review 與 agent safety 專案，診斷 ReviewReady 的技術與公開證據成熟度，
   並把升級順序接到 post-v1 execution plan。
 
+### 認證與發布
+
+- [GitHub and npm auth architecture](github-npm-auth-architecture.md)
+
+  研究跨專案 GitHub keyring、npm Trusted Publishing、OIDC、token 風險與
+  release environment 的取捨；把一次性登入與長期自動發布的邊界分開。
+
 ## 研究資料的共同規則
 
 - 每個外部事實都要保留來源連結與研究日期。
