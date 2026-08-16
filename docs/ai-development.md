@@ -44,7 +44,10 @@ the question it is meant to answer:
    completion condition, proof target, and prerequisites. Connect it to one
    issue or pull request outcome and express ordering through dependencies. A
    passing test, a design decision, a live setting, and a published artifact
-   are different outcomes and require different proof.
+   are different outcomes and require different proof. If the workflow or one
+   of its prerequisites is itself being changed, freeze dependent plans as
+   candidates; a candidate process may run experiments, but it cannot become
+   the authority that proves the process it depends on.
 3. **Attack in batches.** Examine genuinely independent surfaces before
    selecting a repair: correctness, hostile input, authority and provenance,
    compatibility, operations, and evidence as applicable. For research, start
@@ -85,7 +88,16 @@ the question it is meant to answer:
    reconcile the issue, plan, source, generated artifacts, and evidence, then
    freeze a new baseline. Internal proof does not by itself mean merged,
    published, adopted, or production-authoritative; external writes and
-   publication remain separate promotion lanes.
+   publication remain separate promotion lanes. Promotion order follows the
+   dependency graph: a foundational process is promoted before the plans and
+   documents that depend on it are treated as authoritative.
+
+For ReviewReady, these project invariants are non-negotiable throughout the
+loop: readiness is deterministic; an LLM never decides readiness, approves, or
+merges a pull request; effective policy comes from the immutable base revision;
+trusted workflows never execute pull-request code; external metadata and API
+responses are untrusted; all collection and matching work is bounded; unknown
+or incomplete evidence fails closed; and public contracts remain compatible.
 
 Fail-closed applies to the result, not to the effort: uncertain evidence may
 not produce an accepting product decision, but the development loop continues
@@ -111,15 +123,20 @@ continue every independent slice that does not depend on it.
 ## Process self-optimization
 
 When the workflow itself is the target, freeze the current process as the
-baseline and apply the same loop to it. Attack the process through real past
-tasks, looking for missed risks, repeated work, premature stops, stale evidence,
-idle coordination, and unnecessary external mutations. Batch those findings,
-design a materially different improvement, and replay the same tasks against
-the candidate process while the old process remains unchanged. Promote the new
+baseline at an immutable revision or isolated branch and apply the same loop to
+it. Dependent plans remain candidates until the foundational process is
+promoted; they may guide experiments but may not certify their own prerequisite.
+Attack the process through real past tasks, looking for missed risks, repeated
+work, premature stops, stale evidence, idle coordination, and unnecessary
+external mutations. The replay must cover materially different failure modes,
+such as a trust or security change, a release or artifact change, an external
+evidence decision, and the process change itself. Batch those findings, design
+a materially different improvement, and replay the same tasks against the
+candidate process while the old process remains unchanged. Promote the new
 process only when it improves the outcome without weakening evidence, safety,
-or scope control; a single successful replay is not proof that it is best. If
-the candidates are equivalent, keep the simpler one. Once remaining changes
-are only cosmetic, keep the current process and return to product work.
+or scope control; one successful replay is not proof that it is best. If the
+candidates are equivalent, keep the simpler one. Once remaining changes are
+only cosmetic, keep the current process and return to product work.
 
 ## Git promotion protocol
 

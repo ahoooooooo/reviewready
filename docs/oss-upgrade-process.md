@@ -6,6 +6,10 @@ This is ReviewReady's project-level orchestration process. It connects the
 [post-v1 node plan](exec-plans/active/post-v1.md), and the
 [release process](releasing.md) into one repeatable upgrade cycle.
 
+The adversarial delivery loop is the prerequisite engine. This lifecycle is a
+dependent orchestration layer and remains a candidate until the base process
+has completed its own attack, replay, and promotion gate.
+
 It is an operating model, not a form, issue template, scorecard, or substitute
 for a product contract. It does not change readiness semantics or grant an LLM
 authority. It does not execute pull-request code or replace GitHub's authority,

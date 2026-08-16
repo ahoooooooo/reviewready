@@ -42,6 +42,12 @@ describe("open-source upgrade process contract", () => {
     expect(base).toContain("work kind (behavior, design, evidence, or external authority)");
     expect(base).toMatch(/one\s+issue or pull request outcome/);
     expect(base).toMatch(/a named external\s+authority/);
+    expect(base).toMatch(/foundational process is promoted before the plans/);
+    expect(base).toMatch(/trust or security change/);
+    expect(base).toMatch(/LLM never decides readiness, approves, or\s+merges/);
+    expect(base).toMatch(/immutable base revision/);
+    expect(base).toMatch(/unknown\s+or incomplete evidence fails closed/);
+    expect(process).toMatch(/base process\s+has completed its own attack/);
 
     expect(process).toMatch(/grant an LLM\s+authority/);
     expect(process).toContain("does not execute pull-request code");
