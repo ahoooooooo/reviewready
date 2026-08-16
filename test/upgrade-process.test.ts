@@ -49,6 +49,25 @@ describe("open-source upgrade process contract", () => {
     expect(base).toMatch(/unknown\s+or incomplete evidence fails closed/);
     expect(process).toMatch(/base process\s+has completed its own attack/);
 
+    expect(research).toMatch(/shortest reproducible path/);
+    expect(research).toMatch(/action boundary is explicit/);
+    expect(research).toMatch(/prior report lacks replay metadata/);
+    expect(research).toMatch(/candidate cannot approve its own\s+prerequisite/);
+    expect(research).toMatch(/external-program or adoption question/);
+    const lowerResearch = research.toLowerCase();
+    const researchStages = [
+      "### anchor and frame the decision",
+      "### map the source topology",
+      "### attack the question in batches",
+      "### build a claim map and action boundary",
+      "### search for counter-evidence",
+      "### resolve through changing abstraction levels",
+      "### replay, refresh, and independent review",
+      "## promotion and stopping"
+    ].map((stage) => lowerResearch.indexOf(stage));
+    expect(researchStages.every((position) => position >= 0)).toBe(true);
+    expect(researchStages).toEqual([...researchStages].sort((a, b) => a - b));
+
     expect(process).toMatch(/grant an LLM\s+authority/);
     expect(process).toContain("does not execute pull-request code");
     expect(process).toMatch(/one explicit\s+authorization/);
