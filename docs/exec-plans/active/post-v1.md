@@ -287,9 +287,11 @@ TA-3-D design evidence is now recorded in
 [ADR 0011](../../adr/0011-github-app-trusted-ingress.md), the
 [TA-3 threat model](../../threat-model-ta3-trusted-ingress.md), and the
 [state-machine fixtures](../../../fixtures/trust/ta3-ingress-state-machine-v1.json).
-The design integration is tracked by [PR #80](https://github.com/ahoooooooo/reviewready/pull/80);
-that PR remains documentation-only and must pass the repository gate before
-these design records are merged into the default branch.
+The design integration was merged by [PR #80](https://github.com/ahoooooooo/reviewready/pull/80),
+and the provider-neutral local core was merged by [PR #81](https://github.com/ahoooooooo/reviewready/pull/81).
+Those merges establish design and local reference evidence only; they do not
+prove production provider authority or live enforcement. The implementation
+successor remains open until the external TA-3-I contract is proven.
 The design review closed the following authority gaps before implementation:
 
 - App identity, installation/repository allowlists, exact permissions, hook

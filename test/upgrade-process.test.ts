@@ -86,4 +86,12 @@ describe("open-source upgrade process contract", () => {
     expect(stagePositions.every((position) => position >= 0)).toBe(true);
     expect(stagePositions).toEqual([...stagePositions].sort((a, b) => a - b));
   });
+
+  it("does not retain stale pre-merge claims for completed roadmap nodes", async () => {
+    const plan = await readFile("docs/exec-plans/active/post-v1.md", "utf8");
+
+    expect(plan).toContain("PR #80");
+    expect(plan).not.toContain("that PR remains documentation-only");
+    expect(plan).not.toContain("must pass the repository gate before");
+  });
 });
