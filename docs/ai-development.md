@@ -23,16 +23,46 @@ Do not pin a model or reasoning setting in repository configuration. Model choic
 change faster than the product contract and belong to the operator unless a measured
 compatibility problem requires a temporary project constraint.
 
-## Change loop
+## Adversarial delivery loop
 
-1. State one observable behavior and its acceptance examples.
-2. Add or identify a test that fails without the change.
-3. Let the agent implement the smallest slice.
-4. Run focused tests and inspect actual CLI/Action output.
-5. Try malformed, boundary, and adversarial inputs.
-6. Retain every discovered defect as a regression test.
-7. Run the complete gate.
-8. Update the spec, plan, or agent guidance when the repository learned something.
+The base workflow is a loop, not a form or a field checklist. It applies to
+implementation, design, research, and release work. The evidence used to
+prove a result changes by task, but the reasoning loop remains the same:
+
+1. **Frame** one observable outcome, its trust boundary, non-goals, and the
+   condition that would make the work complete.
+2. **Attack in batches** from independent angles. Examine correctness,
+   adversarial input, authority, compatibility, operations, and evidence as
+   applicable. Collect the whole bounded batch before choosing a repair; do not
+   alternate one discovery with one patch when the remaining attack surface is
+   still unexplored.
+3. **Synthesize** the findings. Remove duplicates, connect related failures,
+   rank their impact and uncertainty, and choose disjoint repair slices. A
+   model's agreement is not evidence and a polished explanation is not a pass.
+4. **Repair** each material defect at its smallest safe boundary. A bug starts
+   with a failing regression test. A design or research gap starts with a
+   falsifiable claim, counterexample, or stronger source. When an approach
+   fails, preserve what it disproved and change the attack angle instead of
+   repeating the same attempt.
+5. **Prove** the repair with focused validation, malformed and boundary cases,
+   compatibility and artifact checks, and an independent adversarial review.
+   The reviewer must be able to reject the change on evidence, not merely
+   approve the author's reasoning.
+6. **Promote or loop.** Promote only when no unresolved material issue remains
+   within scope. If review finds a gap, return to the attack phase with the
+   failed attempt and its evidence. Do not convert an unresolved result into a
+   pass by renaming it, lowering the standard, or declaring the work blocked.
+
+Fail-closed applies to the result, not to the effort: uncertain evidence may
+not produce an accepting product decision, but the development loop continues
+with new hypotheses and bounded alternatives. The only legitimate stop outside
+a verified result is an explicitly isolated external dependency or product
+decision that the repository cannot determine itself.
+
+The integrator owns scope, synthesis, and promotion. Parallel agents may attack
+independent surfaces, but no agent's own patch or argument is its final review.
+Agents are closed after their evidence is delivered; a new round starts from
+the accumulated evidence rather than from an unexamined reset.
 
 ## Human accountability
 
