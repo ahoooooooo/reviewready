@@ -1,6 +1,6 @@
 # ADR 0012: GitHub 與 npm 的跨專案發布認證
 
-- Status: accepted operational design; npm trust binding pending
+- Status: accepted operational design; external controls configured, release evidence pending
 - Date: 2026-08-17
 - Research: GitHub and npm auth architecture
 
@@ -16,11 +16,16 @@ release environment。GitHub release environment、protected main、active
 ruleset 與 immutable release/tag 驗證保留為獨立外部保護。這些保護不能被
 AI 或 workflow 以文字、模型輸出或重試繞過。
 
-Trusted Publisher 完成驗證後，npm package 使用 Require two-factor
+Trusted Publisher 完成驗證後，npm package 已設定為 Require two-factor
 authentication and disallow tokens。本機的一次性 npm browser login 只
-負責建立 trust relationship；之後移除本機 npm credential。Trusted
-Publishing 成功的依據是 workflow 的 OIDC、registry provenance 與
-release evidence，不是本機 npm whoami。
+負責建立 trust relationship；完成外部設定後移除本機 npm credential。
+Trusted Publishing 成功的依據是 workflow 的 OIDC、registry provenance
+與 release evidence，不是本機 npm whoami。
+
+截至 2026-08-17，live verification 已確認 Trusted Publisher 的 repository、
+workflow filename 與 release environment 綁定正確，且 npm package 的
+`mfa=publish` 寫入回應為 HTTP 200、npm exit code 0。尚未執行受控的正式
+OIDC release，因此 release evidence 仍是下一個驗證節點。
 
 ## Why
 

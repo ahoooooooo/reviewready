@@ -30,10 +30,10 @@ GitHub CLI 顯示帳號已登入且憑證位於 Windows keyring；HTTPS remote �
 唯讀 git ls-remote 也成功。這表示 GitHub 認證已達到跨 repository
 共用的本機狀態，不需要為每個專案重新登入。
 
-npm 公開 registry 的 @ahoooooo/reviewready latest 為 1.0.10，
-但本機 npm whoami 回傳 401 Unauthorized。這是失效的本機 npm
-bearer credential，不是公開 package 不存在，也不是 npm registry
-不可用。
+npm 公開 registry 的 @ahoooooo/reviewready latest 為 1.0.10；本次設定
+驗證期間 npm whoami 能辨識維護者帳號，帳戶 2FA 為 auth-and-writes，且
+信箱已驗證。這個本機 session 只用於一次性外部設定，不是發布信任根；
+完成後會移除，之後本機 npm whoami 預期為未登入。
 
 GitHub release environment 目前限制在 protected branches，並設有
 required reviewer；repository 也有 active 的 main branch ruleset。這
@@ -82,9 +82,9 @@ protected main、immutable release/tag 檢查，是目前安全與自動化之�
    @ahoooooo/reviewready、ahoooooooo/reviewready、
    .github/workflows/release-publish.yml、release environment，並
    只允許 npm publish。
-3. npm package 設定在 Trusted Publisher 成功建立並驗證後，改成
-   Require two-factor authentication and disallow tokens。這不會阻止
-   OIDC publisher，但會阻止傳統 token 進行 package publish。
+3. npm package 已設定為 Require two-factor authentication and disallow
+   tokens。這不會阻止 OIDC publisher，但會阻止傳統 token 進行 package
+   publish；本次設定回應為 HTTP 200 且 npm exit code 為 0。
 4. 一次性 npm browser login 只用來建立 trust relationship；完成後登出
    並移除本機 npm credential。之後本機 npm whoami 不再是發布健康檢查；
    發布健康檢查改由 GitHub Actions 的 OIDC workflow 與 registry evidence
@@ -96,17 +96,17 @@ protected main、immutable release/tag 檢查，是目前安全與自動化之�
 
 ## 可證偽的完成條件
 
-研究結論只有在以下外部動作完成後才能升級為已配置：
+以下條件區分「外部控制已配置」與「發布證據已完成」：
 
 - npm trust github 的設定與 workflow 完全相符；
-- package publishing access 已禁止傳統 token；
-- 本機沒有可用的 npm publish token；
+- package publishing access 已禁止傳統 token（已完成）；
+- 本機 publish credential 已移除；
 - 一次受控 release workflow 能以 OIDC 通過，且不需要 NPM_TOKEN；
 - provenance 的 workflow、repository、branch 與 release commit 與
   審核 artifact 一致。
 
-在這些條件完成前，狀態只能標為「設計已決定、外部設定待完成」，不能
-宣稱 npm 已達到長期自動發布狀態。
+目前狀態為「外部控制已配置、release evidence 待完成」；在受控 workflow
+以 OIDC 發布並核對 provenance 之前，不能宣稱正式發布鏈路已完成驗證。
 
 ## 主要來源
 
