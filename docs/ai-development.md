@@ -38,25 +38,34 @@ a result changes by task, but the reasoning loop remains the same:
    applicable. Cover the meaningful attack surface before choosing a repair;
    do not alternate one discovery with one patch while unexplored surfaces
    remain, and do not repeat an angle that the accumulated evidence already
-   disproved.
+   disproved. A surface is covered when it was independently challenged or
+   evidence shows that it cannot affect the outcome; completion is not a count
+   of probes.
 3. **Synthesize** the findings. Remove duplicates, connect related failures,
    rank their impact and uncertainty, and separate product defects, process
    defects, environment failures, evidence gaps, and external dependencies.
    This prevents a permission or CI-order failure from being misdiagnosed as a
-   code defect. A model's agreement is not evidence and a polished explanation
-   is not a pass.
+   code defect. Choose repair slices for the smallest safe boundary and
+   strongest proof, not by vote. A model's agreement is not evidence and a
+   polished explanation is not a pass.
 4. **Repair** each material defect at its smallest safe boundary. A bug starts
    with a failing regression test. A design or research gap starts with a
    falsifiable claim, counterexample, or stronger source. When an approach
    fails, preserve what it disproved, introduce a materially different
    hypothesis, and continue the resolution campaign instead of repeating the
-   same attempt or declaring the work blocked.
+   same attempt or declaring the work blocked. If the finding survives a
+   repair, move up the resolution ladder from input and data, to algorithm and
+   contract, to architecture, and finally to scope or external authority.
+   Changing abstraction level is a solution attempt; it is not scope creep when
+   the original boundary cannot satisfy the evidence.
 5. **Prove** the repair against the frozen target. Run focused validation,
    malformed and boundary cases, compatibility and artifact checks, and an
    independent adversarial review. Prerequisite checks must settle before a
    dependent result is interpreted; stale, superseded, or race-affected results
    cannot decide the gate. The reviewer must be able to reject the change on
-   evidence, not merely approve the author's reasoning.
+   evidence, not merely approve the author's reasoning. Independence means a
+   separate reasoning path or fresh context; it does not depend on a different
+   model name or an unverified claim that a human review occurred.
 6. **Promote or loop.** Promote only when no unresolved material issue remains
    within scope, the target revision is reconciled with its actual base, and
    the evidence describes the current attempt. If review finds a gap, return to
@@ -70,11 +79,12 @@ automatic stop; safe alternatives are exhausted first, then the exact missing
 authority or decision is isolated. Do not convert an unresolved result into a
 pass by renaming it, lowering the standard, or hiding it behind stale evidence.
 
-The integrator owns scope, synthesis, and promotion. Use the smallest number
-of parallel agents that exposes genuinely independent surfaces. No agent may
-review its own patch or argument as the final review; overlapping or idle work
-is closed. A new round starts from the accumulated evidence and failed
-attempts, never from an unexamined reset.
+The integrator owns scope, synthesis, and promotion. Start with the smallest
+team that can do the work and add an agent only for a genuinely independent
+surface or an independent challenge. No agent may review its own patch or
+argument as the final review; overlapping or idle work is closed. A new round
+starts from the accumulated evidence and failed attempts, never from an
+unexamined reset.
 
 ## Process self-optimization
 
@@ -83,9 +93,11 @@ baseline and apply the same loop to it. Attack the process through real past
 tasks, looking for missed risks, repeated work, premature stops, stale evidence,
 idle coordination, and unnecessary external mutations. Batch those findings,
 design a materially different improvement, and replay the same tasks against
-the candidate process. Promote the new process only when it improves the
-outcome without weakening evidence, safety, or scope control. Once remaining
-changes are only cosmetic, keep the current process and return to product work.
+the candidate process while the old process remains unchanged. Promote the new
+process only when it improves the outcome without weakening evidence, safety,
+or scope control; a single successful replay is not proof that it is best. If
+the candidates are equivalent, keep the simpler one. Once remaining changes
+are only cosmetic, keep the current process and return to product work.
 
 ## Human accountability
 
