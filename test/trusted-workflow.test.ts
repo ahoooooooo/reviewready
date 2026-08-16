@@ -59,4 +59,24 @@ describe("trusted ReviewReady workflow", () => {
     expect(workflow).not.toContain("actions/checkout");
     expect(workflow).not.toMatch(/^\s+- run:/mu);
   });
+
+  it("waits for the latest trusted CI check before evaluating readiness", () => {
+    expect(workflow).toContain(
+      "group: reviewready-trusted-${{ github.event.pull_request.number }}"
+    );
+    expect(workflow).toContain("cancel-in-progress: true");
+    expect(workflow).toContain("id: wait-for-check");
+    expect(workflow).toContain(
+      "uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0"
+    );
+    expect(workflow).toContain("const maxAttempts = 60");
+    expect(workflow).toContain("const delayMs = 5000");
+    expect(workflow).toContain("checks.listForRef");
+    expect(workflow).toContain("per_page: 100");
+    expect(workflow).toContain('run?.name === "check"');
+    expect(workflow).toContain('latest?.status === "completed"');
+    expect(workflow.indexOf("id: wait-for-check")).toBeLessThan(
+      workflow.indexOf("name: Evaluate pull-request evidence")
+    );
+  });
 });

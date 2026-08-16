@@ -86,6 +86,17 @@ remains a GitHub branch-rule responsibility until another authenticated, trusted
 reconciliation path is deployed. A review-event workflow loaded from an
 untrusted pull-request revision must never be a required readiness check.
 
+The checked-in trusted workflow also separates CI completion from readiness
+evaluation. It cancels superseded runs for the same pull request, then performs
+a bounded read-only wait for the latest `check` Check Run on the exact head SHA
+from the expected GitHub Actions provider before invoking the pinned Action. A
+missing, oversized, incomplete, or still-pending check response fails closed;
+the workflow does not checkout, execute, or interpret pull-request source while
+waiting. This ordering prevents a race-affected readiness result from becoming
+the required status check and normally removes the need for a manual readiness
+rerun; if the bounded wait is exhausted, the workflow fails closed instead of
+accepting stale evidence.
+
 ## Evidence collection
 
 The Action source supports `pull_request`, `pull_request_review`, and

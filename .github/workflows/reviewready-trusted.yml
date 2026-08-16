@@ -11,11 +11,77 @@ permissions:
   statuses: read
   issues: read
 
+concurrency:
+  group: reviewready-trusted-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   readiness:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: Wait for the latest trusted CI check
+        id: wait-for-check
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const maxAttempts = 60;
+            const delayMs = 5000;
+            const maxResponseBytes = 2 * 1024 * 1024;
+            const headSha = context.payload.pull_request?.head?.sha;
+            if (typeof headSha !== "string" || !/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/u.test(headSha)) {
+              throw new Error("The pull-request head revision is invalid or unavailable.");
+            }
+            const timestamp = (value) => {
+              const parsed = Date.parse(typeof value === "string" ? value : "");
+              return Number.isNaN(parsed) ? -1 : parsed;
+            };
+            const sleep = (milliseconds) =>
+              new Promise((resolve) => setTimeout(resolve, milliseconds));
+            for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+              const response = await github.rest.checks.listForRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: headSha,
+                page: 1,
+                per_page: 100
+              });
+              const responseBytes = Buffer.byteLength(JSON.stringify(response.data), "utf8");
+              if (responseBytes > maxResponseBytes) {
+                throw new Error("The GitHub check response exceeded the bounded size.");
+              }
+              const checkRuns = response.data?.check_runs;
+              const totalCount = response.data?.total_count;
+              if (
+                !Array.isArray(checkRuns) ||
+                checkRuns.length > 100 ||
+                !Number.isSafeInteger(totalCount) ||
+                totalCount < checkRuns.length ||
+                totalCount > 100
+              ) {
+                throw new Error("The GitHub check response was incomplete or too large.");
+              }
+              const candidates = checkRuns.filter(
+                (run) => run?.name === "check" && Number(run?.app?.id) === 15368
+              );
+              const latest = candidates.reduce((current, run) => {
+                if (current === undefined) return run;
+                const currentTime = timestamp(current.started_at ?? current.created_at);
+                const candidateTime = timestamp(run.started_at ?? run.created_at);
+                return candidateTime > currentTime ||
+                  (candidateTime === currentTime && Number(run.id) > Number(current.id))
+                  ? run
+                  : current;
+              }, undefined);
+              if (latest?.status === "completed") {
+                core.setOutput("check-run-id", String(latest.id));
+                return;
+              }
+              if (attempt + 1 < maxAttempts) await sleep(delayMs);
+            }
+            throw new Error("The latest GitHub Actions check did not complete within the bounded wait.");
+
       - name: Evaluate pull-request evidence from the trusted base workflow
         uses: ahoooooooo/reviewready@bffe33502395ce27ab046efa242789d6b25333de # v1.0.10
         with:
