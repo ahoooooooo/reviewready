@@ -4,6 +4,11 @@ This is the research method for ReviewReady's product, security, market, and
 open-source strategy questions. It is an abstract reasoning loop, not a form,
 field checklist, or claim that a polished document is correct.
 
+It is the research lane of the project-wide
+[open-source upgrade lifecycle](../oss-upgrade-process.md). It produces claims,
+counter-evidence, and decision boundaries for the lifecycle; it does not decide
+readiness, implementation completion, publication, or adoption by itself.
+
 ## What the process must accomplish
 
 Deep research is complete only when it can support a decision, explain the

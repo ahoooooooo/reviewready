@@ -27,50 +27,65 @@ compatibility problem requires a temporary project constraint.
 
 The base workflow is a loop, not a form or a field checklist. It applies to
 implementation, design, research, and release work. The evidence used to prove
-a result changes by task, but the reasoning loop remains the same:
+a result changes by task, but the reasoning loop remains the same. It has a
+decision layer before a resolution layer so that implementation cannot outrun
+the question it is meant to answer:
 
-1. **Frame** one observable outcome, its trust boundary, non-goals, completion
-   condition, relevant baseline, target revision, and validation prerequisites.
-   The baseline is frozen for the round so that a moving target cannot hide a
-   regression or manufacture an improvement.
-2. **Attack in batches** from independent angles. Examine correctness,
-   adversarial input, authority, compatibility, operations, and evidence as
-   applicable. Cover the meaningful attack surface before choosing a repair;
-   do not alternate one discovery with one patch while unexplored surfaces
-   remain, and do not repeat an angle that the accumulated evidence already
-   disproved. A surface is covered when it was independently challenged or
-   evidence shows that it cannot affect the outcome; completion is not a count
-   of probes.
-3. **Synthesize** the findings. Remove duplicates, connect related failures,
-   rank their impact and uncertainty, and separate product defects, process
-   defects, environment failures, evidence gaps, and external dependencies.
-   This prevents a permission or CI-order failure from being misdiagnosed as a
-   code defect. Choose repair slices for the smallest safe boundary and
-   strongest proof, not by vote. A model's agreement is not evidence and a
-   polished explanation is not a pass.
-4. **Repair** each material defect at its smallest safe boundary. A bug starts
-   with a failing regression test. A design or research gap starts with a
-   falsifiable claim, counterexample, or stronger source. When an approach
-   fails, preserve what it disproved, introduce a materially different
-   hypothesis, and continue the resolution campaign instead of repeating the
-   same attempt or declaring the work blocked. If the finding survives a
-   repair, move up the resolution ladder from input and data, to algorithm and
-   contract, to architecture, and finally to scope or external authority.
-   Changing abstraction level is a solution attempt; it is not scope creep when
-   the original boundary cannot satisfy the evidence.
-5. **Prove** the repair against the frozen target. Run focused validation,
-   malformed and boundary cases, compatibility and artifact checks, and an
-   independent adversarial review. Prerequisite checks must settle before a
-   dependent result is interpreted; stale, superseded, or race-affected results
-   cannot decide the gate. The reviewer must be able to reject the change on
-   evidence, not merely approve the author's reasoning. Independence means a
-   separate reasoning path or fresh context; it does not depend on a different
-   model name or an unverified claim that a human review occurred.
-6. **Promote or loop.** Promote only when no unresolved material issue remains
-   within scope, the target revision is reconciled with its actual base, and
-   the evidence describes the current attempt. If review finds a gap, return to
-   the attack phase with the failed attempt and its evidence. External writes,
-   publication, and release actions occur only after this internal proof.
+1. **Anchor the baseline.** Read the applicable instructions, product and
+   architecture contracts, active node or issue, relevant tests and evidence,
+   current worktree, and any public or external state that can affect the
+   decision. Freeze one trusted revision and observation boundary for the
+   round. Classify observations as local, live, externally enforced, public
+   artifact, or adoption evidence; do not mix a later observation into an old
+   conclusion. This phase is read-only. If the target moves materially, start a
+   new round rather than comparing incompatible states.
+2. **Frame one decision.** Define one observable outcome, its trust boundary,
+   work kind (behavior, design, evidence, or external authority), non-goals,
+   completion condition, proof target, and prerequisites. Connect it to one
+   issue or pull request outcome and express ordering through dependencies. A
+   passing test, a design decision, a live setting, and a published artifact
+   are different outcomes and require different proof.
+3. **Attack in batches.** Examine genuinely independent surfaces before
+   selecting a repair: correctness, hostile input, authority and provenance,
+   compatibility, operations, and evidence as applicable. For research, start
+   with primary sources, preserve dates and conflicts, and attack the strongest
+   contrary explanation. Do not alternate one discovery with one patch while
+   an unexplored surface can still change the decision. A surface is covered
+   when it was independently challenged or evidence shows it cannot affect the
+   outcome; completion is not a count of searches, tests, or agents.
+4. **Synthesize and order.** Remove duplicates, connect causes, rank impact and
+   uncertainty, and separate product defects, design or process defects,
+   environment failures, evidence gaps, and external dependencies. Preserve
+   failed attempts and order the smallest repair slices by dependency. Choose
+   by the strongest proof, not by vote; model agreement and polished prose are
+   not evidence. If the decision is not yet falsifiable, keep it in research or
+   design instead of creating an implementation-shaped task.
+5. **Repair at the smallest safe boundary.** A bug starts with a failing
+   regression test. A design or research gap starts with a falsifiable claim,
+   counterexample, fixture, or stronger source. A design gate is required when
+   authority, trust roots, public schema, identity, persistence, execution,
+   migration, or release semantics change. Repair independent slices as a
+   batch when safe; no agent reviews its own patch as the final review. When an
+   approach fails, preserve what it disproved, change the hypothesis or move
+   from input and data to algorithm and contract, architecture, scope, or
+   external authority. Changing abstraction level is a solution attempt, not a
+   reason to declare the work blocked.
+6. **Prove and independently attack the current attempt.** Prove the exact
+   target revision with focused regressions, hostile boundaries, compatibility,
+   full quality gates, and generated or public artifact checks appropriate to
+   the outcome. Add revision-bound live or external evidence only when the
+   decision requires it. Prerequisites settle before dependent results are
+   interpreted; stale, superseded, incomplete, oversized, contradictory, or
+   race-affected results cannot decide a gate. A fresh reasoning path must be
+   able to reject the repair on evidence, not merely approve its explanation.
+7. **Promote, loop, and re-anchor.** Promote only when no unresolved material
+   issue remains in scope, the evidence describes the current attempt, and the
+   next authority boundary is explicit. If review finds a gap, return to the
+   attack phase with the failed attempt and the new evidence. After promotion,
+   reconcile the issue, plan, source, generated artifacts, and evidence, then
+   freeze a new baseline. Internal proof does not by itself mean merged,
+   published, adopted, or production-authoritative; external writes and
+   publication remain separate promotion lanes.
 
 Fail-closed applies to the result, not to the effort: uncertain evidence may
 not produce an accepting product decision, but the development loop continues
@@ -81,10 +96,17 @@ pass by renaming it, lowering the standard, or hiding it behind stale evidence.
 
 The integrator owns scope, synthesis, and promotion. Start with the smallest
 team that can do the work and add an agent only for a genuinely independent
-surface or an independent challenge. No agent may review its own patch or
-argument as the final review; overlapping or idle work is closed. A new round
-starts from the accumulated evidence and failed attempts, never from an
-unexamined reset.
+surface or an independent challenge. Before dispatch, each parallel task must
+have a distinct attack surface and a concrete evidence handoff. No agent may
+review its own patch or argument as the final review; overlapping or idle work
+is closed after its evidence is delivered. A new round starts from the
+accumulated evidence and failed attempts, never from an unexamined reset.
+
+The loop ends only when another credible finding would not change the decision
+within scope, or when the only remaining action belongs to a named external
+authority. An unresolved result is not a pass, but an external dependency is
+not a reason to abandon safe internal work. Isolate the missing authority and
+continue every independent slice that does not depend on it.
 
 ## Process self-optimization
 
