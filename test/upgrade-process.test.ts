@@ -93,4 +93,14 @@ describe("open-source upgrade process contract", () => {
     expect(plan).not.toContain("that PR remains documentation-only");
     expect(plan).not.toContain("must pass the repository gate before");
   });
+  it("keeps external authentication checks visible to every agent run", async () => {
+    const guide = await readFile("AGENTS.md", "utf8");
+
+    expect(guide).toContain("## External authentication preflight");
+    expect(guide).toContain("gh auth status --hostname github.com");
+    expect(guide).toContain("gh api user --jq .login");
+    expect(guide).toMatch(/[Bb]rowser login does not prove CLI login/);
+    expect(guide).toContain("npm Trusted Publishing");
+    expect(guide).toMatch(/[Nn]ever print\s+tokens/);
+  });
 });
