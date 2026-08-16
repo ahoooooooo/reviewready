@@ -6,6 +6,14 @@
 
 ## 分類
 
+### 升級編排
+
+- [Open-source upgrade lifecycle](../oss-upgrade-process.md)
+
+  將基底對抗流程、深度研究、post-v1 節點、實作驗證、Git 整合、release
+  parity 與 dogfood／採用證據串成可重複的端到端升級循環；它不改變 readiness
+  contract，也不授予 LLM 或研究文件外部權威。
+
 ### 方法
 
 - [Deep research process](deep-research-process.md)

@@ -17,6 +17,11 @@ tag movement, or deployment by itself. The completed v1 plans and release
 evidence remain historical records; this file is the source of truth for future
 node order and promotion gates.
 
+The project-wide handoff between research, work slices, implementation, proof,
+integration, release, and adoption is defined by the
+[open-source upgrade lifecycle](../../oss-upgrade-process.md). This file still
+owns the node order, issue ownership, and node-specific promotion gates.
+
 ## TA-1 current repair batch
 
 The active batch covers the retained v1 issues #18, #25, #26, #27, and #54.
