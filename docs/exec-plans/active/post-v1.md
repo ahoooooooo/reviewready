@@ -316,7 +316,11 @@ provider-neutral contract/reference boundary: the in-memory store exists to
 execute the state machine deterministically and is not presented as durable
 production storage. The trusted webhook wrapper requires both bounded
 installation and repository allowlists before the existing raw-body/HMAC
-ingress can write a record. The local gate passes, but the implementation
+ingress can write a record. The normalized envelope now binds the target,
+base, and head repository identities plus canonical owner identity; delivery
+and body replay keys are repository-scoped; reclaimed workers carry an attempt
+fence; and success publication requires a committed deterministic result.
+The local gate passes, but the implementation
 successor remains open until a real HTTPS transport, transactional store,
 versioned secret manager, bounded Checks adapter, privacy/retention controls,
 and their deployment evidence are selected and tested.

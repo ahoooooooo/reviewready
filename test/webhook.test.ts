@@ -22,11 +22,17 @@ function body(action = "opened"): Uint8Array {
     JSON.stringify({
       action,
       installation: { id: 17 },
-      repository: { id: 99 },
+      repository: { id: 99, owner: { id: 88, type: "Organization", login: "reviewready" } },
       pull_request: {
         number: 42,
-        base: { sha: baseSha },
-        head: { sha: headSha }
+        base: {
+          sha: baseSha,
+          repo: { id: 99, owner: { id: 88, type: "Organization", login: "reviewready" } }
+        },
+        head: {
+          sha: headSha,
+          repo: { id: 99, owner: { id: 88, type: "Organization", login: "reviewready" } }
+        }
       }
     })
   );
@@ -112,11 +118,78 @@ describe("GitHub webhook ingress", () => {
       appId: "123",
       hookId: "hook-5",
       installationId: 17,
+      repositoryId: 99,
       deliveryId: "delivery-1"
     });
-    expect(captured.replayKey).toMatch(/^123:hook-5:17:[0-9a-f]{64}$/u);
+    expect(captured.replayKey).toMatch(/^123:hook-5:17:99:[0-9a-f]{64}$/u);
     expect(captured.bodySha256).toMatch(/^[0-9a-f]{64}$/u);
     expect(captured.receivedAtMs).toBe(1_000);
+    expect(captured.expiresAtMs).toBe(1_000 + MAX_REPLAY_AGE_MS);
+  });
+
+  it("anchors replay expiry to receipt time, not delayed processing time", async () => {
+    const rawBody = body();
+    const record = vi.fn<DurableWebhookStore["record"]>(() => Promise.resolve("new"));
+
+    await expect(
+      receiveGitHubWebhook(
+        { rawBody, headers: headers(rawBody), receivedAtMs: 1_000, nowMs: 2_000 },
+        { appId: 123, webhookSecret: secret, hookId: "hook-5" },
+        { record }
+      )
+    ).resolves.toMatchObject({ accepted: true });
+
+    expect(record.mock.calls[0]?.[0].expiresAtMs).toBe(1_000 + MAX_REPLAY_AGE_MS);
+  });
+
+  it("requires a coherent base repository and head repository identity", async () => {
+    const record = vi.fn<DurableWebhookStore["record"]>(() => Promise.resolve("new"));
+    type JsonObject = Record<string, unknown>;
+    const validPayload = JSON.parse(new TextDecoder().decode(body())) as JsonObject;
+
+    for (const mutate of [
+      (payload: JsonObject) => {
+        const pullRequest = payload.pull_request as JsonObject;
+        const base = pullRequest.base as JsonObject;
+        const repo = base.repo as JsonObject;
+        repo.id = 100;
+      },
+      (payload: JsonObject) => {
+        const pullRequest = payload.pull_request as JsonObject;
+        const head = pullRequest.head as JsonObject;
+        head.repo = null;
+      },
+      (payload: JsonObject) => {
+        const pullRequest = payload.pull_request as JsonObject;
+        const base = pullRequest.base as JsonObject;
+        const repo = base.repo as JsonObject;
+        const owner = repo.owner as JsonObject;
+        owner.id = 89;
+      },
+      (payload: JsonObject) => {
+        const pullRequest = payload.pull_request as JsonObject;
+        const base = pullRequest.base as JsonObject;
+        const repo = base.repo as JsonObject;
+        const owner = repo.owner as JsonObject;
+        owner.login = "different-owner";
+      },
+      (payload: JsonObject) => {
+        const repository = payload.repository as JsonObject;
+        repository.owner = undefined;
+      }
+    ]) {
+      const payload = structuredClone(validPayload);
+      mutate(payload);
+      const rawBody = new TextEncoder().encode(JSON.stringify(payload));
+      await expect(
+        receiveGitHubWebhook(
+          { rawBody, headers: headers(rawBody), receivedAtMs: 1_000, nowMs: 1_000 },
+          { appId: 123, webhookSecret: secret, hookId: "hook-5" },
+          { record }
+        )
+      ).resolves.toMatchObject({ accepted: false, reason: "invalid" });
+    }
+    expect(record).not.toHaveBeenCalled();
   });
 
   it("rejects installation and repository identities outside the configured allowlist", async () => {
@@ -252,7 +325,7 @@ describe("GitHub webhook ingress", () => {
     const rawBody = body();
     const seen = new Set<string>();
     const record = vi.fn<DurableWebhookStore["record"]>((captured) => {
-      expect(captured.replayKey).toMatch(/^123:hook-5:17:[0-9a-f]{64}$/u);
+      expect(captured.replayKey).toMatch(/^123:hook-5:17:99:[0-9a-f]{64}$/u);
       if (seen.has(captured.replayKey)) {
         return Promise.resolve("duplicate");
       }

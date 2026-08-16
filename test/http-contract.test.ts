@@ -14,11 +14,17 @@ function body(): Uint8Array {
     JSON.stringify({
       action: "opened",
       installation: { id: 17 },
-      repository: { id: 99 },
+      repository: { id: 99, owner: { id: 88, type: "Organization", login: "reviewready" } },
       pull_request: {
         number: 42,
-        base: { sha: baseSha },
-        head: { sha: headSha }
+        base: {
+          sha: baseSha,
+          repo: { id: 99, owner: { id: 88, type: "Organization", login: "reviewready" } }
+        },
+        head: {
+          sha: headSha,
+          repo: { id: 99, owner: { id: 88, type: "Organization", login: "reviewready" } }
+        }
       }
     })
   );
