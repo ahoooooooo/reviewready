@@ -259,7 +259,8 @@ The TA-2 evidence-bundle decision is now approved in
 [ADR 0009](../../adr/0009-replayable-audit-evidence-bundle.md), with its
 [normative v1 bundle contract](../../audit-evidence-bundle-v1.md),
 [threat model](../../threat-model-ta2-evidence-bundle.md) and
-[implementation plan](ta-2-evidence-bundle.md). GitHub exposes no documented
+[implementation plan](../completed/ta-2-evidence-bundle.md). GitHub exposes no
+documented
 cross-endpoint transaction for repository settings, so the approved contract
 uses two complete equal bounded observations and explicitly does not claim an
 atomic settings snapshot. Exact policy/workflow source is bound to a

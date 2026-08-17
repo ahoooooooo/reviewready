@@ -9,7 +9,8 @@ findings that must not be upgraded to pass. TA-3 design is the next node.
 This plan implements [ADR 0009](../../adr/0009-replayable-audit-evidence-bundle.md)
 and the [TA-2 threat model](../../threat-model-ta2-evidence-bundle.md) for
 [#55](https://github.com/ahoooooooo/reviewready/issues/55). It is subordinate to
-the fixed node order in [post-v1.md](post-v1.md). The implementation phases
+the fixed node order in [post-v1.md](../active/post-v1.md). The implementation
+phases
 below are historical execution records. TA-3 design/implementation must not
 start until its separate design gate is approved.
 
