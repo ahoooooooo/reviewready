@@ -15,7 +15,7 @@
 
 ## 凍結的現況
 
-本機 ReviewReady 工作區的 package.json 為 1.0.10，release workflow
+本機 ReviewReady 工作區的 package.json 為 1.0.11，release workflow
 已經具備：
 
 - GitHub-hosted runner 與 Node 24；
@@ -30,7 +30,7 @@ GitHub CLI 顯示帳號已登入且憑證位於 Windows keyring；HTTPS remote �
 唯讀 git ls-remote 也成功。這表示 GitHub 認證已達到跨 repository
 共用的本機狀態，不需要為每個專案重新登入。
 
-npm 公開 registry 的 @ahoooooo/reviewready latest 為 1.0.10；本次設定
+npm 公開 registry 的 @ahoooooo/reviewready latest 為 1.0.11；本次設定
 驗證期間 npm whoami 能辨識維護者帳號，帳戶 2FA 為 auth-and-writes，且
 信箱已驗證。這個本機 session 只用於一次性外部設定，不是發布信任根；
 完成後會移除，之後本機 npm whoami 預期為未登入。
@@ -105,8 +105,10 @@ protected main、immutable release/tag 檢查，是目前安全與自動化之�
 - provenance 的 workflow、repository、branch 與 release commit 與
   審核 artifact 一致。
 
-目前狀態為「外部控制已配置、release evidence 待完成」；在受控 workflow
-以 OIDC 發布並核對 provenance 之前，不能宣稱正式發布鏈路已完成驗證。
+目前狀態為「外部控制已配置、v1.0.11 release evidence 已完成」；受控
+workflow 已以 OIDC 發布並核對 provenance、exact tarball、GitHub release、
+tags 與 clean-room install。這只證明本次發布鏈路，不把一次成功擴張成
+永久不變的外部平台保證。
 
 ## 主要來源
 
