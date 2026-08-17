@@ -1,0 +1,59 @@
+{
+  "contract": "reviewready.ai-workflow-security.v1",
+  "version": 1,
+  "bounds": {
+    "maxWorkflowBytes": 262144,
+    "maxCases": 32,
+    "maxFindings": 64,
+    "maxTraversalDepth": 16
+  },
+  "categories": [
+    "prompt_injection",
+    "code_execution",
+    "capability_exposure",
+    "permission_escalation",
+    "provider_provenance"
+  ],
+  "cases": [
+    {
+      "id": "safe-review-text-is-data-only",
+      "class": "safe",
+      "source": ["pull_request.body"],
+      "flow": ["data"],
+      "sink": null,
+      "expected": { "status": "no_finding", "ruleIds": [] }
+    },
+    {
+      "id": "prompt-text-reaches-shell",
+      "class": "vulnerable",
+      "source": ["pull_request.body"],
+      "flow": ["prompt", "model_output", "shell"],
+      "sink": "shell",
+      "expected": { "status": "finding", "ruleIds": ["RR-AI-CODE-EXECUTION"] }
+    },
+    {
+      "id": "untrusted-text-reaches-instruction-boundary",
+      "class": "vulnerable",
+      "source": ["issue.body"],
+      "flow": ["prompt", "instruction"],
+      "sink": "model_instruction",
+      "expected": { "status": "finding", "ruleIds": ["RR-AI-PROMPT-INJECTION"] }
+    },
+    {
+      "id": "secret-is-available-to-untrusted-job",
+      "class": "vulnerable",
+      "source": ["pull_request.event"],
+      "flow": ["privileged_event", "secret", "deploy"],
+      "sink": "deployment_credential",
+      "expected": { "status": "finding", "ruleIds": ["RR-AI-CAPABILITY-EXPOSURE"] }
+    },
+    {
+      "id": "reusable-workflow-identity-is-ambiguous",
+      "class": "ambiguous",
+      "source": ["workflow.reusable"],
+      "flow": ["workflow_ref", "provider"],
+      "sink": null,
+      "expected": { "status": "unknown", "ruleIds": ["RR-AI-PROVENANCE-UNKNOWN"] }
+    }
+  ]
+}

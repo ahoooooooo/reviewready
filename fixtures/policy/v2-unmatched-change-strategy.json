@@ -1,0 +1,44 @@
+{
+  "contract": "reviewready.policy.unmatched-change.v2",
+  "version": 2,
+  "v1Compatibility": {
+    "omittedStrategy": "ready",
+    "publicResultShape": "unchanged",
+    "migration": "explicit-opt-in"
+  },
+  "strategies": [
+    {
+      "name": "ready",
+      "resultStatus": "ready",
+      "exitCode": 0,
+      "meaning": "No rule matched and the policy explicitly accepts that coverage gap."
+    },
+    {
+      "name": "not_ready",
+      "resultStatus": "not_ready",
+      "exitCode": 1,
+      "meaning": "No rule matched and the policy requires a classified change."
+    },
+    {
+      "name": "error",
+      "resultStatus": "error",
+      "exitCode": 2,
+      "meaning": "The strategy is missing, unknown, malformed, or unsupported."
+    }
+  ],
+  "migration": {
+    "v1ToV2": "The maintainer must opt in to policy version 2 and choose a strategy explicitly.",
+    "omittedStrategyInV2": "error",
+    "unknownStrategy": "error",
+    "v2ToV1": {
+      "allowedWhen": "strategy is ready and no v2-only evidence is required",
+      "blockedWhen": ["not_ready", "error"],
+      "reason": "Downgrading either state would silently change the policy meaning."
+    },
+    "rollback": "Restore the previous versioned policy; never reinterpret an existing v1 file."
+  },
+  "canonicalResult": {
+    "v1": "No unmatched-strategy field is added to the public result.",
+    "v2": "The result records the selected unmatched strategy and its deterministic outcome."
+  }
+}
