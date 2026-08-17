@@ -65,6 +65,17 @@ authentication failure is reported as the primary blocker rather than being
 converted into a malformed-target error. Future sessions should read this
 lesson before any GitHub operation.
 
+## 2026-08-18: PR #99 readiness failed on an exact body heading
+
+The draft PR changed `AGENTS.md`, `README.md`, and `docs/**`, so the base policy
+required a visible `Risk` section. The generated body used `Why`, `Validation`,
+and `Scope` instead. CI, type compatibility, CodeQL, and package checks passed,
+but the trusted `readiness` check failed closed because the policy matches exact
+section headings. The repository PR template already contained `## Testing` and
+`## Risk`; the durable fix is to read the template and effective policy before
+creating or updating a PR and to preserve exact required headings. A green CI
+check does not prove ReviewReady evidence is complete.
+
 ## How lessons become fixes
 
 When the same class of failure recurs, first add a focused regression or

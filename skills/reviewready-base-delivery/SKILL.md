@@ -143,6 +143,15 @@ Internal proof does not mean merged, published, adopted, or production-authorita
 Do not commit, push, publish, deploy, mutate settings, or move tags without the
 required authorization and project release gates.
 
+## PR evidence gate
+
+Before creating or updating a PR, read the effective `.reviewready.yml` and
+`.github/PULL_REQUEST_TEMPLATE.md`. Match changed paths to required evidence and
+copy the exact required headings into the body. Do not substitute `Why`,
+`Validation`, or `Scope` for a required `Risk` or `Testing` section. Inspect the
+final body before submitting; a policy check is exact and fails closed on a
+missing section even when CI is green.
+
 ## Process/skill changes
 
 For this rare route, add `process-self-optimization`, read the process rationale

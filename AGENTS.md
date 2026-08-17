@@ -60,6 +60,10 @@ of `docs/`, `src/`, or `test/`.
   completed plans as if historical work were still active.
 - Do not publish packages, create releases, or move tags unless the issue explicitly
   authorizes a release and every prerequisite is verified.
+- Before creating or updating a PR, read the effective `.reviewready.yml` and
+  `.github/PULL_REQUEST_TEMPLATE.md`; derive the required body headings for the
+  changed paths and preserve their exact spelling. `Why`, `Validation`, or
+  `Scope` do not substitute for a required `Risk` or `Testing` heading.
 
 ## External authentication preflight
 
