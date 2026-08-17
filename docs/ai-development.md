@@ -30,6 +30,62 @@ Do not pin a model or reasoning setting in repository configuration. Model choic
 change faster than the product contract and belong to the operator unless a measured
 compatibility problem requires a temporary project constraint.
 
+## Shared round contract and routing
+
+The base loop and the deep-research lane use one compact decision record. It is not
+an additional approval form or a new authority; for a routine change it may be a
+short issue, pull-request, plan, or research-note entry. A non-trivial round records:
+
+- **baseline**: the exact revision, worktree state, public or provider snapshot,
+  observation time, and freshness or refresh trigger;
+- **decision**: one observable outcome, work kind, trust boundary, non-goals, and
+  prerequisites;
+- **surface map**: which source, tests, generated files, package/public coordinates,
+  or external settings may change, and which evidence tier each surface needs;
+- **attack map**: independent attack surfaces, the strongest falsifier for each,
+  bounded effort, and the condition that ends the attack batch;
+- **claim/defect ledger**: each finding's status, evidence path, uncertainty, owner,
+  and next action; and
+- **proof and handoff**: focused proof, complete gate, artifact or external checks,
+  acceptance condition, remaining authority, and the exact next decision.
+
+### Prompt admission gate
+
+Every user prompt enters the **full base adversarial loop**. This gate selects
+additional evidence lanes; it is not permission to skip baseline, framing,
+attack, proof, or promotion. The result is a set of overlays, not one shortcut
+label:
+
+1. **process self-optimization**: the prompt asks to change, optimize, compare,
+   or route a workflow, prompt, skill, agent method, or repository rule;
+2. **promotion**: the prompt asks to publish, commit, push, merge, tag, deploy,
+   change settings or permissions, use credentials/secrets, or contact a
+   provider with a state-changing operation;
+3. **deep research**: the decision depends on current or external facts, search,
+   competitors, adoption, market, eligibility, strategy, recommendations, or
+   external authority;
+4. **consequential scope**: the prompt involves security, trust, provenance,
+   authority, release, package, workflow, Action, schema, public API,
+   compatibility, migration, architecture, or multiple repository surfaces;
+5. **routine scope**: only a bounded local task with a clear acceptance condition,
+   no current/external fact, no trust or public-contract boundary, no process-rule
+   change, and no destructive or external mutation. This changes only the
+   evidence breadth, never the base-loop rigor.
+
+Examples: “understand the whole project status” adds consequential scope;
+“查最新” or “recommend a strategy” adds deep research; “optimize the
+prompt/process” adds process self-optimization; “publish the package” adds
+promotion. Multiple overlays may apply. If a prompt is ambiguous or a routine
+condition cannot be proved, add the stronger overlay rather than defaulting to
+routine. Record `base-full` plus every selected overlay and its prompt trigger
+before proceeding.
+
+Each stage updates the same record. Promotion is not allowed while the record lacks
+the current revision and freshness, the strongest unresolved objection, the proof
+that could falsify the result, the evidence tier supporting the claim, or the next
+authority boundary. This prevents a polished handoff from silently dropping stale
+data, a release surface, or an external dependency.
+
 ## Adversarial delivery loop
 
 The base workflow is a loop, not a form or a field checklist. It applies to
@@ -135,15 +191,21 @@ it. Dependent plans remain candidates until the foundational process is
 promoted; they may guide experiments but may not certify their own prerequisite.
 Attack the process through real past tasks, looking for missed risks, repeated
 work, premature stops, stale evidence, idle coordination, and unnecessary
-external mutations. The replay must cover materially different failure modes,
-such as a trust or security change, a release or artifact change, an external
-evidence decision, and the process change itself. Batch those findings, design
-a materially different improvement, and replay the same tasks against the
-candidate process while the old process remains unchanged. Promote the new
-process only when it improves the outcome without weakening evidence, safety,
-or scope control; one successful replay is not proof that it is best. If the
-candidates are equivalent, keep the simpler one. Once remaining changes are
-only cosmetic, keep the current process and return to product work.
+external mutations. The replay must cover at least four materially different
+cases: a local behavior or security task, including a trust or security change,
+a release or public-artifact task, an external-authority or adoption decision,
+and a research-to-work-order handoff.
+Include the process-change task itself when the candidate changes this method.
+For each case, compare the frozen method and candidate on missed attacks, stale
+or unsupported claims, duplicated work, handoff completeness, unnecessary
+external actions, and scope control. Batch those findings, design a materially
+different process candidate, and replay the same cases against it while the old
+process remains unchanged. Promote the new process only when the replay shows at
+least one meaningful safety, evidence-quality, or coordination improvement and
+no regression in authority, scope, or fail-closed behavior; one successful
+replay is not proof that it is best. If the candidates are equivalent, keep the
+simpler process. Once remaining changes are only cosmetic, keep the current
+process and return to product work.
 
 ## Git promotion protocol
 

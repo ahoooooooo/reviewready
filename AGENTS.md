@@ -8,6 +8,10 @@ policy. It never claims code is correct and never approves or merges a PR.
 
 - `docs/product-spec.md`: v1 behavior and non-goals.
 - `docs/architecture.md`: trust boundaries and module rules.
+- `skills/reviewready-base-delivery/SKILL.md`: executable full-rigor iterative
+  delivery protocol applied to every repository task.
+- `skills/reviewready-deep-research/SKILL.md`: source-traceable research overlay
+  for current, external, strategic, and authority-dependent decisions.
 - `docs/ai-development.md`: how humans and coding agents evolve this repository.
 - `docs/exec-plans/active/post-v1.md`: fixed post-v1 node order and promotion gates.
 - `docs/exec-plans/completed/v1.md`: historical v1 delivery plan and decision log.
@@ -20,10 +24,29 @@ policy. It never claims code is correct and never approves or merges a PR.
 - `test/`: unit and integration tests.
 - `fixtures/`: executable policy and pull-request examples.
 
+## Context loading
+
+The source map is not a preload list. Keep the default context to this file and
+`skills/reviewready-base-delivery/SKILL.md`. Load the deep-research skill only
+when its prompt admission gate triggers. Load rationale and evidence documents
+on demand by route: product/architecture for behavior or trust changes,
+post-v1 for node planning, release/operational/current-status for external or
+release work, and research documents for research or process-method changes.
+Use `rg` to find relevant headings and read bounded sections; do not preload all
+of `docs/`, `src/`, or `test/`.
+
 ## Working rules
 
 - Read the product spec, architecture, relevant issue, and nearest tests before
   changing behavior.
+- Use the full base adversarial loop in
+  `skills/reviewready-base-delivery/SKILL.md` for every user prompt. Its prompt
+  admission gate selects extra lanes; it never permits skipping baseline,
+  framing, attack, proof, or promotion. `routine` is only a scope label.
+- Read and apply `skills/reviewready-base-delivery/SKILL.md` at the start of each
+  task. When its prompt admission gate selects research, also read and apply
+  `skills/reviewready-deep-research/SKILL.md`; the docs remain the project-level
+  rationale and source map.
 - For a bug, first add a test that fails for the reported case.
 - Keep pass/fail deterministic; an LLM must never decide readiness.
 - Treat PR metadata, paths, labels, event payloads, and API data as untrusted.

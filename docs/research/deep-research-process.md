@@ -14,6 +14,43 @@ being changed, the current method is the frozen baseline and every downstream
 research report or work-order plan remains a candidate until the method passes
 its own replay and promotion gate.
 
+## Shared round protocol
+
+Deep research is a specialization of the base round, not a second lifecycle.
+The same decision record, routing rule, evidence tiers, and promotion boundary
+apply to both lanes:
+
+| Base round stage      | Research specialization                                                                                  | Required handoff                                                                        |
+| --------------------- | -------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Anchor and frame      | Freeze the falsifiable question, source state, time boundary, revision, and non-goals.                   | One decision with a freshness boundary.                                                 |
+| Attack and synthesize | Map sources, challenge independent surfaces, and build the claim/defect ledger.                          | Claims separated into fact, inference, recommendation, unknown, or external dependency. |
+| Resolve or repair     | Strengthen a source, narrow a claim, change strategy, or hand off a bounded implementation/design slice. | One falsifier, owner, acceptance condition, and no implied permission to publish.       |
+| Prove and review      | Replay sources, refresh time-sensitive facts, and let an independent path reject the conclusion.         | A structured promote, reopen, or defer-external verdict.                                |
+| Promote and re-anchor | Preserve the snapshot and decision boundary, then start a new round when the source state moves.         | Exact next authority or work-order boundary.                                            |
+
+The research lane may add source and claim detail, but it must not duplicate the
+base baseline, scope, or promotion record. A routine local task does not need a
+full research round; a trust, release, adoption, or novel external claim does.
+
+### Prompt admission for deep research
+
+Deep research is an overlay on the full base adversarial loop, not an alternative
+to it. Enter this lane when the user's requested decision depends on facts
+outside the trusted checkout or on a claim whose meaning can change with time.
+This includes requests to search or verify current state, compare competitors,
+assess adoption, eligibility, market or strategy, evaluate external authority,
+or recommend a direction whose evidence is not already frozen locally.
+“Understand the current project status” and “try to optimize the process” also
+require an explicit baseline and research/process replay; they are not routine
+documentation tasks.
+
+Do not enter deep research for a bounded local implementation whose behavior,
+acceptance examples, and proof sources are already known. That task still uses
+the full base process with local evidence only and is upgraded if the prompt
+reveals a new trust, public, current-state, or external-dependency claim. If
+admission is ambiguous, the base routing gate escalates rather than silently
+treating the prompt as local.
+
 ## What the process must accomplish
 
 Deep research is complete only when it can support a decision, explain the
@@ -88,6 +125,16 @@ by request, response, query, and time limits; an unbounded search cannot create
 authority. If a prior report lacks replay metadata, do not reconstruct or
 backfill it as if it were captured evidence: downgrade the claim to a historical
 observation or unknown and hand off a bounded refresh action.
+
+### Claim-source ledger
+
+For every material claim, keep one compact ledger row containing a claim ID,
+the exact wording, claim class, source path or query, authority and scope,
+observation date, revision or release, bounded excerpt or digest when needed,
+freshness or refresh trigger, strongest counter-case, decision consequence, and
+current action owner. A source may support several claims, but each claim must
+have its own shortest reproducible path. This makes stale research visible
+without requiring a new document for every round.
 
 ### Attack the question in batches
 
@@ -176,6 +223,11 @@ authority. If the research method itself is the target, replay the frozen
 method and its candidate separately; the candidate cannot approve its own
 prerequisite.
 
+The independent handoff must return one of three outcomes: **promote**,
+**reopen**, or **defer-external**. It must name the strongest remaining objection,
+the claim or source it affects, and the next falsifiable action. “Looks good” is
+not a research verdict.
+
 For research, proof is traceable sources, reproducible queries, explicit dates,
 counter-evidence, and a stable reasoning path. For implementation, the same
 stage also includes regression tests, compatibility checks, and artifact
@@ -223,13 +275,16 @@ Attack the method for missed sources, repeated effort, premature closure,
 unsupported certainty, stale evidence, poor handoff, and recommendations that
 cannot become action.
 
-The replay must cover materially different questions and failure modes: an
-external-program or adoption question, a competitor or technical-landscape
+The replay must cover at least the same four materially different questions:
+an external-program or adoption question, a competitor or technical-landscape
 question, a repository decision that must become an executable work slice, and
-the process change itself. Batch the findings, create a materially different
-process candidate, and replay the same questions while the old method remains
-unchanged. Promote the new method only if it improves decision quality or
-reduces wasted effort without weakening evidence, safety, or scope. If
-candidates are equivalent, keep the simpler one. When remaining changes are
-cosmetic, the method has reached its current practical limit and research can
-return to the product decision.
+the process change itself. For each case, compare missed sources, unsupported
+certainty, stale-claim detection, counter-case coverage, handoff completeness,
+duplicated effort, and whether the action boundary stayed safe. Batch the
+findings, create a materially different process candidate, and replay the same
+questions while the old method remains unchanged. Promote the new method only
+if it improves decision quality, stale-evidence detection, or coordination and
+does not weaken authority, evidence, safety, or scope control. If candidates are
+equivalent, keep the simpler one. When remaining changes are cosmetic, the
+method has reached its current practical limit and research can return to the
+product decision.

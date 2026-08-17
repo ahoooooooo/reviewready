@@ -1,0 +1,4 @@
+interface:
+  display_name: "ReviewReady Base Delivery"
+  short_description: "Full-rigor iterative delivery for every task"
+  default_prompt: "Use $reviewready-base-delivery to run this task through baseline, attack, implementation, verification, and promotion."
