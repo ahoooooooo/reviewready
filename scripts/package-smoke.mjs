@@ -202,6 +202,35 @@ function runCli(executable, arguments_, cwd, expectedStatus) {
 }
 
 /**
+ * Verify that the installed tarball keeps every generated source-map target.
+ *
+ * @param {string} packageRoot
+ * @returns {void}
+ */
+function verifyInstalledSourceMaps(packageRoot) {
+  const distRoot = join(packageRoot, "dist");
+  const entries = readdirSync(distRoot);
+  const entrySet = new Set(entries);
+  const sourceMapReference = /^\s*\/\/# sourceMappingURL=([^\s]+)\s*$/gmu;
+
+  for (const entry of entries) {
+    if (!/^[^/]+\.(?:js|d\.ts)$/u.test(entry)) {
+      continue;
+    }
+    const content = readFileSync(join(distRoot, entry), "utf8");
+    for (const match of content.matchAll(sourceMapReference)) {
+      const reference = match[1];
+      if (reference === undefined || reference.startsWith("data:")) {
+        continue;
+      }
+      if (!/^[^/\\?#]+$/u.test(reference) || !entrySet.has(reference)) {
+        throw new Error("installed package contains a broken source-map reference: " + entry);
+      }
+    }
+  }
+}
+
+/**
  * @param {string[]} arguments_
  * @param {string} cwd
  * @returns {void}
@@ -284,6 +313,7 @@ function runSmoke(projectRoot) {
       ) {
         throw new Error("installed package contains development-only files");
       }
+      verifyInstalledSourceMaps(packageRoot);
       const evidenceSchemaPath = join(packageRoot, "reviewready.audit-evidence.schema.json");
       if (!existsSync(evidenceSchemaPath)) {
         throw new Error("packaged evidence schema is missing");
