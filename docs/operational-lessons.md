@@ -6,6 +6,21 @@ readiness authority, a release permission, or a substitute for GitHub's
 external controls. It must never contain credentials, tokens, or private
 account data.
 
+## Compact error capture
+
+During a task, record non-critical failures in the current plan, PR, or issue
+before repairing them:
+
+```text
+Error | Evidence | Impact | Class | Next action | Status
+```
+
+Do not turn every transient or one-off failure into a permanent document. Promote
+an error here only when it recurs, changes a trust/release decision, exposes a
+process gap, or deserves a durable guard. P0 security, data-loss, corruption,
+and required-gate blockers stop the current work; non-blocking errors are batched
+after discovery.
+
 ## GitHub command targeting
 
 Every GitHub command that needs a repository must derive the owner from a

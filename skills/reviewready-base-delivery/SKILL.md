@@ -82,6 +82,24 @@ public artifacts, and evidence freshness. Preserve failed attempts and the
 strongest unresolved objection. Do not patch the first finding while an
 unexplored surface could change the decision.
 
+### 3.1 Capture errors before repairing
+
+For a non-critical failure, write one compact record in the current plan, PR, or
+issue before changing anything:
+
+```text
+Error: <symptom>
+Evidence: <command, output, source, or URL>
+Impact: P0/P1/P2 and blocking/non-blocking
+Class: product | process | environment | evidence | external
+Next: <repair, retry, defer, or continue>
+```
+
+Stop and address P0 security, data-loss, corruption, or required-gate blockers.
+Capture P1 blockers before the next repair batch. Continue past non-blocking P2
+errors when safe, then batch them. Do not create a new memory document or test
+for a one-off failure unless it is recurring, material, or executable behavior.
+
 ### 4. Synthesize and choose the smallest safe slice
 
 Separate product defects, design gaps, process defects, environment failures,

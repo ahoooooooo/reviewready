@@ -64,6 +64,9 @@ of `docs/`, `src/`, or `test/`.
   `.github/PULL_REQUEST_TEMPLATE.md`; derive the required body headings for the
   changed paths and preserve their exact spelling. `Why`, `Validation`, or
   `Scope` do not substitute for a required `Risk` or `Testing` heading.
+- For non-critical failures, capture a compact error record in the current plan,
+  PR, or issue before repairing it; batch non-blocking fixes and promote only
+  recurring or material lessons into durable docs or tests.
 
 ## External authentication preflight
 

@@ -93,6 +93,12 @@ update the claim ledger. Record rejected or irrelevant sources only when their
 absence explains a coverage decision. Send progress at checkpoint boundaries,
 not after every query.
 
+When a source, query, tool, or provider fails, capture it in the claim state
+before retrying: symptom, evidence, affected claim, impact, alternative path,
+and status. Do not repeat the same failing search automatically. A missing or
+unavailable source is an evidence gap, not support for the claim. Keep one error
+record per distinct failure and summarize it at the next checkpoint.
+
 ### 3. Coverage audit
 
 Pause and audit the map before deep-diving. For every material claim, mark it
