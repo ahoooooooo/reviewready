@@ -24,25 +24,21 @@ owns the node order, issue ownership, and node-specific promotion gates.
 
 ## Current single mainline (2026-08-17)
 
-There is one active execution lane until the next public release is complete:
+The v1.0.11 maintenance lane is complete. Its exact public coordinates are
+recorded in `docs/release-evidence-v1.0.11.json`, and the npm artifact,
+immutable release tag, GitHub Release, stable `v1`, and trusted workflow pin
+all resolve to the verified release commit `e9cd421ac106adb5731dd22b714701a136e937f8`.
+No new feature lane is active until a new decision:
 
-1. **Lock the baseline.** Use GitHub main at f56730d as the only source for
-   the next change. Do not develop from an old feature branch, and do not open
-   parallel implementation PRs.
-2. **Prepare the v1.0.11 patch candidate.** Publish the already-merged package
-   source-map fix with matching package, lockfile, changelog, Action, and
-   release evidence. This is maintenance of the existing v1 contract, not a
-   new readiness feature or a promotion of a later roadmap node.
-3. **Run the complete release gate.** Verify the exact tarball, package
-   integrity/provenance, clean consumer install, GitHub release/tag, stable
-   Action ref, and documentation parity. Do not publish or move tags until
-   this matrix is complete.
-4. **Publish only after one explicit release authorization.** If authorization
-   is not present, stop at a verified ready-but-unreleased candidate. No server,
-   database, domain, or paid service is part of this lane.
-5. **Stop and reassess.** After the patch release is verified, decide whether
-   any later capability is worth entering. No new feature starts before that
-   decision.
+1. **Keep the release root immutable.** Treat v1.0.11 as the current public
+   maintenance root; do not rewrite its semantic tag, release, npm bytes, or
+   evidence.
+2. **Keep the trusted caller synchronized.** Any future Action pin or package
+   release must repeat the same exact-artifact and public-coordinate gate. No
+   stable ref moves before npm verification.
+3. **Stop and reassess.** Decide explicitly whether a later capability is worth
+   entering. No server, database, domain, paid service, or new feature lane is
+   part of the completed v1.0.11 release.
 
 The following work is deliberately parked, not silently mixed into the
 mainline:
