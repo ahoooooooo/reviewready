@@ -54,7 +54,47 @@ const SENSITIVE_CONTENT = [
  * @returns {boolean}
  */
 function isAllowedPath(path) {
-  return EXACT_ALLOWED_FILES.has(path) || /^dist\/[^/]+\.(?:js|d\.ts)$/u.test(path);
+  return EXACT_ALLOWED_FILES.has(path) || /^dist\/[^/]+\.(?:js|d\.ts)(?:\.map)?$/u.test(path);
+}
+
+const SOURCE_MAP_REFERENCE = /^\s*\/\/# sourceMappingURL=([^\s]+)\s*$/gmu;
+
+/**
+ * Generated JavaScript and declaration files must not point at source maps
+ * that npm leaves outside the packed artifact.
+ *
+ * @param {PackageAuditEntry[]} entries
+ * @returns {string[]}
+ */
+function auditSourceMapReferences(entries) {
+  const paths = new Set(entries.map((entry) => entry.path));
+  const errors = [];
+
+  for (const entry of entries) {
+    if (!/^dist\/[^/]+\.(?:js|d\.ts)$/u.test(entry.path)) {
+      continue;
+    }
+    for (const match of entry.content.matchAll(SOURCE_MAP_REFERENCE)) {
+      const reference = match[1];
+      if (reference === undefined) {
+        continue;
+      }
+      if (reference.startsWith("data:")) {
+        continue;
+      }
+      if (!/^[^/\\?#]+$/u.test(reference)) {
+        errors.push(`Unsafe source map reference in package file: ${entry.path}`);
+        continue;
+      }
+      const directoryEnd = entry.path.lastIndexOf("/") + 1;
+      const mapPath = entry.path.slice(0, directoryEnd) + reference;
+      if (!paths.has(mapPath)) {
+        errors.push(`Missing source map for package file: ${entry.path}`);
+      }
+    }
+  }
+
+  return errors.sort();
 }
 
 /**
@@ -155,6 +195,7 @@ export function auditPackageEntries(entries) {
     }
   }
 
+  errors.push(...auditSourceMapReferences(entries));
   errors.push(...auditPackageManifest(entries));
   return errors.sort();
 }

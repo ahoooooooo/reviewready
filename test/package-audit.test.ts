@@ -190,6 +190,7 @@ describe("auditPackageEntries", () => {
     const releasePreflight = await readFile("scripts/release-preflight.mjs", "utf8");
 
     expect(packageSmoke).toContain("audit");
+    expect(packageSmoke).toContain("verifyInstalledSourceMaps");
     expect(packageSmoke).toContain("reviewready.audit-evidence.schema.json");
     expect(releasePreflight).toContain("audit");
     expect(releasePreflight).toContain("reviewready.audit-evidence.schema.json");
@@ -248,6 +249,31 @@ describe("auditPackageEntries", () => {
 
   it("accepts the documented package surface without private metadata", () => {
     expect(auditPackageEntries(requiredEntries())).toEqual([]);
+  });
+
+  it("accepts generated source maps referenced by published runtime files", () => {
+    const entries = requiredEntries();
+    const runtime = entries.find((entry) => entry.path === "dist/cli.js");
+    const declarations = entries.find((entry) => entry.path === "dist/cli.d.ts");
+    if (!runtime || !declarations) {
+      throw new Error("test fixture is missing generated runtime files");
+    }
+    runtime.content += "\n//# sourceMappingURL=cli.js.map\n";
+    declarations.content += "\n//# sourceMappingURL=cli.d.ts.map\n";
+    entries.push(
+      { path: "dist/cli.js.map", content: "{}" },
+      { path: "dist/cli.d.ts.map", content: "{}" }
+    );
+
+    expect(auditPackageEntries(entries)).toEqual([]);
+  });
+
+  it("declares generated source maps in the npm package surface", async () => {
+    const packageJson = JSON.parse(await readFile("package.json", "utf8")) as {
+      files?: unknown;
+    };
+
+    expect(packageJson.files).toEqual(expect.arrayContaining(["dist/*.js.map", "dist/*.d.ts.map"]));
   });
 
   it.each([
