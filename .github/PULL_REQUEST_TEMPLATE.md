@@ -7,6 +7,9 @@ when appropriate.
 Risk: describe security, compatibility, workflow, or release risk; write "none
 identified" when appropriate.
 
+This repository's automation policy does not use a text-only human-attestation
+checkbox as evidence of identity or responsibility.
+
 Do not place required evidence only inside an HTML comment or code block.
 -->
 
@@ -15,5 +18,3 @@ Do not place required evidence only inside an HTML comment or code block.
 ## Testing
 
 ## Risk
-
-- [ ] I understand and take responsibility for this change.
