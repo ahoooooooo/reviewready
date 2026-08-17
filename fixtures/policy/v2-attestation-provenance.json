@@ -1,0 +1,53 @@
+{
+  "contract": "reviewready.attestation.provenance.v2",
+  "version": 2,
+  "binding": ["actor", "event", "repository", "baseSha", "headSha", "policyDigest", "freshness"],
+  "retention": {
+    "rawEvidence": "discard-after-validation",
+    "normalizedEvidenceDays": 30,
+    "replayTombstoneDays": 90
+  },
+  "cases": [
+    {
+      "id": "fresh-bound-review",
+      "expected": "accepted",
+      "evidence": {
+        "actor": "github-user:42",
+        "event": "pull_request_review.submitted:9001",
+        "repository": "github-repository:99",
+        "baseSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "headSha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "policyDigest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "freshness": "fresh"
+      }
+    },
+    {
+      "id": "wrong-revision",
+      "expected": "rejected",
+      "reason": "The event does not bind to the evaluated base and head revision.",
+      "evidence": {
+        "actor": "github-user:42",
+        "event": "pull_request_review.submitted:9002",
+        "repository": "github-repository:99",
+        "baseSha": "cccccccccccccccccccccccccccccccccccccccc",
+        "headSha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "policyDigest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "freshness": "fresh"
+      }
+    },
+    {
+      "id": "provider-unavailable",
+      "expected": "unknown",
+      "reason": "The external authority cannot prove actor, revision, or freshness.",
+      "evidence": {
+        "actor": "unknown",
+        "event": "unknown",
+        "repository": "github-repository:99",
+        "baseSha": "unknown",
+        "headSha": "unknown",
+        "policyDigest": "unknown",
+        "freshness": "unknown"
+      }
+    }
+  ]
+}

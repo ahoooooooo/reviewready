@@ -359,6 +359,10 @@ Subgates:
   budget, SARIF contract, and resource limits are approved. Closing #57 creates
   separate single-outcome AI-1-I implementation/evidence issues; it never
   completes AI-1 by itself.
+- The current design evidence is ADR 0013 and
+  fixtures/ai-workflow/security-corpus-v1.json. It fixes the initial threat
+  vocabulary, stable finding identities, explicit unknown outcome, and bounded
+  corpus limits without implementing an analyzer.
 - AI-1-I starts only after AI-1-D exits and implements the accepted corpus and
   contract without coupling analyzer findings to readiness.
 
@@ -391,6 +395,10 @@ Subgates:
   acceptance-fixture contract is approved. Closing either issue creates
   separate single-outcome V2-1-I implementation/migration issues and never
   completes V2-1 by itself.
+- The current design evidence is ADR 0014 with
+  fixtures/policy/v2-unmatched-change-strategy.json, and ADR 0015 with
+  fixtures/policy/v2-attestation-provenance.json. These artifacts preserve v1
+  behavior and define deterministic v2 boundaries; they do not implement v2.
 - V2-1-I starts only after both design leaves exit. Its successor issues
   implement and prove the accepted contracts while preserving all v1 behavior.
 
