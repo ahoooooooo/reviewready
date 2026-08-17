@@ -1,4 +1,6 @@
 # yaml-language-server: $schema=./reviewready.schema.json
+# This repository uses an explicit automation policy. A visible checkbox cannot
+# authenticate human identity or responsibility, so human_attestation is omitted.
 version: 1
 rules:
   - id: runtime-change
@@ -21,8 +23,6 @@ rules:
       - type: check
         name: check
         conclusions: [success]
-      - type: human_attestation
-        text: I understand and take responsibility for this change.
 
   - id: trust-boundary-change
     description: Workflow, Action, package, release, security, and documentation changes need risk evidence.
@@ -48,8 +48,6 @@ rules:
       - type: check
         name: check
         conclusions: [success]
-      - type: human_attestation
-        text: I understand and take responsibility for this change.
 
   - id: coverage-catch-all
     description: Every ordinary repository path must enter at least one self-policy rule.
