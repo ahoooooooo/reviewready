@@ -22,6 +22,42 @@ integration, release, and adoption is defined by the
 [open-source upgrade lifecycle](../../oss-upgrade-process.md). This file still
 owns the node order, issue ownership, and node-specific promotion gates.
 
+## Current single mainline (2026-08-17)
+
+There is one active execution lane until the next public release is complete:
+
+1. **Lock the baseline.** Use GitHub main at f56730d as the only source for
+   the next change. Do not develop from an old feature branch, and do not open
+   parallel implementation PRs.
+2. **Prepare the v1.0.11 patch candidate.** Publish the already-merged package
+   source-map fix with matching package, lockfile, changelog, Action, and
+   release evidence. This is maintenance of the existing v1 contract, not a
+   new readiness feature or a promotion of a later roadmap node.
+3. **Run the complete release gate.** Verify the exact tarball, package
+   integrity/provenance, clean consumer install, GitHub release/tag, stable
+   Action ref, and documentation parity. Do not publish or move tags until
+   this matrix is complete.
+4. **Publish only after one explicit release authorization.** If authorization
+   is not present, stop at a verified ready-but-unreleased candidate. No server,
+   database, domain, or paid service is part of this lane.
+5. **Stop and reassess.** After the patch release is verified, decide whether
+   any later capability is worth entering. No new feature starts before that
+   decision.
+
+The following work is deliberately parked, not silently mixed into the
+mainline:
+
+- #78/#79: optional hosted GitHub App authority and external enforcement
+  evidence; these require infrastructure and are not a free-core prerequisite;
+- #61: an external pilot that requires another maintainer's consent;
+- AI-1/V2-1 runtime implementations: #57/#58/#59 design leaves are complete,
+  but their analyzers and migrations are separate future work and remain
+  decoupled from readiness.
+
+The operating rule is one active issue, one branch, one PR, one promotion gate.
+Research may explain a parked item, but it cannot create a second execution
+lane or change the v1 public contract without a new explicit decision.
+
 ## TA-1 current repair batch
 
 The active batch covers the retained v1 issues #18, #25, #26, #27, and #54.
