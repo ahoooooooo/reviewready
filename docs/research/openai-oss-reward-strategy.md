@@ -52,6 +52,8 @@ OpenAI 官方的 [Codex for Open Source](https://developers.openai.com/community
 ## 2. 2026-08-16 的公開狀態快照
 
 以下數字是研究時從 GitHub API、npm registry 與 repository 內部驗證結果取得的 snapshot；下載數不是 unique users，也不能直接等同於 broad adoption。
+本表只描述 2026-08-16 的歷史觀察；目前跨 surface 狀態請以
+[current-status](../current-status.md) 為準。
 
 | 面向              | 可觀察事實                                                                  | 解讀                                                                                                            |
 | ----------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |

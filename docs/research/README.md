@@ -57,6 +57,8 @@
 
 ## 關聯的執行資料
 
+- [Current project status](../current-status.md)：跨 local、release、npm、GitHub
+  與文件狀態的唯一索引；外部 provider 狀態必須附驗證時間與 evidence class。
 - [Post-v1 execution plan](../exec-plans/active/post-v1.md)：固定的
   PL-0 → TA-1 → TA-2 → TA-3 → AI-1 → V2-1 → AD-1 節點順序。
 - [Product spec](../product-spec.md)：v1 行為與非目標。
