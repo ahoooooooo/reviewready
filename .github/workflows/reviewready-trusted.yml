@@ -83,7 +83,7 @@ jobs:
             throw new Error("The latest GitHub Actions check did not complete within the bounded wait.");
 
       - name: Evaluate pull-request evidence from the trusted base workflow
-        uses: ahoooooooo/reviewready@bffe33502395ce27ab046efa242789d6b25333de # v1.0.10
+        uses: ahoooooooo/reviewready@e9cd421ac106adb5731dd22b714701a136e937f8 # v1.0.11
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           policy-path: .reviewready.yml

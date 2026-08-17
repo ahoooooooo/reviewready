@@ -1,6 +1,6 @@
 # ADR 0012: GitHub 與 npm 的跨專案發布認證
 
-- Status: accepted operational design; external controls configured, release evidence pending
+- Status: accepted operational design; external controls configured and v1.0.11 release evidence verified
 - Date: 2026-08-17
 - Research: GitHub and npm auth architecture
 
@@ -24,8 +24,11 @@ Trusted Publishing 成功的依據是 workflow 的 OIDC、registry provenance
 
 截至 2026-08-17，live verification 已確認 Trusted Publisher 的 repository、
 workflow filename 與 release environment 綁定正確，且 npm package 的
-`mfa=publish` 寫入回應為 HTTP 200、npm exit code 0。尚未執行受控的正式
-OIDC release，因此 release evidence 仍是下一個驗證節點。
+`mfa=publish` 寫入回應為 HTTP 200、npm exit code 0。受控的 v1.0.11 OIDC
+release 已由 workflow run
+`32017160523` 完成，npm provenance、exact tarball、GitHub immutable release、
+stable `v1` 與 registry smoke 均已驗證；完整座標記錄於
+`docs/release-evidence-v1.0.11.json`。
 
 ## Why
 
