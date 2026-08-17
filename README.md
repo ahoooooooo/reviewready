@@ -19,9 +19,9 @@ pull-request code.
 
 ## Current status
 
-The latest published CLI and Action are v1.0.10. Its exact audited tarball, npm
-provenance, semantic-version tag target, GitHub Release target, and stable Action
-ref have all been verified against one commit. The v1.0.6 trust-core and
+The current package line is v1.0.11. Its exact audited tarball, npm provenance,
+semantic-version tag target, GitHub Release target, and stable Action ref will
+be recorded in the release evidence after public verification. The v1.0.6 trust-core and
 live-ingress contracts are released, but a normal `pull_request` workflow is
 still not a trusted enforcement root: it is loaded from the pull-request merge
 ref and can be modified by the contribution it evaluates. Loading policy
@@ -29,7 +29,7 @@ contents from the base SHA does not by itself protect the caller workflow,
 Action pin, or `policy-path`.
 
 The `audit collect` and `audit replay` evidence-bundle commands described below
-are available in the published 1.0.10 package. The TA-2 bundle surface is
+are included in the v1.0.11 package. The TA-2 bundle surface is
 versioned, bounded, and replayed offline; it must not be treated as a readiness
 or workflow-authority decision.
 
@@ -52,10 +52,10 @@ dedicated-provider contract is tracked in
 current exact revisions, observed controls, unavailable settings, and remaining
 advisory boundary.
 [SECURITY.md](SECURITY.md) lists the other current evidence boundaries.
-Semantic-version release tags will not be rewritten under project policy, but
-GitHub release immutability was not enabled for the historical v1.0.7 release;
-[#60](https://github.com/ahoooooooo/reviewready/issues/60) tracks protection for
-future releases.
+Semantic-version release tags will not be rewritten under project policy. The
+historical v1.0.7 release predates GitHub release immutability; future releases
+are now protected by that setting. [#60](https://github.com/ahoooooooo/reviewready/issues/60)
+tracks the remaining public-coordinate evidence.
 
 ## Quick start
 
@@ -72,9 +72,9 @@ The Action can also be used in an advisory workflow:
 - uses: ahoooooooo/reviewready@f21ed2e94efedb01f73e518c39765cef72c58e1c # v1.0.7
 ```
 
-The advisory example retains the audited v1.0.7 commit shipped in the
-published v1.0.10 package README, because published npm package bytes cannot be
-rewritten. The repository's checked-in trusted reference is updated separately
+The advisory example retains the audited v1.0.7 commit in the package README
+source. Once published, npm package bytes cannot be rewritten. The repository's
+checked-in trusted reference is updated separately
 after each release to the exact verified release commit; #60 tracks the
 remaining public-coordinate reconciliation.
 

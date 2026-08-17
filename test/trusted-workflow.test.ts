@@ -46,7 +46,7 @@ describe("trusted ReviewReady workflow", () => {
   it("keeps the package version, README status, and changelog release aligned", () => {
     expect(typeof packageManifest.version).toBe("string");
     const version = String(packageManifest.version);
-    expect(readme).toContain(`latest published CLI and Action are v${version}`);
+    expect(readme).toContain(`The current package line is v${version}`);
     expect(changelog).toContain(`## [${version}]`);
   });
 

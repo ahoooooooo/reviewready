@@ -5,6 +5,13 @@ the project uses semantic versioning.
 
 ## [Unreleased]
 
+## [1.0.11] - 2026-08-17
+
+### Fixed
+
+- Include generated JavaScript and declaration source maps in the published
+  package so packaged runtime references remain verifiable by consumers.
+
 ## [1.0.10] - 2026-08-16
 
 ### Fixed
