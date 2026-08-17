@@ -36,6 +36,11 @@ export interface TrustedIngressBinding {
   readonly hookId: string;
   readonly installationId: number;
   readonly repositoryId: number;
+  readonly baseRepositoryId: number;
+  readonly headRepositoryId: number;
+  readonly repositoryOwnerId: number;
+  readonly repositoryOwnerType: "User" | "Organization";
+  readonly repositoryOwnerLogin: string;
   readonly pullNumber: number;
   readonly baseSha: string;
   readonly headSha: string;
@@ -201,6 +206,7 @@ interface ReceiptEntry {
   readonly bodySha256: string;
   readonly binding: TrustedIngressBinding;
   readonly bindingDigest: string;
+  readonly receivedAtMs: number;
   readonly expiresAtMs: number;
   readonly generation: number;
   readonly deliveryIds: Set<string>;
@@ -268,6 +274,13 @@ function isBinding(value: unknown): value is TrustedIngressBinding {
     isBoundedText(candidate.hookId) &&
     isSafePositiveInteger(candidate.installationId) &&
     isSafePositiveInteger(candidate.repositoryId) &&
+    isSafePositiveInteger(candidate.baseRepositoryId) &&
+    isSafePositiveInteger(candidate.headRepositoryId) &&
+    isSafePositiveInteger(candidate.repositoryOwnerId) &&
+    candidate.baseRepositoryId === candidate.repositoryId &&
+    (candidate.repositoryOwnerType === "User" ||
+      candidate.repositoryOwnerType === "Organization") &&
+    isBoundedText(candidate.repositoryOwnerLogin, 256) &&
     isSafePositiveInteger(candidate.pullNumber) &&
     isSha(candidate.baseSha, 40) &&
     isSha(candidate.headSha, 40) &&
@@ -284,6 +297,11 @@ function canonicalBinding(binding: TrustedIngressBinding): string {
     binding.hookId,
     binding.installationId,
     binding.repositoryId,
+    binding.baseRepositoryId,
+    binding.headRepositoryId,
+    binding.repositoryOwnerId,
+    binding.repositoryOwnerType,
+    binding.repositoryOwnerLogin,
     binding.pullNumber,
     binding.baseSha,
     binding.headSha,
@@ -306,7 +324,12 @@ export function deriveBindingDigest(binding: TrustedIngressBinding): string {
 }
 
 function namespace(binding: TrustedIngressBinding): string {
-  return JSON.stringify([binding.appId, binding.hookId, binding.installationId]);
+  return JSON.stringify([
+    binding.appId,
+    binding.hookId,
+    binding.installationId,
+    binding.repositoryId
+  ]);
 }
 
 function deliveryKey(binding: TrustedIngressBinding, deliveryId: string): string {
@@ -532,6 +555,7 @@ export class InMemoryTrustedIngressStore implements TrustedIngressStore {
       bodySha256: receipt.bodySha256,
       binding: receipt.binding,
       bindingDigest: receipt.bindingDigest,
+      receivedAtMs: receipt.receivedAtMs,
       expiresAtMs: receipt.expiresAtMs,
       generation,
       deliveryIds: new Set([receipt.deliveryId]),
@@ -618,8 +642,8 @@ export class InMemoryTrustedIngressStore implements TrustedIngressStore {
     return { outcome: reclaimed ? "reclaimed" : "leased", attempt: entry.attempts };
   }
 
-  public prepare(receipt: string, nowMs: number): TrustedPrepareResult {
-    if (!isBoundedText(receipt, 256) || !isSafeTime(nowMs)) {
+  public prepare(receipt: string, nowMs: number, attempt: number): TrustedPrepareResult {
+    if (!isBoundedText(receipt, 256) || !isSafeTime(nowMs) || !isSafePositiveInteger(attempt)) {
       return { outcome: "invalid" };
     }
     const entry = this.records.get(receipt);
@@ -643,6 +667,9 @@ export class InMemoryTrustedIngressStore implements TrustedIngressStore {
     ) {
       return { outcome: "busy" };
     }
+    if (entry.attempts !== attempt) {
+      return { outcome: "stale" };
+    }
     entry.externalId = deriveExternalId(entry.bindingDigest, entry.generation);
     entry.outboxEnqueued = true;
     this.outbox.set(entry.externalId, {
@@ -663,13 +690,15 @@ export class InMemoryTrustedIngressStore implements TrustedIngressStore {
     receipt: string,
     generation: number,
     resultDigest: string,
-    nowMs: number
+    nowMs: number,
+    attempt: number
   ): { readonly outcome: TrustedCommitOutcome } {
     if (
       !isBoundedText(receipt, 256) ||
       !isSafePositiveInteger(generation) ||
       !isSha(resultDigest, 64) ||
-      !isSafeTime(nowMs)
+      !isSafeTime(nowMs) ||
+      !isSafePositiveInteger(attempt)
     ) {
       return { outcome: "invalid" };
     }
@@ -684,6 +713,9 @@ export class InMemoryTrustedIngressStore implements TrustedIngressStore {
       return entry.resultDigest === resultDigest
         ? { outcome: "duplicate" }
         : { outcome: "conflict" };
+    }
+    if (entry.attempts !== attempt) {
+      return { outcome: "stale" };
     }
     if (entry.state !== "prepared" && entry.state !== "provider_adopted") {
       return { outcome: "not_ready" };
@@ -719,7 +751,9 @@ export class InMemoryTrustedIngressStore implements TrustedIngressStore {
       return "provider_ambiguous";
     }
     entry.providerAdopted = true;
-    entry.state = "provider_adopted";
+    if (entry.state !== "committed" && entry.state !== "published") {
+      entry.state = "provider_adopted";
+    }
     return "adopted";
   }
 
@@ -744,6 +778,9 @@ export class InMemoryTrustedIngressStore implements TrustedIngressStore {
     if (entry.state === "published") {
       return "published";
     }
+    if (entry.state !== "committed") {
+      return "blocked";
+    }
     if (this.publicationGate === undefined || !this.publicationGate.canPublishSuccess()) {
       return "blocked";
     }
@@ -760,9 +797,17 @@ export class InMemoryTrustedIngressStore implements TrustedIngressStore {
       return { outcome: "invalid", deliveryTombstoneExists: false };
     }
     let cleaned = 0;
-    for (const entry of this.records.values()) {
+    for (const entry of [...this.records.values()]) {
       if (entry.bodyRetained && entry.expiresAtMs <= nowMs) {
         entry.bodyRetained = false;
+        cleaned += 1;
+      }
+      if (
+        nowMs >= entry.receivedAtMs &&
+        nowMs - entry.receivedAtMs >= TA3_TOMBSTONE_RETENTION_MS &&
+        this.canPurge(entry)
+      ) {
+        this.purge(entry);
         cleaned += 1;
       }
     }
@@ -830,6 +875,27 @@ export class InMemoryTrustedIngressStore implements TrustedIngressStore {
   private isCurrent(entry: ReceiptEntry): boolean {
     const slot = this.slots.get(slotKey(entry.binding));
     return slot?.receipt === entry.receipt && slot.generation === entry.generation;
+  }
+
+  private canPurge(entry: ReceiptEntry): boolean {
+    return (
+      entry.externalId === undefined || this.outbox.get(entry.externalId)?.acknowledged === true
+    );
+  }
+
+  private purge(entry: ReceiptEntry): void {
+    for (const deliveryId of entry.deliveryIds) {
+      this.deliveries.delete(deliveryKey(entry.binding, deliveryId));
+    }
+    this.bodies.delete(bodyKey(entry.binding, entry.bodySha256));
+    const slot = this.slots.get(slotKey(entry.binding));
+    if (slot?.receipt === entry.receipt) {
+      this.slots.delete(slotKey(entry.binding));
+    }
+    if (entry.externalId !== undefined) {
+      this.outbox.delete(entry.externalId);
+    }
+    this.records.delete(entry.receipt);
   }
 }
 

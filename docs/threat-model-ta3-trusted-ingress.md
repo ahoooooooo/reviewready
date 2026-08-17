@@ -1,6 +1,6 @@
 # TA-3 trusted GitHub App ingress: threat model
 
-- Status: accepted design for TA-3-D; implementation deferred
+- Status: accepted design for TA-3-D; provider-neutral TA-3-I local core implemented; production implementation deferred
 - Governing decision: [ADR 0011](adr/0011-github-app-trusted-ingress.md)
 - Scope: the direct GitHub App provider, its webhook ingress, durable
   evaluation state, and Check Run publication boundary

@@ -4,6 +4,7 @@ import {
   InMemoryTrustedIngressStore,
   TA3_MAX_BODY_BYTES,
   TA3_MAX_REPLAY_AGE_MS,
+  TA3_TOMBSTONE_RETENTION_MS,
   TrustedIngressModeController,
   acceptTrustedDelivery,
   deriveBindingDigest,
@@ -25,6 +26,11 @@ function binding(overrides: Partial<TrustedIngressBinding> = {}): TrustedIngress
     hookId: "hook-7",
     installationId: 8001,
     repositoryId: 7001,
+    baseRepositoryId: 7001,
+    headRepositoryId: 7001,
+    repositoryOwnerId: 7101,
+    repositoryOwnerType: "Organization",
+    repositoryOwnerLogin: "reviewready",
     pullNumber: 42,
     baseSha,
     headSha,
@@ -120,6 +126,25 @@ describe("TA-3 trusted ingress state machine", () => {
     expect(store.inspect()).toMatchObject({ bodyClaims: 1, evaluationCount: 1 });
   });
 
+  it("isolates delivery and body replay namespaces by repository", async () => {
+    const store = new InMemoryTrustedIngressStore();
+
+    await expect(
+      acceptTrustedDelivery(store, delivery("same-delivery", "1".repeat(64)))
+    ).resolves.toMatchObject({
+      outcome: "accepted"
+    });
+    await expect(
+      acceptTrustedDelivery(
+        store,
+        delivery("same-delivery", "1".repeat(64), {
+          binding: binding({ repositoryId: 7002, baseRepositoryId: 7002 })
+        })
+      )
+    ).resolves.toMatchObject({ outcome: "accepted" });
+    expect(store.inspect()).toMatchObject({ evaluationCount: 2, currentGeneration: 1 });
+  });
+
   it("does not infer acceptance after an ambiguous store result", async () => {
     const store = new InMemoryTrustedIngressStore({ acceptFault: "unknown-after-commit" });
     const input = delivery("delivery-1", "1".repeat(64));
@@ -161,7 +186,7 @@ describe("TA-3 trusted ingress state machine", () => {
       outcome: "reclaimed",
       attempt: 2
     });
-    const prepared = store.prepare("delivery-1", 2_100);
+    const prepared = store.prepare("delivery-1", 2_100, 2);
     expect(prepared).toMatchObject({ outcome: "prepared", generation: 1 });
 
     await acceptTrustedDelivery(
@@ -170,10 +195,47 @@ describe("TA-3 trusted ingress state machine", () => {
         binding: binding({ policySha256: "4".repeat(64) })
       })
     );
-    expect(store.commit("delivery-1", 1, "5".repeat(64), 2_200)).toMatchObject({
+    expect(store.commit("delivery-1", 1, "5".repeat(64), 2_200, 2)).toMatchObject({
       outcome: "stale"
     });
     expect(store.inspect()).toMatchObject({ currentGeneration: 2, successfulCommits: 0 });
+  });
+
+  it("fences an old lease holder after the same receipt is reclaimed", async () => {
+    const store = new InMemoryTrustedIngressStore();
+    await acceptTrustedDelivery(store, delivery("delivery-lease-fence", "1".repeat(64)));
+
+    const firstLease = store.lease("delivery-lease-fence", 2_000, 100);
+    const secondLease = store.lease("delivery-lease-fence", 2_100, 100);
+    if (firstLease.attempt !== 1 || secondLease.attempt !== 2) {
+      throw new Error("test setup did not reclaim the lease");
+    }
+
+    expect(store.prepare("delivery-lease-fence", 2_110, firstLease.attempt)).toMatchObject({
+      outcome: "stale"
+    });
+    const prepared = store.prepare("delivery-lease-fence", 2_110, secondLease.attempt);
+    if (prepared.outcome !== "prepared" || prepared.generation === undefined) {
+      throw new Error("test setup did not prepare the reclaimed lease");
+    }
+    expect(
+      store.commit(
+        "delivery-lease-fence",
+        prepared.generation,
+        "5".repeat(64),
+        2_110,
+        firstLease.attempt
+      )
+    ).toMatchObject({ outcome: "stale" });
+    expect(
+      store.commit(
+        "delivery-lease-fence",
+        prepared.generation,
+        "5".repeat(64),
+        2_110,
+        secondLease.attempt
+      )
+    ).toMatchObject({ outcome: "committed" });
   });
 
   it("adopts exactly one matching provider result before publishing success", async () => {
@@ -182,7 +244,7 @@ describe("TA-3 trusted ingress state machine", () => {
     const input = delivery("delivery-1", "1".repeat(64));
     const accepted = await acceptTrustedDelivery(store, input);
     store.lease("delivery-1", 2_000, 100);
-    const prepared = store.prepare("delivery-1", 2_000);
+    const prepared = store.prepare("delivery-1", 2_000, 1);
     if (
       prepared.outcome !== "prepared" ||
       prepared.externalId === undefined ||
@@ -194,6 +256,12 @@ describe("TA-3 trusted ingress state machine", () => {
     const expected = checkRun({ externalId: prepared.externalId });
 
     expect(store.reconcileCheckRun("delivery-1", [expected])).toBe("adopted");
+    expect(store.completeCheckRun("delivery-1", prepared.generation, "success")).toBe("blocked");
+    expect(store.commit("delivery-1", prepared.generation, "4".repeat(64), 2_000, 1)).toMatchObject(
+      {
+        outcome: "committed"
+      }
+    );
     expect(store.completeCheckRun("delivery-1", prepared.generation, "success")).toBe("published");
     expect(store.inspect().successfulPublishes).toBe(1);
     expect(store.inspect()).toMatchObject({ outboxEvents: 1 });
@@ -216,7 +284,7 @@ describe("TA-3 trusted ingress state machine", () => {
     const input = delivery("delivery-no-gate", "1".repeat(64));
     await acceptTrustedDelivery(store, input);
     store.lease("delivery-no-gate", 2_000, 100);
-    const prepared = store.prepare("delivery-no-gate", 2_000);
+    const prepared = store.prepare("delivery-no-gate", 2_000, 1);
     if (
       prepared.outcome !== "prepared" ||
       prepared.generation === undefined ||
@@ -238,7 +306,7 @@ describe("TA-3 trusted ingress state machine", () => {
     const store = new InMemoryTrustedIngressStore();
     await acceptTrustedDelivery(store, delivery("delivery-1", "1".repeat(64)));
     store.lease("delivery-1", 2_000, 100);
-    const prepared = store.prepare("delivery-1", 2_000);
+    const prepared = store.prepare("delivery-1", 2_000, 1);
     if (prepared.outcome !== "prepared" || prepared.externalId === undefined) {
       throw new Error("test setup did not prepare a receipt");
     }
@@ -281,7 +349,7 @@ describe("TA-3 trusted ingress state machine", () => {
     const store = new InMemoryTrustedIngressStore();
     await acceptTrustedDelivery(store, delivery("delivery-1", "1".repeat(64)));
     store.lease("delivery-1", 2_000, 100);
-    const prepared = store.prepare("delivery-1", 2_000);
+    const prepared = store.prepare("delivery-1", 2_000, 1);
     if (prepared.outcome !== "prepared") {
       throw new Error("test setup did not prepare a receipt");
     }
@@ -293,17 +361,50 @@ describe("TA-3 trusted ingress state machine", () => {
     const store = new InMemoryTrustedIngressStore();
     await acceptTrustedDelivery(store, delivery("delivery-1", "1".repeat(64)));
     store.lease("delivery-1", 2_000, 100);
-    const prepared = store.prepare("delivery-1", 2_000);
+    const prepared = store.prepare("delivery-1", 2_000, 1);
     if (prepared.outcome !== "prepared" || prepared.generation === undefined) {
       throw new Error("test setup did not prepare a receipt");
     }
 
-    expect(store.commit("delivery-1", prepared.generation, "5".repeat(64), 2_000)).toMatchObject({
+    expect(store.commit("delivery-1", prepared.generation, "5".repeat(64), 2_000, 1)).toMatchObject(
+      {
+        outcome: "committed"
+      }
+    );
+    expect(store.commit("delivery-1", prepared.generation, "6".repeat(64), 2_000, 1)).toMatchObject(
+      {
+        outcome: "conflict"
+      }
+    );
+  });
+
+  it("does not regress a committed provider result or count it twice", async () => {
+    const store = new InMemoryTrustedIngressStore();
+    await acceptTrustedDelivery(store, delivery("delivery-order", "1".repeat(64)));
+    store.lease("delivery-order", 2_000, 100);
+    const prepared = store.prepare("delivery-order", 2_000, 1);
+    if (
+      prepared.outcome !== "prepared" ||
+      prepared.externalId === undefined ||
+      prepared.generation === undefined
+    ) {
+      throw new Error("test setup did not prepare a receipt");
+    }
+
+    expect(
+      store.commit("delivery-order", prepared.generation, "5".repeat(64), 2_000, 1)
+    ).toMatchObject({
       outcome: "committed"
     });
-    expect(store.commit("delivery-1", prepared.generation, "6".repeat(64), 2_000)).toMatchObject({
-      outcome: "conflict"
+    expect(
+      store.reconcileCheckRun("delivery-order", [checkRun({ externalId: prepared.externalId })])
+    ).toBe("adopted");
+    expect(
+      store.commit("delivery-order", prepared.generation, "5".repeat(64), 2_000, 1)
+    ).toMatchObject({
+      outcome: "duplicate"
     });
+    expect(store.inspect().successfulCommits).toBe(1);
   });
 
   it("rejects token profile drift and downgrades required mode", () => {
@@ -417,7 +518,7 @@ describe("TA-3 trusted ingress state machine", () => {
     const store = new InMemoryTrustedIngressStore({ publicationGate: mode });
     await acceptTrustedDelivery(store, delivery("delivery-1", "1".repeat(64)));
     store.lease("delivery-1", 2_000, 100);
-    const prepared = store.prepare("delivery-1", 2_000);
+    const prepared = store.prepare("delivery-1", 2_000, 1);
     if (
       prepared.outcome !== "prepared" ||
       prepared.generation === undefined ||
@@ -438,10 +539,10 @@ describe("TA-3 trusted ingress state machine", () => {
     const store = new InMemoryTrustedIngressStore();
     expect(store.lease("", -1, 0)).toMatchObject({ outcome: "invalid" });
     expect(store.lease("missing", 0)).toMatchObject({ outcome: "missing" });
-    expect(store.prepare("", -1)).toMatchObject({ outcome: "invalid" });
-    expect(store.prepare("missing", 0)).toMatchObject({ outcome: "missing" });
-    expect(store.commit("", 0, "bad", -1)).toMatchObject({ outcome: "invalid" });
-    expect(store.commit("missing", 1, "1".repeat(64), 0)).toMatchObject({ outcome: "missing" });
+    expect(store.prepare("", -1, 1)).toMatchObject({ outcome: "invalid" });
+    expect(store.prepare("missing", 0, 1)).toMatchObject({ outcome: "missing" });
+    expect(store.commit("", 0, "bad", -1, 1)).toMatchObject({ outcome: "invalid" });
+    expect(store.commit("missing", 1, "1".repeat(64), 0, 1)).toMatchObject({ outcome: "missing" });
     expect(store.reconcileCheckRun("", [])).toBe("invalid");
     expect(store.reconcileCheckRun("missing", [])).toBe("missing");
     expect(store.completeCheckRun("", 0, "success")).toBe("invalid");
@@ -500,6 +601,25 @@ describe("TA-3 trusted ingress state machine", () => {
     expect(store.hasDeliveryTombstone("delivery-expired")).toBe(true);
   });
 
+  it("purges the tombstone and indexes only after the declared retention window", async () => {
+    const store = new InMemoryTrustedIngressStore();
+    await acceptTrustedDelivery(
+      store,
+      delivery("delivery-purge", "1".repeat(64), { receivedAtMs: 0, nowMs: 0 })
+    );
+
+    expect(store.cleanup(TA3_MAX_REPLAY_AGE_MS)).toMatchObject({ outcome: "cleaned" });
+    expect(store.cleanup(TA3_TOMBSTONE_RETENTION_MS - 1)).toMatchObject({
+      outcome: "cleanup_deferred",
+      deliveryTombstoneExists: true
+    });
+    expect(store.cleanup(TA3_TOMBSTONE_RETENTION_MS)).toMatchObject({
+      outcome: "cleaned",
+      deliveryTombstoneExists: false
+    });
+    expect(store.hasDeliveryTombstone("delivery-purge")).toBe(false);
+  });
+
   it("rejects traversal policy paths before any durable claim", async () => {
     const store = new InMemoryTrustedIngressStore();
     await expect(
@@ -507,6 +627,19 @@ describe("TA-3 trusted ingress state machine", () => {
         store,
         delivery("delivery-traversal", "1".repeat(64), {
           binding: binding({ policyPath: "../untrusted.yml" })
+        })
+      )
+    ).resolves.toMatchObject({ outcome: "invalid", accepted: false });
+    expect(store.inspect().storeCalls).toBe(0);
+  });
+
+  it("rejects an internally incoherent repository binding before durable access", async () => {
+    const store = new InMemoryTrustedIngressStore();
+    await expect(
+      acceptTrustedDelivery(
+        store,
+        delivery("delivery-incoherent-repository", "1".repeat(64), {
+          binding: binding({ baseRepositoryId: 7002 })
         })
       )
     ).resolves.toMatchObject({ outcome: "invalid", accepted: false });

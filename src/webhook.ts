@@ -22,6 +22,14 @@ export interface GitHubWebhookRequest {
   readonly nowMs: number;
 }
 
+export type GitHubRepositoryOwnerType = "User" | "Organization";
+
+export interface GitHubRepositoryOwner {
+  readonly id: number;
+  readonly type: GitHubRepositoryOwnerType;
+  readonly login: string;
+}
+
 export interface GitHubWebhookConfig {
   readonly appId: number;
   readonly webhookSecret: string;
@@ -37,6 +45,7 @@ export interface DurableWebhookRecord {
     readonly appId: string;
     readonly hookId: string;
     readonly installationId: number;
+    readonly repositoryId: number;
     readonly deliveryId: string;
   };
   /** The durable store must atomically claim this body replay namespace as well as key.deliveryId. */
@@ -46,6 +55,11 @@ export interface DurableWebhookRecord {
   readonly event: "pull_request" | "pull_request_review";
   readonly action: string;
   readonly repositoryId: number;
+  readonly repositoryOwnerId: number;
+  readonly repositoryOwnerType: GitHubRepositoryOwnerType;
+  readonly repositoryOwnerLogin: string;
+  readonly baseRepositoryId: number;
+  readonly headRepositoryId: number;
   readonly pullNumber: number;
   readonly baseSha: string;
   readonly headSha: string;
@@ -67,6 +81,11 @@ export interface WebhookIngressResult {
   readonly deliveryId?: string;
   readonly installationId?: number;
   readonly repositoryId?: number;
+  readonly repositoryOwnerId?: number;
+  readonly repositoryOwnerType?: GitHubRepositoryOwnerType;
+  readonly repositoryOwnerLogin?: string;
+  readonly baseRepositoryId?: number;
+  readonly headRepositoryId?: number;
   readonly pullNumber?: number;
   readonly baseSha?: string;
   readonly headSha?: string;
@@ -145,6 +164,19 @@ function stringValue(value: unknown, max = MAX_WEBHOOK_HEADER_LENGTH): string | 
     : undefined;
 }
 
+function repositoryOwner(value: unknown): GitHubRepositoryOwner | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const id = positiveInteger(value.id);
+  const type = value.type;
+  const login = stringValue(value.login, 256);
+  if (id === undefined || (type !== "User" && type !== "Organization") || login === undefined) {
+    return undefined;
+  }
+  return { id, type, login };
+}
+
 function singleHeader(
   headers: Readonly<Record<string, WebhookHeaderValue | undefined>>,
   wanted: string
@@ -179,6 +211,11 @@ function metadata(
     readonly deliveryId: string;
     readonly installationId: number;
     readonly repositoryId: number;
+    readonly repositoryOwnerId: number;
+    readonly repositoryOwnerType: GitHubRepositoryOwnerType;
+    readonly repositoryOwnerLogin: string;
+    readonly baseRepositoryId: number;
+    readonly headRepositoryId: number;
     readonly pullNumber: number;
     readonly baseSha: string;
     readonly headSha: string;
@@ -245,15 +282,32 @@ export async function receiveGitHubWebhook(
   const installation = isRecord(payload.installation)
     ? positiveInteger(payload.installation.id)
     : undefined;
-  const repository = isRecord(payload.repository)
-    ? positiveInteger(payload.repository.id)
+  const repositoryPayload = isRecord(payload.repository) ? payload.repository : undefined;
+  const repository = repositoryPayload ? positiveInteger(repositoryPayload.id) : undefined;
+  const repositoryOwnerPayload = repositoryPayload
+    ? repositoryOwner(repositoryPayload.owner)
     : undefined;
   const pullRequest = isRecord(payload.pull_request) ? payload.pull_request : undefined;
   const review = isRecord(payload.review) ? payload.review : undefined;
-  const base =
-    isRecord(pullRequest) && isRecord(pullRequest.base) ? pullRequest.base.sha : undefined;
-  const head =
-    isRecord(pullRequest) && isRecord(pullRequest.head) ? pullRequest.head.sha : undefined;
+  const basePayload =
+    isRecord(pullRequest) && isRecord(pullRequest.base) ? pullRequest.base : undefined;
+  const headPayload =
+    isRecord(pullRequest) && isRecord(pullRequest.head) ? pullRequest.head : undefined;
+  const baseRepositoryPayload =
+    basePayload && isRecord(basePayload.repo) ? basePayload.repo : undefined;
+  const headRepositoryPayload =
+    headPayload && isRecord(headPayload.repo) ? headPayload.repo : undefined;
+  const baseRepository = baseRepositoryPayload
+    ? positiveInteger(baseRepositoryPayload.id)
+    : undefined;
+  const headRepository = headRepositoryPayload
+    ? positiveInteger(headRepositoryPayload.id)
+    : undefined;
+  const baseOwner = baseRepositoryPayload
+    ? repositoryOwner(baseRepositoryPayload.owner)
+    : undefined;
+  const base = basePayload?.sha;
+  const head = headPayload?.sha;
   const pullNumber = isRecord(pullRequest) ? positiveInteger(pullRequest.number) : undefined;
   if (
     action === undefined ||
@@ -261,6 +315,14 @@ export async function receiveGitHubWebhook(
     !EVENT_ACTIONS[event]?.has(action) ||
     installation === undefined ||
     repository === undefined ||
+    repositoryOwnerPayload === undefined ||
+    baseRepository === undefined ||
+    headRepository === undefined ||
+    baseRepository !== repository ||
+    baseOwner === undefined ||
+    baseOwner.id !== repositoryOwnerPayload.id ||
+    baseOwner.type !== repositoryOwnerPayload.type ||
+    baseOwner.login.toLowerCase() !== repositoryOwnerPayload.login.toLowerCase() ||
     pullNumber === undefined ||
     typeof base !== "string" ||
     !SHA.test(base) ||
@@ -289,7 +351,7 @@ export async function receiveGitHubWebhook(
     return invalid();
   }
 
-  const expiresAtMs = request.nowMs + MAX_REPLAY_AGE_MS;
+  const expiresAtMs = request.receivedAtMs + MAX_REPLAY_AGE_MS;
   if (!Number.isSafeInteger(expiresAtMs)) {
     return invalid();
   }
@@ -299,14 +361,20 @@ export async function receiveGitHubWebhook(
       appId: String(config.appId),
       hookId,
       installationId: installation,
+      repositoryId: repository,
       deliveryId
     },
-    replayKey: `${String(config.appId)}:${hookId}:${String(installation)}:${bodySha256}`,
+    replayKey: `${String(config.appId)}:${hookId}:${String(installation)}:${String(repository)}:${bodySha256}`,
     body: request.rawBody.slice(),
     bodySha256,
     event: event as "pull_request" | "pull_request_review",
     action,
     repositoryId: repository,
+    repositoryOwnerId: repositoryOwnerPayload.id,
+    repositoryOwnerType: repositoryOwnerPayload.type,
+    repositoryOwnerLogin: repositoryOwnerPayload.login,
+    baseRepositoryId: baseRepository,
+    headRepositoryId: headRepository,
     pullNumber,
     baseSha: base,
     headSha: head,
@@ -333,6 +401,11 @@ function recordDetails(record: DurableWebhookRecord): {
   readonly deliveryId: string;
   readonly installationId: number;
   readonly repositoryId: number;
+  readonly repositoryOwnerId: number;
+  readonly repositoryOwnerType: GitHubRepositoryOwnerType;
+  readonly repositoryOwnerLogin: string;
+  readonly baseRepositoryId: number;
+  readonly headRepositoryId: number;
   readonly pullNumber: number;
   readonly baseSha: string;
   readonly headSha: string;
@@ -342,6 +415,11 @@ function recordDetails(record: DurableWebhookRecord): {
     deliveryId: record.key.deliveryId,
     installationId: record.key.installationId,
     repositoryId: record.repositoryId,
+    repositoryOwnerId: record.repositoryOwnerId,
+    repositoryOwnerType: record.repositoryOwnerType,
+    repositoryOwnerLogin: record.repositoryOwnerLogin,
+    baseRepositoryId: record.baseRepositoryId,
+    headRepositoryId: record.headRepositoryId,
     pullNumber: record.pullNumber,
     baseSha: record.baseSha,
     headSha: record.headSha,
