@@ -3,6 +3,13 @@
 ReviewReady is built with coding agents, but evidence—not authorship—decides whether
 a change is acceptable.
 
+The repository's own `.reviewready.yml` is an explicit automation policy. It
+requires visible change evidence and deterministic checks, but intentionally
+does not require `human_attestation`: a checkbox in PR text cannot authenticate
+the actor, prove comprehension, or create legal responsibility. This local
+choice does not change the v1 schema capability, replace independent review for
+high-risk changes, or authorize an LLM to decide readiness, approve, or merge.
+
 ## Bootstrap, then evolve
 
 The repository starts with the smallest useful Codex setup:
