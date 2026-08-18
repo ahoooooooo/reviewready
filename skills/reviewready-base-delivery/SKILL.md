@@ -58,10 +58,13 @@ boundary or changed surface expands.
 
 ## External provider gate
 
-Run `npm run auth:status` before requesting or performing a GitHub/npm provider
-operation. It is the local machine-readable authority map and makes no network
-request. Do not substitute model memory, a historical note, or another auth
-channel for its result.
+Run `npm run auth:status` once before the first GitHub/npm provider
+operation in a bounded external batch. It is the local machine-readable
+authority map and makes no network request. Reuse that routing result only while
+the provider authority, repository/package scope, network context, and
+credential context remain unchanged; a new batch or changed context requires a
+fresh preflight. Do not substitute model memory, a historical note, or another
+auth channel for its result.
 
 - Git fetch/push uses browser-backed Windows Git Credential Manager. GitHub API
   work uses the explicitly approved connected provider/browser channel. GitHub
@@ -75,6 +78,14 @@ channel for its result.
   GCM probe may hand off a separate human login decision.
 - Credential probing has one attempt and zero same-context retries. Never emit
   account names, tokens, credential files, or raw provider responses.
+
+Keep ordinary work in the local sandbox. When the result is
+`connected_context_required` or `context_unavailable`, record the
+context boundary, stop retrying in the sandbox, and request one approved
+connected/elevated execution context for the exact provider operation. Execute
+only the approved provider, resource scope, network context, and read/write
+effect there, then return to the sandbox for local validation. Never disable
+the sandbox globally or select danger-full-access/--yolo automatically.
 
 For each actual provider operation, name the provider, intended resource scope,
 network context, and read/write effect in the approval request. Keep the batch

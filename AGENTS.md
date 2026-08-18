@@ -114,9 +114,18 @@ not conceal it with a repeated command.
 
 ## Authentication authority and external preflight
 
-Before any GitHub or npm operation, run `npm run auth:status`. This is a bounded
-local check: it contacts no provider, prints no account or credential, and never
-retries. Read `docs/authentication.md` when any returned state is unfamiliar.
+Before the first GitHub or npm operation in a bounded external batch, run
+`npm run auth:status` once. This is a bounded local check: it contacts no
+provider, prints no account or credential, and never retries. Reuse the result
+only while the provider authority, repository/package scope, network context,
+and credential context remain unchanged. Read `docs/authentication.md` when any
+returned state is unfamiliar.
+
+Keep ordinary local work in the sandbox. When the result is
+`connected_context_required` or `context_unavailable`, stop sandbox retries and
+route only the exact approved provider operation through a connected/elevated
+context; return to the sandbox for local validation. Never disable sandboxing
+globally or select danger-full-access/--yolo automatically.
 
 - Git fetch and push use the HTTPS remote plus browser-backed Windows Git
   Credential Manager. GitHub API, PR, issue, release, and settings operations

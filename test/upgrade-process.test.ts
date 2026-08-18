@@ -94,10 +94,12 @@ describe("open-source upgrade process contract", () => {
     expect(plan).not.toContain("must pass the repository gate before");
   });
   it("keeps external authentication checks visible to every agent run", async () => {
-    const [guide, contract, implementation] = await Promise.all([
+    const [guide, contract, implementation, base, development] = await Promise.all([
       readFile("AGENTS.md", "utf8"),
       readFile("docs/authentication.md", "utf8"),
-      readFile("scripts/auth-status.mjs", "utf8")
+      readFile("scripts/auth-status.mjs", "utf8"),
+      readFile("skills/reviewready-base-delivery/SKILL.md", "utf8"),
+      readFile("docs/ai-development.md", "utf8")
     ]);
 
     expect(guide).toContain("## Authentication authority and external preflight");
@@ -111,6 +113,13 @@ describe("open-source upgrade process contract", () => {
     expect(guide).not.toContain("gh api user");
     expect(contract).toContain("same-context retries");
     expect(contract).toContain("Local npm authentication is intentionally irrelevant");
+    expect(contract).toContain("External lane routing");
+    expect(contract).toContain("bounded batch");
+    expect(guide).toContain("bounded external batch");
+    expect(guide).toContain("connected/elevated");
+    expect(base).toContain("Keep ordinary work in the local sandbox");
+    expect(base).toContain("return to the sandbox");
+    expect(development).toContain("first operation in a bounded");
     expect(implementation).toContain('ghCli: "forbidden"');
     expect(implementation).toContain('npmWhoami: "forbidden"');
   });

@@ -1,7 +1,9 @@
 # Authentication authority and status
 
 This is the operational source of truth for ReviewReady authentication. Read it
-before any GitHub or npm operation. The executable status is:
+before the first external operation in a bounded batch or when the provider,
+resource scope, network context, or credential context changes. The executable
+status is:
 
 ```console
 npm run auth:status
@@ -10,7 +12,8 @@ npm run auth:status
 The command is local-only: it contacts neither GitHub nor npm, prints no account
 name or credential, and never retries. Its JSON output is authoritative for
 selecting the authentication channel; it is not permission to perform an
-external operation.
+external operation. Reuse the result only for the same bounded batch and
+unchanged authority/context.
 
 ## Authority matrix
 
@@ -31,6 +34,20 @@ interactive Windows credential store. Therefore
 connected Windows/provider context**; they do not mean logged out. Only
 `not_logged_in`, observed by one GCM probe in the connected Windows user
 context, permits a human-authorized GCM browser login.
+
+## External lane routing
+
+1. Keep local inspection, edits, and tests in the sandbox.
+2. Run one auth preflight before the first operation in the bounded external
+   batch.
+3. If the sandbox cannot reach the required credential or provider context,
+   stop sandbox retries and request one approved connected/elevated context for
+   the exact provider, resource scope, network context, and read/write effect.
+4. Perform only that approved operation, then return to the sandbox for local
+   validation.
+
+Do not disable sandboxing globally, use danger-full-access/--yolo as a fallback,
+or change credentials and authority channels to work around a context result.
 
 ## Status semantics
 

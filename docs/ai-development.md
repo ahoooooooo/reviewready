@@ -258,8 +258,12 @@ GitHub environment reviewers, two-factor authentication, and other provider
 controls remain external gates; an agent must not work around them or turn a
 failed session into an implicit authorization.
 
-Authentication probes are not retry-safe reads. Run `npm run auth:status` once,
-use GCM or the connected provider channel it names, and stop on a context result.
+Authentication probes are not retry-safe reads. Keep local work in the sandbox
+and run `npm run auth:status` once before the first operation in a bounded
+external batch. Reuse the result only while provider authority, resource scope,
+network context, and credential context remain unchanged. On a context result,
+stop sandbox retries, use the exact GCM or connected provider channel it names
+through one approved connected/elevated operation, then return to the sandbox.
 Never substitute GitHub CLI or local npm login for an unavailable authority.
 
 The CI order is part of the proof rather than a timing assumption. Untrusted
