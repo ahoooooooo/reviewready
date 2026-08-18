@@ -6,6 +6,12 @@ dist/action/*
 !dist/action/package.json
 !dist/action/licenses.txt
 coverage/
+.reviewready-agent-failures.ndjson
+.reviewready-hook-observations.ndjson
+.reviewready-npm-cache/
+.codex/hooks.json
+.codex/hooks/
+test/codex-hook.test.ts
 *.log
 .DS_Store
 .env

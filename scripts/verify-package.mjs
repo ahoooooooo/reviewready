@@ -8,6 +8,8 @@ import { dirname, resolve, sep } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
+import { localNpmEnvironment } from "./npm-runtime.mjs";
+
 /** @typedef {{ path: string, content: string }} PackageAuditEntry */
 
 const REQUIRED_FILES = [
@@ -254,6 +256,7 @@ export function loadPlannedPackageEntries(projectRoot) {
     [npmCliPath, "pack", "--dry-run", "--json", "--ignore-scripts"],
     {
       cwd: projectRoot,
+      env: localNpmEnvironment(projectRoot),
       encoding: "utf8",
       stdio: ["ignore", "pipe", "inherit"],
       timeout: MAX_CHILD_PROCESS_MS

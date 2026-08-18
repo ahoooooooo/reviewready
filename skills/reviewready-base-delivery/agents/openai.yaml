@@ -1,4 +1,4 @@
 interface:
   display_name: "ReviewReady Base Delivery"
-  short_description: "Full-rigor iterative delivery for every task"
-  default_prompt: "Use $reviewready-base-delivery to run this task through baseline, attack, implementation, verification, and promotion."
+  short_description: "Conservative delivery with relevant proof"
+  default_prompt: "Use $reviewready-base-delivery with the conservative base loop, relevant focused proof, a fresh reviewer (fork_context=false), and a handoff containing revision, worktree, reviewer id/role, dispatch context, exact scope, raw artifacts, commands/evidence, severity-ordered findings, strongest falsifier, missed attack surface, authority/evidence gap, recommendation, and one outcome for process, promotion, consequential, public, or full-project scope."

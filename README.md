@@ -44,17 +44,24 @@ npm install --global @ahoooooo/reviewready
 reviewready validate --policy .reviewready.yml
 ```
 
-The Action can also be used in an advisory workflow:
+The Action can also be used in an advisory workflow. Use the current verified
+immutable release reference:
+
+```yaml
+- uses: ahoooooooo/reviewready@e9cd421ac106adb5731dd22b714701a136e937f8 # v1.0.11
+```
+
+The published v1.0.11 README bytes retain this historical advisory reference
+because npm package bytes cannot be rewritten. It is preserved for byte-level
+compatibility only and must not be copied for new integrations:
 
 ```yaml
 - uses: ahoooooooo/reviewready@f21ed2e94efedb01f73e518c39765cef72c58e1c # v1.0.7
 ```
 
-The advisory example retains the audited v1.0.7 commit in the package README
-source. Once published, npm package bytes cannot be rewritten. The repository's
-checked-in trusted reference is updated separately
-after each release to the exact verified release commit; #60 tracks the
-remaining public-coordinate reconciliation.
+The repository source keeps current examples on the v1.0.11 release for the
+next published package; historical coordinates remain documented in the
+release-evidence files.
 
 The mutable `v1` tag is convenient, but an immutable verified commit is safer.
 The advisory workflow below must not be configured as the repository's only
@@ -126,7 +133,7 @@ Action-only repositories can copy the schema into the repository or reference an
 immutable release URL:
 
 ```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/ahoooooooo/reviewready/v1.0.7/reviewready.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ahoooooooo/reviewready/v1.0.11/reviewready.schema.json
 ```
 
 Keep the schema version aligned with the Action or CLI version being used. A local
@@ -172,7 +179,7 @@ jobs:
       statuses: read
       issues: read
     steps:
-      - uses: ahoooooooo/reviewready@9cb239e3b81e00b0f82239eaf43843863ab51e2d # v1.0.6
+      - uses: ahoooooooo/reviewready@e9cd421ac106adb5731dd22b714701a136e937f8 # v1.0.11
 ```
 
 Replace the example test commands with the target repository's own verification.

@@ -1,5 +1,10 @@
 # GitHub 與 npm 認證架構研究
 
+> Historical research snapshot (2026-08-17). Do not use its GitHub CLI or
+> one-time npm login observations as current auth instructions. The operational
+> authority is `docs/authentication.md`, enforced by `npm run auth:status`, and
+> the current decision is ADR 0016.
+
 ## 研究邊界
 
 - 研究日期：2026-08-17

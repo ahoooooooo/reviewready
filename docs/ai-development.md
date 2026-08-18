@@ -51,40 +51,39 @@ short issue, pull-request, plan, or research-note entry. A non-trivial round rec
 
 ### Prompt admission gate
 
-Every user prompt enters the **full base adversarial loop**. This gate selects
-additional evidence lanes; it is not permission to skip baseline, framing,
-attack, proof, or promotion. The result is a set of overlays, not one shortcut
-label:
+Every user prompt enters the base decision contract. Route breadth then selects
+the evidence required; it is not a shortcut around baseline, one outcome, or
+focused proof:
 
 1. **process self-optimization**: the prompt asks to change, optimize, compare,
    or route a workflow, prompt, skill, agent method, or repository rule;
 2. **promotion**: the prompt asks to publish, commit, push, merge, tag, deploy,
    change settings or permissions, use credentials/secrets, or contact a
    provider with a state-changing operation;
-3. **deep research**: the decision depends on current or external facts, search,
-   competitors, adoption, market, eligibility, strategy, recommendations, or
-   external authority;
+3. **deep research**: the decision depends on a material current or external
+   claim requiring multi-source search, synthesis, comparison, or authority;
 4. **consequential scope**: the prompt involves security, trust, provenance,
    authority, release, package, workflow, Action, schema, public API,
    compatibility, migration, architecture, or multiple repository surfaces;
-5. **routine scope**: only a bounded local task with a clear acceptance condition,
-   no current/external fact, no trust or public-contract boundary, no process-rule
-   change, and no destructive or external mutation. This changes only the
-   evidence breadth, never the base-loop rigor.
+5. **bounded local scope**: only a bounded local task or known single-source
+   status/fact check with a clear acceptance condition, no trust or public-
+   contract boundary, no process-rule change, and no destructive or external
+   mutation. It still uses the base contract; only its evidence breadth stays
+   focused.
 
-Examples: “understand the whole project status” adds consequential scope;
+Examples: “understand the whole project status” requires a dated baseline;
 “查最新” or “recommend a strategy” adds deep research; “optimize the
 prompt/process” adds process self-optimization; “publish the package” adds
-promotion. Multiple overlays may apply. If a prompt is ambiguous or a routine
-condition cannot be proved, add the stronger overlay rather than defaulting to
-routine. Record `base-full` plus every selected overlay and its prompt trigger
-before proceeding.
+promotion. An explicit request to use a named skill overrides route inference.
+Multiple overlays may apply. If a bounded condition cannot be proved, keep the
+base contract and add the stronger applicable overlay rather than taking a
+shortcut. Record `base`, the overlays, and the prompt trigger before proceeding.
 
-Each stage updates the same record. Promotion is not allowed while the record lacks
-the current revision and freshness, the strongest unresolved objection, the proof
-that could falsify the result, the evidence tier supporting the claim, or the next
-authority boundary. This prevents a polished handoff from silently dropping stale
-data, a release surface, or an external dependency.
+Each stage updates the same record. Consequential and research promotion is not allowed
+while the record lacks the current revision and freshness, the strongest
+unresolved objection, the proof that could falsify the result, the evidence tier
+supporting the claim, or the next authority boundary. Every base handoff still
+needs its current baseline, decision, focused proof, and escalation boundary.
 
 ## Adversarial delivery loop
 
@@ -170,12 +169,30 @@ authority or decision is isolated. Do not convert an unresolved result into a
 pass by renaming it, lowering the standard, or hiding it behind stale evidence.
 
 The integrator owns scope, synthesis, and promotion. Start with the smallest
-team that can do the work and add an agent only for a genuinely independent
-surface or an independent challenge. Before dispatch, each parallel task must
-have a distinct attack surface and a concrete evidence handoff. No agent may
-review its own patch or argument as the final review; overlapping or idle work
-is closed after its evidence is delivered. A new round starts from the
-accumulated evidence and failed attempts, never from an unexamined reset.
+team that can do the work and add agents only for genuinely independent
+surfaces. For process-self-optimization, promotion, consequential,
+public/release, full-project, or explicit independent-review requests, the
+integrator must dispatch one fresh reviewer with no conversation context after
+baseline/framing and before repair or promotion. Pass only raw task-local
+artifacts and questions; do not leak prior findings or intended fixes. No agent
+may review its own patch or argument as the final review, and a same-context
+self-critique does not satisfy the independent-review gate. If the reviewer
+finds a material objection, return to attack; if it is unavailable, record the
+deferred review and do not promote. Overlapping or idle work is closed after
+its evidence is delivered. A new round starts from the accumulated evidence and
+failed attempts, never from an unexamined reset.
+
+The independent reviewer report must identify a strongest falsifier, a missed
+attack surface, an authority or evidence gap, and a recommendation. It is
+evidence for the integrator, not an approval or readiness decision. Before
+promotion, the integrator records a fresh-review handoff containing the current
+revision/worktree, reviewer agent id and role, explicit fork_context=false,
+scope/raw artifacts, commands/evidence, severity-ordered findings, the
+strongest falsifier, missed attack surface, authority/evidence gap,
+recommendation, and exactly one outcome: promote, reopen, or defer-external.
+Missing or ambiguous handoff fields fail closed for the independent-review gate.
+Validate the JSON handoff with npm run review:validate -- --file <handoff.json>
+before treating that gate as complete.
 
 The loop ends only when another credible finding would not change the decision
 within scope, or when the only remaining action belongs to a named external
@@ -214,12 +231,13 @@ the owner for every local mutation while high-impact external changes remain
 deliberately gated.
 
 The routine branch lane covers the already authorized task scope: inspect the
-trusted checkout, edit repository files, run focused and complete validation,
-create commits, push the current feature branch, and update its existing PR or
-draft PR. The integrator may continue through those actions without requesting a
-new approval for each commit or push. This lane never authorizes protected-branch
-merges, tag movement, releases, package publication, ruleset changes, secrets,
-credentials, or deployment.
+trusted checkout, edit repository files, run focused validation, and create
+commits or push the current feature branch when authorized. Run complete
+validation before final PR/promotion or when the changed surface requires it.
+The integrator may continue through retry-safe commits and pushes in that named
+batch without requesting a new approval for each one. This lane never authorizes
+protected-branch merges, tag movement, releases, package publication, ruleset
+changes, secrets, credentials, or deployment.
 
 The promotion lane begins only after the candidate has passed local proof and
 the owner gives one explicit authorization for the named merge or release
@@ -228,6 +246,10 @@ reconciliation inside that named batch proceed without repeated approval prompts
 GitHub environment reviewers, two-factor authentication, and other provider
 controls remain external gates; an agent must not work around them or turn a
 failed session into an implicit authorization.
+
+Authentication probes are not retry-safe reads. Run `npm run auth:status` once,
+use GCM or the connected provider channel it names, and stop on a context result.
+Never substitute GitHub CLI or local npm login for an unavailable authority.
 
 The CI order is part of the proof rather than a timing assumption. Untrusted
 pull-request CI may check out and test the proposed revision with read-only

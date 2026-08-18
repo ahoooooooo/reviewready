@@ -8,8 +8,9 @@ account data.
 
 ## Compact error capture
 
-During a task, record non-critical failures in the current plan, PR, or issue
-before repairing them:
+During a task, record non-critical failures in the current plan, PR, issue, or
+task handoff before repairing them. Do not create an external record for a
+one-off:
 
 ```text
 Error | Evidence | Impact | Class | Next action | Status
@@ -21,64 +22,45 @@ process gap, or deserves a durable guard. P0 security, data-loss, corruption,
 and required-gate blockers stop the current work; non-blocking errors are batched
 after discovery.
 
-## GitHub command targeting
+## Authentication authority and repository targeting
 
-Every GitHub command that needs a repository must derive the owner from a
-successful authenticated lookup. The lookup's exit code and its non-empty
-result are prerequisites; a failed lookup must stop before constructing a
-repository argument. Never type the owner into a command or silently fall back
-to a remembered account name.
+Run `npm run auth:status` before any GitHub or npm provider operation. The
+command validates the canonical HTTPS remote, Windows Git Credential Manager,
+and npm Trusted Publishing wiring locally. It prints a machine-readable state,
+never an account name or credential, and performs zero network requests.
 
-The safe PowerShell sequence is:
-
-```powershell
-$owner = gh api user --jq .login
-if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($owner)) {
-  throw "Cannot determine the authenticated GitHub owner; stop before targeting a repository."
-}
-$repo = "$owner/reviewready"
-```
-
-If the lookup fails, classify the failure as authentication, network/proxy,
-rate limit, or provider availability before retrying. Do not execute a command
-with an empty or manually substituted owner, and do not expose environment
-variables or credential material while diagnosing it. The same guard applies
-to PR, issue, release, ruleset, Actions, and repository API commands.
+Git fetch/push uses GCM. GitHub API work uses the explicitly approved connected
+provider/browser channel and the repository selected by that channel. Do not
+derive identity through GitHub CLI, type a remembered owner, or switch from an
+unavailable connector to a different authentication channel. A missing connected
+channel stops that external operation once; it does not start a login or retry
+loop.
 
 ## Authentication status is channel- and context-bound
 
-The browser session, GitHub CLI keyring, Git HTTPS helper, and npm registry
-session are separate. A successful browser login does not prove that `gh` can
-call the API, and a public Git read does not prove authenticated write access.
-The status is valid only for the channel and network context that was tested;
-future operations must repeat the bounded preflight instead of trusting this
-file as a permanent login flag.
+The Windows GCM store, a connected GitHub provider/browser session, the Codex
+sandbox, and npm OIDC are separate contexts. The sandbox cannot read the
+interactive Windows credential store. Therefore `connected_context_required`
+or `context_unavailable` is not evidence that GitHub is logged out. The only
+allowed response is to stop and use the connected context, with no same-context
+retry and no GitHub CLI fallback.
 
-On 2026-08-17, the sandbox first reported a misleading CLI failure because its
-proxy could not reach GitHub. A bounded check in the approved connected context
-then confirmed `gh auth status` and `gh api user --jq .login` succeeded. The
-lesson is to separate network context from credential validity before asking
-the owner to log in again.
-
-npm is intentionally different: local `npm whoami` may return `ENEEDAUTH` after
-logout while the protected GitHub Actions OIDC Trusted Publishing path remains
-the release authority. Do not store a token or turn a local npm session into a
-release prerequisite.
+npm is intentionally different again: local login is irrelevant. `ENEEDAUTH`
+after logout is expected while the protected GitHub Actions OIDC Trusted
+Publishing path remains the release authority. Do not run local login/whoami as
+a health check, store a token, or turn a local npm session into a prerequisite.
 
 ## 2026-08-17: malformed repository target during PR monitoring
 
-While monitoring PR #84, a manually written repository owner was mistyped in a
-`gh` command. The follow-up attempted to derive the owner dynamically, but the
-GitHub API was unavailable through the active proxy. Because the failed lookup
-was not treated as a hard precondition, the empty value produced an invalid
-`/reviewready` repository target. No repository mutation occurred, but the
-operator received a misleading secondary error and lost time.
+While monitoring PR #84, the former GitHub CLI path accepted a mistyped owner,
+then converted a proxy failure into an empty `/reviewready` target. No repository
+mutation occurred, but the secondary error hid the real context failure and
+wasted time.
 
-The durable correction is the guard above: resolve identity once, validate it,
-derive the repository target, and only then run external commands. A network or
-authentication failure is reported as the primary blocker rather than being
-converted into a malformed-target error. Future sessions should read this
-lesson before any GitHub operation.
+That CLI path is retired. The durable correction is the executable auth contract:
+validate the canonical remote locally, use GCM for Git and the connected provider
+for API work, and stop once when the required context is unavailable. Future
+sessions must not replay the historical CLI workaround.
 
 ## 2026-08-18: PR #99 readiness failed on an exact body heading
 

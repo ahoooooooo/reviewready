@@ -44,16 +44,13 @@ environment implementation of this sequence; it requires npm Trusted Publishing
 to be configured for that exact workflow filename and does not accept an npm
 token secret.
 
-The one-time npm trust setup for this repository is:
-
-    npm trust github @ahoooooo/reviewready --repository ahooooooo/reviewready --file release-publish.yml --environment release --allow-publish --yes
-
-Run it only after npm login --auth-type=web has completed. The npm package
-settings must then require two-factor authentication and disallow traditional
-tokens. After the trust relationship is verified, run npm logout on the
-maintenance machine; local npm whoami is intentionally not the publish health
-check after that point. The release workflow must publish through OIDC without
-NPM_TOKEN or NODE_AUTH_TOKEN.
+The one-time npm Trusted Publisher bootstrap is complete and preserved only as
+historical evidence in ADR 0012. Do not repeat local npm authentication, trust
+setup, logout, or account probes during an ordinary release or auth check. Any
+Trusted Publisher reconfiguration is a separate authorized provider mutation.
+The package requires two-factor authentication and disallows traditional tokens;
+the release workflow must publish through OIDC without NPM_TOKEN or
+NODE_AUTH_TOKEN.
 
 Before dispatching the workflow, independently verify that the GitHub release
 environment requires the intended reviewers. Also verify the npm Trusted Publisher

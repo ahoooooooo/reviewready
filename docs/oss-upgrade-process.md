@@ -71,9 +71,10 @@ Start from one trusted repository revision and one observed project state. Read
 the applicable instructions, product and architecture contracts, active node
 plan, relevant issues, tests, release coordinates, and existing evidence.
 Record the public and external state that matters to the decision, including
-its observation time and limitations. Authentication may be checked without
-exposing credentials; a failed login is an external dependency, not a product
-fact.
+its observation time and limitations. Run the local machine-readable auth
+contract before provider work. A sandbox or connected-channel failure is an
+external/context dependency, not logout evidence or a product fact, and it is
+never retried through a different authority channel.
 
 The baseline includes the current node, worktree, source and generated
 artifacts, public package and Action coordinates, open-work classification, and

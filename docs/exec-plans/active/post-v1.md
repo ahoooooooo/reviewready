@@ -22,6 +22,10 @@ last-known and currently reachable external state, see
 [docs/current-status.md](../../current-status.md). This plan remains the source
 of truth for node order and promotion gates only.
 
+Current authentication authority is [docs/authentication.md](../../authentication.md)
+and `npm run auth:status`. GitHub CLI and local npm-session observations later
+in this plan are historical baselines, not current login or retry instructions.
+
 The project-wide handoff between research, work slices, implementation, proof,
 integration, release, and adoption is defined by the
 [open-source upgrade lifecycle](../../oss-upgrade-process.md). This file still

@@ -1,6 +1,6 @@
 ---
 name: reviewready-deep-research
-description: Use when a ReviewReady decision depends on current or external facts, public or provider state, competitors, adoption, eligibility, market, strategy, security authority, provenance, or evidence that can change over time.
+description: Use when the user explicitly requests deep research, or when a ReviewReady decision depends on current or external facts, public or provider state, competitors, adoption, eligibility, market, strategy, security authority, provenance, or evidence that can change over time.
 ---
 
 # ReviewReady Deep Research
@@ -13,6 +13,9 @@ itself.
 ## Overlay gates
 
 - Require the base route and decision before loading this overlay.
+- Treat an explicit user request for this skill as a mandatory overlay signal;
+  state `base + deep-research` before searching and never substitute a quick
+  status lookup.
 - Research only material claims; do not build a ledger for every source or minor
   detail.
 - Set a bounded source/query/time budget before searching. Treat it as an effort
@@ -37,7 +40,7 @@ Add this overlay when the user's decision depends on facts outside the trusted
 checkout or on claims whose meaning can change with time. Triggers include:
 
 - searching or verifying current provider, repository, package, program, or
-  public state;
+  public state as part of a material multi-source decision;
 - comparing competitors or technical alternatives;
 - assessing adoption, eligibility, ecosystem importance, market, cost, or
   maintainer credibility;
@@ -45,10 +48,16 @@ checkout or on claims whose meaning can change with time. Triggers include:
   external governance; and
 - recommending a direction whose supporting evidence is not already frozen.
 
+A known single-source status or fact lookup stays within the base loop and uses
+focused proof; it is not a separate route. Only an explicit deep-research request
+or material multi-source synthesis enters this overlay. If admission is
+ambiguous, keep base and add this overlay only when the unresolved claim could
+change the decision.
+
 “Understand the current project status” requires a dated baseline. “Optimize the
-process” requires process self-optimization. Neither is a routine documentation
-task. If admission is ambiguous, add this overlay rather than silently treating
-the prompt as local.
+process” requires process self-optimization. Neither is a documentation shortcut.
+If admission is ambiguous, keep the base route and add this overlay only when
+the unresolved current or external claim could change the decision.
 
 ## Research state machine
 

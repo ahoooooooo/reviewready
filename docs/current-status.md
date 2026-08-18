@@ -1,11 +1,12 @@
 # ReviewReady current status
 
-Status: **canonical cross-surface snapshot**
+Status: **canonical mainline cross-surface snapshot**
 
-This document is the single index for the current project state. It separates
-local repository facts, public release facts, and time-bound external provider
-observations. Historical evidence is linked but is never presented as current
-live authority.
+This document is the single index for the mainline/public project state at the
+dated snapshot below. It separates local mainline facts, public release facts,
+and time-bound external provider observations. It is not a live checkout status
+for feature branches; use Git for the active branch and revision. Historical
+evidence is linked but is never presented as current live authority.
 
 Snapshot date: **2026-08-17 (Asia/Taipei)**
 
@@ -98,12 +99,13 @@ read-only GitHub snapshot on 2026-08-17 observed:
 - Recent main checks for the verified `0931d64` revision passed, including
   `check`, CodeQL, Windows package smoke, and TA-2 trusted promotion.
 
-The canonicalization attempt immediately before this document was written
-received HTTP 503 from GitHub twice during `gh api user`. No repository-targeted
-GitHub command or mutation was performed after that failure. Therefore the
-items in the preceding list are **last known evidence**, not a claim that the
-provider is currently reachable. A future GitHub operation must repeat the
-authentication preflight in its actual connected context.
+The legacy GitHub CLI canonicalization attempt immediately before this document
+was written received HTTP 503 twice. No repository-targeted GitHub command or
+mutation was performed after that failure. Therefore the items in the preceding
+list are **last known evidence**, not a claim that the provider is currently
+reachable. Current operations first run `npm run auth:status`, then use GCM for
+Git or the explicitly approved connected provider for API work. The CLI path is
+retired and must not be retried.
 
 ## Remaining trust boundaries
 
@@ -129,6 +131,7 @@ These are known limitations, not silently completed work:
 - Historical governance snapshot:
   [governance-evidence-ta1.md](governance-evidence-ta1.md).
 - Research classification: [research/README.md](research/README.md).
+- Authentication authority: [authentication.md](authentication.md).
 - External-operation lessons: [operational-lessons.md](operational-lessons.md).
 
 The status document must be updated with a new timestamp and evidence class

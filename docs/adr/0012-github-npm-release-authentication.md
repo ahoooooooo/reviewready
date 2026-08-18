@@ -1,15 +1,23 @@
 # ADR 0012: GitHub 與 npm 的跨專案發布認證
 
-- Status: accepted operational design; external controls configured and v1.0.11 release evidence verified
+- Status: historical release-authentication design; local channel selection and
+  preflight are superseded by ADR 0016
 - Date: 2026-08-17
 - Research: GitHub and npm auth architecture
 
 ## Decision
 
-ReviewReady 的本機 GitHub 操作使用 GitHub CLI browser login 儲存在
-Windows keyring，並由 Git Credential Manager 提供 HTTPS Git 認證。npm
-公開發布使用 GitHub Actions Trusted Publishing 的 OIDC，不使用長期
-NPM_TOKEN、NODE_AUTH_TOKEN 或本機 npm publish token。
+> Historical note: do not use the GitHub CLI or local npm session described in
+> this 2026-08-17 setup record as current authentication preflight. Current
+> authority and status semantics are defined by ADR 0016 and
+> `docs/authentication.md`.
+
+At the 2026-08-17 release setup, local GitHub operations used a GitHub CLI
+browser login stored in the Windows keyring, while Git Credential Manager
+provided HTTPS Git authentication. ADR 0016 retires the CLI channel as current
+preflight: Git now uses GCM and API work uses the connected provider. npm public
+publication continues to use GitHub Actions Trusted Publishing OIDC without a
+long-lived NPM_TOKEN, NODE_AUTH_TOKEN, or local npm publish token.
 
 Trusted Publisher 必須精確綁定 package、repository、workflow filename 與
 release environment。GitHub release environment、protected main、active

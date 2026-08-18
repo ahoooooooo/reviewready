@@ -34,7 +34,7 @@ full research round; a trust, release, adoption, or novel external claim does.
 
 ### Prompt admission for deep research
 
-Deep research is an overlay on the full base adversarial loop, not an alternative
+Deep research is an overlay on the base loop, not an alternative
 to it. Enter this lane when the user's requested decision depends on facts
 outside the trusted checkout or on a claim whose meaning can change with time.
 This includes requests to search or verify current state, compare competitors,
@@ -48,8 +48,8 @@ Do not enter deep research for a bounded local implementation whose behavior,
 acceptance examples, and proof sources are already known. That task still uses
 the full base process with local evidence only and is upgraded if the prompt
 reveals a new trust, public, current-state, or external-dependency claim. If
-admission is ambiguous, the base routing gate escalates rather than silently
-treating the prompt as local.
+admission is ambiguous, keep the base contract and add this overlay only when
+the unresolved current/external claim could change the decision.
 
 ## What the process must accomplish
 
