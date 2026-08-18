@@ -97,7 +97,8 @@ and continue independent local work; never switch authority channels silently.
 ## Windows sandbox gate
 
 When a Windows command fails with spawn EPERM, CreateProcess failure,
-helper_unknown_error, or an ACL/deny-read sandbox error:
+helper_unknown_error, an ACL/deny-read sandbox error, or a nested npm/package
+child process reports ETIMEDOUT:
 
 1. Record the exact command, error, Codex version, sandbox mode, and whether
    the operation was local or external.
@@ -108,11 +109,14 @@ helper_unknown_error, or an ACL/deny-read sandbox error:
    ```
 
 3. If it fails, preserve the error and retry the original command at most once
-   in an explicitly approved fresh/connected Codex execution context. Do not
-   loop in the same sandbox or resumed conversation.
-4. If the retry fails, hand off the environment blocker with the sandbox log
-   path and exact reproduction. Never select danger-full-access or --yolo
-   automatically to hide the failure.
+   in an explicitly approved fresh/connected Codex execution context. If the
+   canary passes but a nested npm/package command still times out, retry the
+   exact command at most once in an approved elevated context with
+   `REVIEWREADY_NPM_CACHE=.reviewready-npm-cache` or the equivalent
+   process-local cache. Do not loop in the same sandbox or resumed conversation.
+4. If the fresh-context retry fails, hand off the environment blocker with the
+   sandbox log path and exact reproduction. Never select danger-full-access or
+   --yolo automatically to hide the failure.
 5. Run repository validation only after the canary passes; otherwise mark the
    result environment-blocked, not product-passing or product-failing.
 

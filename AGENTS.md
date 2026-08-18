@@ -154,8 +154,9 @@ settings mutation, or deployment unless those actions were named explicitly.
 ## Windows sandbox recovery
 
 When a Windows command reports spawn EPERM, CreateProcess failure,
-helper_unknown_error, or an ACL/deny-read sandbox error, classify it as an
-execution-environment failure before changing product code.
+helper_unknown_error, an ACL/deny-read sandbox error, or a nested npm/package
+child process reports ETIMEDOUT, classify it as an execution-environment
+failure before changing product code.
 
 1. Record the exact command, error, current Codex version, sandbox mode, and
    whether the command was local or external.
@@ -167,7 +168,11 @@ execution-environment failure before changing product code.
 
 3. If the canary fails, do not repeat the same child-spawning command in the
    same sandbox or resumed conversation. Capture the failure and retry it once
-   in an explicitly approved fresh/connected Codex execution context.
+   in an explicitly approved fresh/connected Codex execution context. If the
+   canary passes but a nested npm/package command still times out, retry the
+   exact command once in an approved elevated context with
+   `REVIEWREADY_NPM_CACHE=.reviewready-npm-cache` or the equivalent
+   process-local cache.
 4. If the fresh-context retry fails, stop and hand off the environment blocker
    with the sandbox log path and exact reproduction. Do not switch to
    danger-full-access or --yolo as an automatic workaround.

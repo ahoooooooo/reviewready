@@ -25,9 +25,12 @@ The actual authorities are different:
 ## Decision
 
 `scripts/auth-status.mjs` is the machine-readable local authentication contract.
-Agents run `npm run auth:status` before any GitHub/npm provider operation. The
-script validates repository wiring without network access, hides account names,
-does not read or emit credentials, and never retries.
+Agents run `npm run auth:status` once before the first GitHub/npm provider
+operation in a bounded external batch. The result is reused only while the
+provider authority, resource scope, network context, and credential context
+remain unchanged. The script validates repository wiring without network
+access, hides account names, does not read or emit credentials, and never
+retries.
 
 GitHub rules:
 
@@ -54,7 +57,11 @@ npm rules:
 The status command exits successfully for an intact repository contract even
 when the current sandbox requires a connected credential context. Contract
 drift exits with code 2. Actual provider reads and writes still require their
-operation-specific approvals.
+operation-specific approvals. Keep local work in the sandbox; on a context
+result, use one approved connected/elevated lane for the exact operation and
+return to the sandbox for local validation. A nested npm/package ETIMEDOUT may
+use one retry with a process-local `REVIEWREADY_NPM_CACHE`; it does not
+authorize a global sandbox bypass or credential change.
 
 ## Consequences
 

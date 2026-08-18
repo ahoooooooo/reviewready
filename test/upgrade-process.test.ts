@@ -94,12 +94,14 @@ describe("open-source upgrade process contract", () => {
     expect(plan).not.toContain("must pass the repository gate before");
   });
   it("keeps external authentication checks visible to every agent run", async () => {
-    const [guide, contract, implementation, base, development] = await Promise.all([
+    const [guide, contract, implementation, base, development, lessons, adr] = await Promise.all([
       readFile("AGENTS.md", "utf8"),
       readFile("docs/authentication.md", "utf8"),
       readFile("scripts/auth-status.mjs", "utf8"),
       readFile("skills/reviewready-base-delivery/SKILL.md", "utf8"),
-      readFile("docs/ai-development.md", "utf8")
+      readFile("docs/ai-development.md", "utf8"),
+      readFile("docs/operational-lessons.md", "utf8"),
+      readFile("docs/adr/0016-authentication-authority-status.md", "utf8")
     ]);
 
     expect(guide).toContain("## Authentication authority and external preflight");
@@ -119,7 +121,13 @@ describe("open-source upgrade process contract", () => {
     expect(guide).toContain("connected/elevated");
     expect(base).toContain("Keep ordinary work in the local sandbox");
     expect(base).toContain("return to the sandbox");
+    expect(base).toContain("ETIMEDOUT");
+    expect(base).toContain("REVIEWREADY_NPM_CACHE");
     expect(development).toContain("first operation in a bounded");
+    expect(lessons).toContain("Bounded external lane and nested npm execution");
+    expect(lessons).toContain("REVIEWREADY_NPM_CACHE");
+    expect(adr).toContain("bounded external batch");
+    expect(adr).toContain("connected/elevated lane");
     expect(implementation).toContain('ghCli: "forbidden"');
     expect(implementation).toContain('npmWhoami: "forbidden"');
   });
