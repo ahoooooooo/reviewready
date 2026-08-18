@@ -181,9 +181,17 @@ Use a two-wave adaptive scheduler:
   decision-changing surfaces with disjoint artifacts and falsifiers.
 - Assign one reviewer per surface. Cap the base route at three reviewers total
   and two active reviewers at once; close each reviewer after its handoff.
-- Permit one replacement for a timeout or tool failure inside the same round
-  budget. A failed or partial reviewer is incomplete evidence, never a reason
-  to treat surviving reports as complete.
+- Give each reviewer a report-only prompt, a dispatch timestamp, and one total
+  wait budget: 60 seconds by default and never more than 120 seconds for a
+  deliberately approved long read. Do not run the full repository gate inside
+  the reviewer.
+- Treat a silent timeout as terminal for the current round: close the agent
+  once, record the environment failure, and emit a defer-external handoff. Do
+  not keep polling or launch a replacement for a silent timeout. Allow one
+  replacement only for an explicit pre-dispatch tool failure where the
+  reviewer never started and the round budget remains.
+- A failed or partial reviewer is incomplete evidence, never a reason to treat
+  surviving reports as complete.
 - Stop when all material surfaces are covered and another report would not
   change the claim or defect map. Do not use majority agreement, low confidence,
   or agent count as a stop condition.

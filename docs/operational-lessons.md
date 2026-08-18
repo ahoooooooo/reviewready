@@ -67,6 +67,16 @@ elevated context with `REVIEWREADY_NPM_CACHE=.reviewready-npm-cache`, then
 classify the result as environment-routed or environment-blocked. Do not change
 product code, credentials, or global sandbox settings to hide the failure.
 
+## Reviewer watchdog
+
+A reviewer that stays running without a report is an execution-context failure,
+not independent evidence. Give report-only reviewers one bounded wait budget
+(60 seconds by default, 120 seconds only for a deliberately approved long
+read). On a silent timeout, close once, record the failure, and produce a
+defer-external handoff. Do not poll indefinitely or launch a replacement solely
+because the reviewer timed out; reserve one replacement for an explicit
+pre-dispatch tool failure where the reviewer never started.
+
 ## 2026-08-17: malformed repository target during PR monitoring
 
 While monitoring PR #84, the former GitHub CLI path accepted a mistyped owner,

@@ -51,6 +51,9 @@ and never preload all of `docs/`, `src/`, or `test/`.
   reviewer id/role, scope/evidence, falsifier, missed surface, authority gap,
   recommendation, and one outcome. Same-context self-review does not satisfy
   the gate.
+- Reviewer watchdog: give a report-only reviewer one bounded wait budget; a
+  silent timeout is terminal for the round and yields defer-external. Do not
+  keep polling or replace a reviewer solely because it timed out.
 - Add `deep-research` only when the user explicitly requests it or a material
   decision needs multi-source current/external evidence. An explicit named-skill
   request always wins; ambiguous scope stays on base and escalates when needed.

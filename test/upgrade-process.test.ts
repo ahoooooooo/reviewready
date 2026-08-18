@@ -123,9 +123,14 @@ describe("open-source upgrade process contract", () => {
     expect(base).toContain("return to the sandbox");
     expect(base).toContain("ETIMEDOUT");
     expect(base).toContain("REVIEWREADY_NPM_CACHE");
+    expect(base).toContain("Treat a silent timeout as terminal");
+    expect(base).toContain("60 seconds by default");
     expect(development).toContain("first operation in a bounded");
+    expect(development).toContain("silent timeout is terminal");
     expect(lessons).toContain("Bounded external lane and nested npm execution");
     expect(lessons).toContain("REVIEWREADY_NPM_CACHE");
+    expect(lessons).toContain("Reviewer watchdog");
+    expect(lessons).toContain("pre-dispatch tool failure");
     expect(adr).toContain("bounded external batch");
     expect(adr).toContain("connected/elevated lane");
     expect(implementation).toContain('ghCli: "forbidden"');

@@ -186,10 +186,14 @@ The default delegation schedule is one reviewer, not a fixed panel. Expand to a
 maximum of three total reviewers and two concurrent reviewers only when the
 first report names an unresolved decision-changing falsifier and at least two
 uncovered surfaces have disjoint artifacts and falsifiers. Allow one replacement
-for a timeout or tool failure within the round budget; otherwise leave review
-incomplete. The first pass discovers attacks; a final pass must match the current
-review epoch after the last material repair, revision, scope, or trust-boundary
-change.
+only for an explicit pre-dispatch tool failure where the reviewer never started
+and the round budget remains. Give each report-only reviewer one total wait
+budget: 60 seconds by default and never more than 120 seconds for a deliberately
+approved long read. A silent timeout is terminal for the round; close once,
+record the environment failure, and defer-external without repeated polling or
+replacement. The first pass discovers attacks; a final pass must match the
+current review epoch after the last material repair, revision, scope, or
+trust-boundary change.
 
 The independent reviewer report must identify a strongest falsifier, a missed
 attack surface, an authority or evidence gap, and a recommendation. It is
