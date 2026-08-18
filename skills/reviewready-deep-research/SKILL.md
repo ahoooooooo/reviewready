@@ -116,6 +116,30 @@ Identify claims with high decision impact, source conflict, weak authority,
 volatile freshness, or missing counter-evidence. Create one next action per gap;
 do not widen the search without a gap that could change the decision.
 
+### 3.1 Bounded research delegation
+
+After the coverage audit, build a surface matrix before dispatching research
+agents. For multi-source decisions, start with two raw-artifact-only passes:
+one authority/primary-source surface and one counter-evidence or alternative
+surface. Add one pass per additional material surface, up to four source agents
+total and two active agents at once. A single-surface decision may use one pass.
+
+Each pass receives only the frozen decision, revision, source restrictions,
+assigned surface, excluded surfaces, raw artifacts, falsifier, and deadline. Do
+not pass the integrator claim map, citations, counter-case, action boundary, or
+sibling reports. Each pass returns source lineage, claim IDs, evidence, and its
+strongest unresolved objection; it never writes the final narrative.
+
+Deep-research handoffs use raw: artifact ids for source material; derived claim
+maps, sibling summaries, and recommendations are not raw artifacts and must not
+be placed in the raw artifact list.
+
+Expand only when an unresolved claim could change the decision and the new
+surface has disjoint authority, artifacts, and falsifier. Permit one replacement
+for a timeout or tool failure inside the same research budget. Close completed
+or overlapping passes. Stop when every material surface is owned, the claim map
+no longer changes, and another pass cannot change the action boundary.
+
 ### 4. Targeted deep dives and pivots
 
 Search only for the gaps from the coverage audit. Pivot query terms, source
@@ -140,11 +164,21 @@ quote, metric, or source identity.
 
 ### 6. Independent review
 
-Give the current claim map, citations, counter-case, and action boundary to a
-fresh reasoning pass. Ask it to reject the conclusion, find a missing source,
-identify a stale claim, or show that the recommendation does not follow. If no
-independent pass is available, perform a clearly labeled adversarial self-review
-and lower confidence where it cannot be independent.
+After the contradiction/citation audit and source replay, dispatch one final
+fresh reviewer with fork_context=false against the current review epoch. Give it
+only the frozen decision, raw source artifacts, source lineage, claim IDs,
+counter-case candidates, and action-boundary question. Do not pass the
+integrator claim map or sibling conclusions. Require a handoff with the
+strongest falsifier, missed source/surface, authority or freshness gap,
+recommendation, and one outcome.
+
+The final reviewer must be able to reject the conclusion. Record the
+deep-research route, review epoch, assignments, surface coverage, source
+lineage, and claim ids in the multi-reviewer handoff. A timeout, partial
+review, or unavailable independent pass is incomplete evidence and yields
+defer-external; do not substitute adversarial self-review for the required
+fresh pass. Any material repair, revision, scope, source set, or action-boundary
+change invalidates the review epoch and requires a new final review.
 
 ### 7. Report and handoff
 

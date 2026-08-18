@@ -144,6 +144,18 @@ include official eligibility, technical behavior, security and trust, direct
 competitors, adoption and maintenance, release operations, cost, and the
 strongest argument against the project.
 
+The integrator converts these into a surface matrix. Start with two
+raw-artifact-only passes for a multi-source decision: authority/primary-source
+and counter-evidence/alternative. Add one pass per additional material surface,
+up to four source agents total and two active agents at once. Each assignment
+records its owned and excluded surfaces, artifact ids, falsifier, deadline, and
+review epoch. Sibling reports and the integrator claim map are not passed into a
+new assignment.
+
+Deep-research handoffs mark source artifacts with the raw: prefix and preserve
+source lineage and claim ids. Derived claim maps, sibling summaries, and
+recommendations cannot be used as raw evidence.
+
 The batch must be broad enough to expose a material alternative explanation.
 It is not complete because a number of searches or agents ran; it is complete
 when the meaningful independent surfaces were challenged or evidence showed
@@ -217,11 +229,14 @@ current. The replay must answer whether the claim map, strongest counter-case,
 and action boundary still hold, not merely whether the prose is unchanged.
 
 An independent review uses a separate reasoning path or fresh context and must
-be able to reject the conclusion. It does not require a different model
-identity, a human review claim that cannot be verified, or an LLM verdict as
-authority. If the research method itself is the target, replay the frozen
-method and its candidate separately; the candidate cannot approve its own
-prerequisite.
+be able to reject the conclusion. Dispatch it with fork_context=false after the
+contradiction/citation audit and source replay, using only the frozen decision,
+raw artifacts, source lineage, claim ids, and action-boundary question. It does
+not require a different model identity, a human review claim that cannot be
+verified, or an LLM verdict as authority. If the research method itself is the
+target, replay the frozen method and its candidate separately; the candidate
+cannot approve its own prerequisite. A timeout or unavailable reviewer is
+defer-external, not self-review.
 
 The independent handoff must return one of three outcomes: **promote**,
 **reopen**, or **defer-external**. It must name the strongest remaining objection,
@@ -253,12 +268,15 @@ reason to keep iterating.
 
 ## Agent and model discipline
 
-The integrator owns scope, synthesis, and promotion. Use the smallest team
-that exposes independent surfaces; add parallel work only when it reduces blind
-spots rather than multiplying summaries. Each pass has one independent surface
-and one evidence handoff; the integrator owns the claim map and final
-promotion. Close overlapping or idle work after its evidence is delivered. No
-agent reviews its own argument as the final decision.
+The integrator owns scope, synthesis, and promotion. Use the bounded surface
+matrix and smallest team that exposes independent surfaces; add parallel work
+only when it reduces blind spots rather than multiplying summaries. Allow one
+replacement for a failed pass inside the same research budget, then stop without
+closure if evidence remains incomplete. Deduplicate by claim id and canonical
+source/query/revision lineage. Each pass has one independent surface and one
+evidence handoff; the integrator owns the claim map and final promotion. Close
+overlapping or idle work after the evidence is delivered. No agent reviews its
+own argument as the final decision.
 
 There is no stronger-model escape hatch in this process. Continue with the
 available reasoning path, change perspectives, and require evidence. Model

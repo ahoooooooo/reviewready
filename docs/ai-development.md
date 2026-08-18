@@ -182,15 +182,26 @@ deferred review and do not promote. Overlapping or idle work is closed after
 its evidence is delivered. A new round starts from the accumulated evidence and
 failed attempts, never from an unexamined reset.
 
+The default delegation schedule is one reviewer, not a fixed panel. Expand to a
+maximum of three total reviewers and two concurrent reviewers only when the
+first report names an unresolved decision-changing falsifier and at least two
+uncovered surfaces have disjoint artifacts and falsifiers. Allow one replacement
+for a timeout or tool failure within the round budget; otherwise leave review
+incomplete. The first pass discovers attacks; a final pass must match the current
+review epoch after the last material repair, revision, scope, or trust-boundary
+change.
+
 The independent reviewer report must identify a strongest falsifier, a missed
 attack surface, an authority or evidence gap, and a recommendation. It is
 evidence for the integrator, not an approval or readiness decision. Before
-promotion, the integrator records a fresh-review handoff containing the current
-revision/worktree, reviewer agent id and role, explicit fork_context=false,
-scope/raw artifacts, commands/evidence, severity-ordered findings, the
-strongest falsifier, missed attack surface, authority/evidence gap,
+promotion, the integrator records a multi-reviewer handoff containing the route,
+review epoch, current revision/worktree, assignments, owned/excluded surfaces,
+surface coverage, raw artifacts, commands/evidence, severity-ordered findings,
+the strongest falsifier, missed attack surface, authority/evidence gap,
 recommendation, and exactly one outcome: promote, reopen, or defer-external.
 Missing or ambiguous handoff fields fail closed for the independent-review gate.
+An assignment with status timeout, tool-failure, or deferred is valid only with
+the defer-external outcome; it cannot be promoted as complete.
 Validate the JSON handoff with npm run review:validate -- --file <handoff.json>
 before treating that gate as complete.
 

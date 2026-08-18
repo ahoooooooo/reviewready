@@ -158,15 +158,35 @@ unavailable reviewer is recorded and leaves independent review deferred, so the
 task cannot be promoted as independently reviewed. Bounded routine tasks do not
 pay this coordination cost unless the user requests it.
 
+Use a two-wave adaptive scheduler:
+
+- Start with one fresh reviewer. Do not start a fixed panel for every task.
+- Expand only when the first report identifies an unresolved falsifier that
+  could change the decision and the integrator can name at least two uncovered,
+  decision-changing surfaces with disjoint artifacts and falsifiers.
+- Assign one reviewer per surface. Cap the base route at three reviewers total
+  and two active reviewers at once; close each reviewer after its handoff.
+- Permit one replacement for a timeout or tool failure inside the same round
+  budget. A failed or partial reviewer is incomplete evidence, never a reason
+  to treat surviving reports as complete.
+- Stop when all material surfaces are covered and another report would not
+  change the claim or defect map. Do not use majority agreement, low confidence,
+  or agent count as a stop condition.
+
+The first review is attack discovery. Before proof or promotion, run a final
+fresh review against the current review epoch, revision, worktree, scope, and
+trust boundary. Any material repair, revision change, scope expansion, or trust
+boundary change invalidates the prior epoch and requires a new final review.
+
 Before proof can close or promotion can begin, record a fresh-review handoff
 with every field below:
 
-- revision and worktree state;
-- reviewer agent id and role;
-- dispatch context, explicitly recorded as fork_context=false;
-- exact scope and raw artifacts examined;
+- route, review epoch, revision, and worktree state;
+- reviewer assignments with id, role, dispatch context, owned/excluded surfaces,
+  raw artifact ids, and completion status;
+- surface coverage with exactly one owner per surface;
 - commands or evidence sources used;
-- severity-ordered findings;
+- severity-ordered findings keyed to their reviewer and owned surface;
 - strongest falsifier;
 - missed attack surface;
 - authority or evidence gap;
@@ -175,8 +195,10 @@ with every field below:
 
 Missing fields, an unknown dispatch context, or a reviewer outcome other than
 the three allowed values means independent review is incomplete and promotion
-must defer. The handoff records evidence about the process; it never delegates
-readiness, merge, or release authority to the reviewer.
+must defer. A reviewer status of timeout, tool-failure, or deferred is valid
+only with the defer-external outcome. The handoff records evidence about the
+process; it never delegates readiness, merge, or release authority to the
+reviewer.
 
 Validate the JSON handoff with npm run review:validate -- --file <handoff.json>
 before treating the independent-review gate as complete.

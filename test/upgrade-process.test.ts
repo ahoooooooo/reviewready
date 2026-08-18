@@ -52,7 +52,7 @@ describe("open-source upgrade process contract", () => {
     expect(research).toMatch(/shortest reproducible path/);
     expect(research).toMatch(/action boundary is explicit/);
     expect(research).toMatch(/prior report lacks replay metadata/);
-    expect(research).toMatch(/candidate cannot approve its own\s+prerequisite/);
+    expect(research).toMatch(/candidate\s+cannot approve its own\s+prerequisite/);
     expect(research).toMatch(/external-program or adoption question/);
     const lowerResearch = research.toLowerCase();
     const researchStages = [

@@ -1,10 +1,20 @@
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { defineConfig } from "vitest/config";
+
+const configuredCoverageDirectory = process.env.REVIEWREADY_COVERAGE_DIRECTORY?.trim();
+const coverageDirectory =
+  configuredCoverageDirectory ||
+  (process.env.CI !== undefined
+    ? "coverage"
+    : join(tmpdir(), "reviewready-coverage-" + String(process.pid)));
 
 export default defineConfig({
   test: {
     coverage: {
       provider: "v8",
       reporter: ["text", "json-summary"],
+      reportsDirectory: coverageDirectory,
       include: [
         "src/engine.ts",
         "src/input.ts",

@@ -118,6 +118,13 @@ describe("auditPackageEntries", () => {
     expect(packageJson.scripts?.["test:watch"]).toContain("--configLoader runner");
   });
 
+  it("isolates local coverage reports for concurrent validation runs", async () => {
+    const config = await readFile("vitest.config.ts", "utf8");
+
+    expect(config).toContain("REVIEWREADY_COVERAGE_DIRECTORY");
+    expect(config).toContain("process.pid");
+  });
+
   it("keeps child npm cache selection process-local", async () => {
     const packageSmoke = await readFile("scripts/package-smoke.mjs", "utf8");
     const releasePreflight = await readFile("scripts/release-preflight.mjs", "utf8");
