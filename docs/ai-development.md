@@ -204,6 +204,12 @@ control; it does not prove that a reviewer worker can execute and return a
 report. If the worker canary times out, returns malformed output, or cannot be
 closed, record `defer-external` and do not dispatch the larger review.
 
+Normal bounded reviewers use a fresh default agent with
+`fork_context=false` and `reasoning_effort=medium`; reserve the fixed
+high-reasoning reviewer role for an explicitly approved long read. This is a
+latency routing choice only: exact report, watchdog, close, and handoff gates
+remain unchanged.
+
 Substantive review is surface-packeted: one reviewer owns one named surface and
 one primary raw artifact by default, with explicit exclusions, one falsifier,
 and one concrete question. Only a deliberately approved 120-second read may
@@ -218,9 +224,10 @@ The local `scripts/reviewer-watchdog.mjs` helper is the executable contract for
 these transitions. It validates the exact worker sentinel and report packet,
 makes timeout terminal, enforces one close call, and exposes a throwing
 `assertDispatchAllowed()` ticket only after a completed host-closed review. The
-final handoff records the canary and host close evidence under
+final handoff records the canary and structured host close proof under
 `reviewerReadiness`; it also records the exact validated complete final report
-and host close evidence bound to the substantive reviewer id. It must pass
+and structured close proof bound to the substantive reviewer id. Complete proof
+must contain `source`, `agentId`, `previousStatus`, and `closed=true`. It must pass
 `npm run review:validate` before promotion.
 
 The independent reviewer report must identify a strongest falsifier, a missed

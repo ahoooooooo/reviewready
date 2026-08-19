@@ -20,6 +20,11 @@ close-agent adapter. Record the host response as close evidence. A timeout,
 malformed output, or unconfirmed close is terminal for the round; do not spend
 tokens on a substantive reviewer.
 
+Use a fresh default agent with `fork_context=false` and
+`reasoning_effort=medium` for the normal bounded packet. Reserve the fixed
+high-reasoning `reviewer` role for an explicitly approved long read; the role
+choice never changes report, watchdog, close, or handoff validation.
+
 ## Bounded surface packet
 
 The default packet contains exactly one named surface, one primary raw artifact,
@@ -91,8 +96,8 @@ The JSON handoff must contain:
   bound to the canary id;
 - reviewer assignments with id, role, `fork_context=false`, one-primary or
   deliberately paired packet mode, wait budget, owned/excluded surfaces,
-  artifacts, exact validated report when complete, substantive-agent close
-  evidence, and status;
+  artifacts, exact validated report when complete, structured substantive-agent
+  close evidence, and status;
 - exactly one owner per covered surface;
 - severity-ordered findings, strongest falsifier, missed surface, authority gap,
   recommendation, and exactly one outcome.

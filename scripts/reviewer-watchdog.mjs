@@ -42,9 +42,14 @@ export function validateWorkerCanary(output) {
 }
 
 /** @param {unknown} proof @param {string} expectedAgentId */
-function validateCloseProof(proof, expectedAgentId) {
+export function validateCloseProof(proof, expectedAgentId) {
   if (!isRecord(proof) || proof.source !== "host-close-agent") {
     throw new Error("close proof must come from host-close-agent");
+  }
+  for (const key of Object.keys(proof)) {
+    if (!["source", "agentId", "previousStatus", "closed"].includes(key)) {
+      throw new Error("close proof field is unexpected: " + key);
+    }
   }
   if (proof.agentId !== expectedAgentId) {
     throw new Error("close proof agent id does not match the watchdog");
@@ -54,6 +59,41 @@ function validateCloseProof(proof, expectedAgentId) {
     throw new Error("close proof closed must be boolean");
   }
   return { previousStatus, closed: proof.closed };
+}
+
+/** @param {unknown} evidence @param {string} expectedAgentId @param {boolean} requireClosed */
+export function validateCloseEvidence(evidence, expectedAgentId, requireClosed = false) {
+  if (!isRecord(evidence) || evidence.source !== "host-close-agent") {
+    throw new Error("close evidence must come from host-close-agent");
+  }
+  if (evidence.agentId !== expectedAgentId) {
+    throw new Error("close evidence agent id does not match the reviewer");
+  }
+  if (evidence.error !== undefined) {
+    if (requireClosed) {
+      throw new Error("complete close evidence cannot be an error");
+    }
+    for (const key of Object.keys(evidence)) {
+      if (!["source", "agentId", "error"].includes(key)) {
+        throw new Error("close evidence field is unexpected: " + key);
+      }
+    }
+    return {
+      source: "host-close-agent",
+      agentId: expectedAgentId,
+      error: requiredText(evidence.error, "close evidence error")
+    };
+  }
+  const proof = validateCloseProof(evidence, expectedAgentId);
+  if (requireClosed && !proof.closed) {
+    throw new Error("complete close evidence must confirm closed=true");
+  }
+  return {
+    source: "host-close-agent",
+    agentId: expectedAgentId,
+    previousStatus: proof.previousStatus,
+    closed: proof.closed
+  };
 }
 
 /**
@@ -119,7 +159,8 @@ export function createWorkerWatchdog(input) {
   let state = "waiting";
   let closeCalls = 0;
   let closeConfirmed = false;
-  let closeEvidence = "";
+  /** @type {Record<string, unknown> | undefined} */
+  let closeEvidence;
   let dispatchAllowed = false;
   /** @type {unknown} */
   let report;
@@ -178,11 +219,19 @@ export function createWorkerWatchdog(input) {
         proof = await input.closeAgent(agentId);
         const closeProof = validateCloseProof(proof, agentId);
         closeConfirmed = closeProof.closed;
-        closeEvidence =
-          "host-close-agent:agent=" + agentId + ":previous_status=" + closeProof.previousStatus;
+        closeEvidence = {
+          source: "host-close-agent",
+          agentId,
+          previousStatus: closeProof.previousStatus,
+          closed: closeProof.closed
+        };
       } catch (error) {
         state = "close-unconfirmed";
-        closeEvidence = "host-close-agent:agent=" + agentId + ":error";
+        closeEvidence = {
+          source: "host-close-agent",
+          agentId,
+          error: "close-agent-failed"
+        };
         throw error;
       }
       state = closeConfirmed ? "closed" : "close-unconfirmed";

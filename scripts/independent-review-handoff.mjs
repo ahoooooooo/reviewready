@@ -5,7 +5,7 @@ import { readFileSync, statSync } from "node:fs";
 import process from "node:process";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { validateReviewerReport } from "./reviewer-watchdog.mjs";
+import { validateCloseEvidence, validateReviewerReport } from "./reviewer-watchdog.mjs";
 import { validateResearchPass } from "./research-pass.mjs";
 
 const SCHEMA_VERSION = 2;
@@ -74,6 +74,7 @@ const REVIEWER_READINESS_FIELDS = new Set([
 ]);
 
 /** @typedef {{ artifactId: string, sourceLineage: string[], claimIds: string[] }} ArtifactBinding */
+/** @typedef {{ source: "host-close-agent", agentId: string, previousStatus: string, closed: boolean } | { source: "host-close-agent", agentId: string, error: string }} CloseEvidence */
 /**
  * @typedef {{
  *   id: string,
@@ -84,7 +85,7 @@ const REVIEWER_READINESS_FIELDS = new Set([
  *   artifactIds: string[],
  *   artifactBindings: ArtifactBinding[],
  *   report?: string,
- *   closeEvidence: string,
+ *   closeEvidence: CloseEvidence,
  *   status: string
  * }} ReviewerAssignment
  * @typedef {{ reviewers: ReviewerAssignment[], ownedSurfaces: Set<string> }} ReviewerData
@@ -205,12 +206,15 @@ function requiredReviewerReadiness(value) {
   if (typeof closed !== "boolean") {
     throw new Error("reviewerReadiness.closed must be boolean");
   }
-  const closeEvidence = requiredText(value.closeEvidence, "reviewerReadiness.closeEvidence");
   if (status === "passed" && observedOutput.trim() !== REVIEWER_CANARY_SENTINEL) {
     throw new Error("passed reviewerReadiness must observe the canary sentinel");
   }
-  if (!closeEvidence.startsWith("host-close-agent:agent=" + canaryId + ":")) {
-    throw new Error("reviewerReadiness.closeEvidence is not bound to the canary id");
+  if (status === "passed" && !closed) {
+    throw new Error("passed reviewerReadiness must confirm closed=true");
+  }
+  const closeEvidence = validateCloseEvidence(value.closeEvidence, canaryId, status === "passed");
+  if ("closed" in closeEvidence && closeEvidence.closed !== closed) {
+    throw new Error("reviewerReadiness closed flag does not match close evidence");
   }
   return {
     canaryId,
@@ -356,17 +360,7 @@ function requiredReviewers(value, route) {
             "].status must be complete, timeout, tool-failure, or deferred"
         );
       }
-      const closeEvidence = requiredText(
-        item.closeEvidence,
-        "reviewers[" + String(index) + "].closeEvidence"
-      );
-      const closePrefix = "host-close-agent:agent=" + id + ":";
-      if (!closeEvidence.startsWith(closePrefix)) {
-        throw new Error("reviewer close evidence is not bound to reviewer id: " + id);
-      }
-      if (status === "complete" && !closeEvidence.startsWith(closePrefix + "previous_status=")) {
-        throw new Error("complete reviewer close evidence is not host-confirmed: " + id);
-      }
+      const closeEvidence = validateCloseEvidence(item.closeEvidence, id, status === "complete");
       const report =
         status === "complete" && (role === "final-review" || route === "deep-research")
           ? requiredSubstantiveReport(item.report, route, role, ownedSurfaces, artifactIds, index)

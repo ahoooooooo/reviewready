@@ -175,6 +175,12 @@ final reviewer merely to rename an unchanged completed report.
 Any timeout, malformed/off-scope report, unconfirmed close, packet mismatch, or
 missing handoff field is incomplete evidence and yields `defer-external`.
 
+For the normal 60-second packet, dispatch a fresh default agent with
+`fork_context=false` and `reasoning_effort=medium`. The fixed high-reasoning
+`reviewer` role is an explicitly approved long-read profile, not the default
+route; changing the profile does not loosen the report, watchdog, or handoff
+requirements.
+
 These hard invariants apply even when the detailed reference is not loaded:
 
 - `fork_context=false`, elevated doctor/control canary, then exact
@@ -194,9 +200,11 @@ The minimum reviewer report fields are exactly `surface`, `falsifier`,
 `REVIEWER_REPORT_V1`; evidence must bind to the packet artifact. The minimum
 `reviewerReadiness` fields are canary id, `fork_context=false`, 30-second budget,
 exact sentinel/output, passed/deferred status, closed flag, and agent-bound host
-close evidence. A complete final reviewer assignment in the handoff must also
-carry that exact validated report and host close evidence bound to its
-substantive reviewer id.
+close evidence. Close evidence must be a structured host proof with `source`,
+`agentId`, `previousStatus`, and `closed` (or an explicit error shape); a
+complete/passed proof must have `closed=true`. A complete final reviewer
+assignment in the handoff must also carry that exact validated report and
+structured close evidence bound to its substantive reviewer id.
 
 ### 3. Attack before repairing
 

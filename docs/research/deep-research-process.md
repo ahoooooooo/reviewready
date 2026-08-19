@@ -287,7 +287,8 @@ defer-external, not self-review.
 
 The final independent reviewer still uses the base worker-readiness canary,
 one-primary-artifact packet by default, exact `REVIEWER_REPORT_V1` output, the
-reviewer watchdog, structured host-close proof, and `reviewerReadiness` handoff
+default-medium reviewer profile, reviewer watchdog, structured host-close proof
+(`source`, `agentId`, `previousStatus`, `closed`), and `reviewerReadiness` handoff
 evidence. Source-pass reports cannot satisfy the final reviewer gate.
 
 The independent handoff must return one of three outcomes: **promote**,

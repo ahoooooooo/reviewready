@@ -108,9 +108,10 @@ Narrow or mark unknown rather than repeating the same search or patching prose.
 Replay the conclusion from the frozen source set against the current revision or
 public state. Refresh time-sensitive facts in a new round. Before promotion,
 run the base worker-readiness canary and dispatch a base-governed final reviewer
-with one primary raw artifact by default, `fork_context=false`, exact
-`REVIEWER_REPORT_V1`, watchdog close/dispatch gates, and `reviewerReadiness`
-close evidence. Source-pass reports cannot satisfy this gate.
+with one primary raw artifact by default, the default-medium profile,
+`fork_context=false`, exact `REVIEWER_REPORT_V1`, watchdog close/dispatch gates,
+and structured `reviewerReadiness` close proof. Source-pass reports cannot
+satisfy this gate.
 
 The final reviewer must be able to reject the conclusion. A timeout, partial or
 off-scope report, unavailable pass, or unconfirmed close is `defer-external`,

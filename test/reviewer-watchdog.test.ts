@@ -78,7 +78,12 @@ describe("reviewer watchdog", () => {
     await expect(watchdog.close()).resolves.toEqual({
       status: "closed",
       dispatchAllowed: true,
-      closeEvidence: "host-close-agent:agent=agent-1:previous_status=completed"
+      closeEvidence: {
+        source: "host-close-agent",
+        agentId: "agent-1",
+        previousStatus: "completed",
+        closed: true
+      }
     });
     expect(watchdog.closeCalls).toBe(1);
     expect(watchdog.assertDispatchAllowed()).toEqual({
@@ -124,7 +129,12 @@ describe("reviewer watchdog", () => {
     await expect(watchdog.close()).resolves.toEqual({
       status: "closed",
       dispatchAllowed: false,
-      closeEvidence: "host-close-agent:agent=agent-2:previous_status=running"
+      closeEvidence: {
+        source: "host-close-agent",
+        agentId: "agent-2",
+        previousStatus: "running",
+        closed: true
+      }
     });
     expect(() => watchdog.assertDispatchAllowed()).toThrow("dispatch is forbidden");
     expect(() => watchdog.accept(report)).toThrow("terminal");
@@ -141,7 +151,12 @@ describe("reviewer watchdog", () => {
     await expect(watchdog.close()).resolves.toEqual({
       status: "close-unconfirmed",
       dispatchAllowed: false,
-      closeEvidence: "host-close-agent:agent=agent-3:previous_status=not_found"
+      closeEvidence: {
+        source: "host-close-agent",
+        agentId: "agent-3",
+        previousStatus: "not_found",
+        closed: false
+      }
     });
     expect(watchdog.snapshot()).toMatchObject({ closeCalls: 1, closeConfirmed: false });
   });
