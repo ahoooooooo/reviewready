@@ -209,13 +209,13 @@ bounded reviewers use a fresh default agent with `fork_context=false`; do not
 substitute another model or reasoning profile. This is a latency routing choice
 only: exact report, watchdog, close, and handoff gates remain unchanged.
 After a recorded LUNA MAX 120-second timeout, only `luna-max-long-read` may
-pair two small artifacts at 180 seconds.
+pair two small artifacts at 300 seconds.
 
 Substantive review is surface-packeted: one reviewer owns one named surface and
 one primary raw artifact by default, with explicit exclusions, one falsifier,
 and one concrete question. Only a deliberately approved 120-second read may
 pair two small artifacts; after a recorded LUNA MAX timeout, the explicit
-`luna-max-long-read` profile may pair two at 180 seconds. Larger work is split
+`luna-max-long-read` profile may pair two at 300 seconds. Larger work is split
 into disjoint assignments.
 Reviewers do not run the full repository gate. Their report must
 start with `REVIEWER_REPORT_V1` and include the assigned surface, falsifier,

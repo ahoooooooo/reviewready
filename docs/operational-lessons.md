@@ -90,7 +90,7 @@ The fixed `reviewer` role uses high reasoning and intermittently exceeded the
 `default`/medium run completed and found a real close-proof gap, but it is not
 the project profile. The durable route is now a fresh `default` agent with
 `model=gpt-5.6-luna` and `reasoning_effort=max`; use the user's required LUNA MAX
-profile even when it needs the deliberate 120-second paired-artifact budget.
+profile even when it needs the deliberate 300-second paired-artifact budget.
 This changes latency routing only: `fork_context=false`, exact report, watchdog
 close, structured host proof, and handoff validation remain mandatory. A timeout
 is still terminal `defer-external`, never a reason to replace the reviewer.

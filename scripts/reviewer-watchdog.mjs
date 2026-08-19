@@ -163,8 +163,8 @@ export function createWorkerWatchdog(input) {
     throw new Error("closeAgent must be a host adapter function");
   }
   const waitBudgetSeconds = input.waitBudgetSeconds ?? 60;
-  if (!Number.isInteger(waitBudgetSeconds) || waitBudgetSeconds < 1 || waitBudgetSeconds > 180) {
-    throw new Error("waitBudgetSeconds must be an integer from 1 to 180");
+  if (!Number.isInteger(waitBudgetSeconds) || waitBudgetSeconds < 1 || waitBudgetSeconds > 300) {
+    throw new Error("waitBudgetSeconds must be an integer from 1 to 300");
   }
   let state = "waiting";
   let closeCalls = 0;

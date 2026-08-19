@@ -179,7 +179,7 @@ For every subagent spawn, set `model=gpt-5.6-luna` and
 `reasoning_effort=max`. For the normal bounded packet, dispatch a fresh
 `default` agent with `fork_context=false`; do not substitute another model or
 reasoning profile. Use `luna-max-long-read` only after a recorded 120-second
-LUNA MAX timeout, with exactly two small artifacts and a 180-second budget.
+LUNA MAX timeout, with exactly two small artifacts and a 300-second budget.
 This routing choice does not loosen the report, watchdog, or handoff
 requirements.
 

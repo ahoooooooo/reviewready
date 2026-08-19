@@ -324,10 +324,10 @@ function requiredReviewers(value, route) {
         typeof waitBudgetSeconds !== "number" ||
         !Number.isInteger(waitBudgetSeconds) ||
         waitBudgetSeconds < 1 ||
-        waitBudgetSeconds > 180
+        waitBudgetSeconds > 300
       ) {
         throw new Error(
-          "reviewers[" + String(index) + "].waitBudgetSeconds must be an integer from 1 to 180"
+          "reviewers[" + String(index) + "].waitBudgetSeconds must be an integer from 1 to 300"
         );
       }
       if (packetMode === "single-artifact") {
@@ -346,9 +346,9 @@ function requiredReviewers(value, route) {
       }
       if (
         packetMode === "luna-max-long-read" &&
-        (artifactIds.length !== 2 || waitBudgetSeconds !== 180)
+        (artifactIds.length !== 2 || waitBudgetSeconds !== 300)
       ) {
-        throw new Error("luna-max-long-read packets require two artifacts and a 180-second budget");
+        throw new Error("luna-max-long-read packets require two artifacts and a 300-second budget");
       }
       if (
         route === "deep-research" &&

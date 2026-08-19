@@ -31,7 +31,7 @@ The default packet contains exactly one named surface, one primary raw artifact,
 explicit exclusions, one falsifier, and one concrete question. A packet that
 needs more evidence becomes a disjoint assignment. Only a deliberately approved
 120-second read may pair two small artifacts; after a recorded LUNA MAX timeout,
-the explicit `luna-max-long-read` profile may pair two small artifacts for 180
+the explicit `luna-max-long-read` profile may pair two small artifacts for 300
 seconds. Never give one reviewer a whole repository or ask it to run the full
 repository gate.
 
@@ -70,7 +70,7 @@ solely to obtain a better-shaped report.
 - Give each reviewer one total wait budget: 60 seconds by default, or 120
   seconds only for a deliberately approved paired-artifact read. After a
   recorded LUNA MAX 120-second timeout, use only the explicit
-  `luna-max-long-read` two-artifact profile with a 180-second budget.
+  `luna-max-long-read` two-artifact profile with a 300-second budget.
 - A silent timeout is terminal. Close once, record the environment failure, and
   defer-external. Never poll indefinitely or replace solely for timeout.
 - One replacement is allowed only for an explicit pre-dispatch tool failure
