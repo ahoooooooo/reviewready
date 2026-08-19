@@ -191,9 +191,37 @@ and the round budget remains. Give each report-only reviewer one total wait
 budget: 60 seconds by default and never more than 120 seconds for a deliberately
 approved long read. A silent timeout is terminal for the round; close once,
 record the environment failure, and defer-external without repeated polling or
-replacement. The first pass discovers attacks; a final pass must match the
-current review epoch after the last material repair, revision, scope, or
-trust-boundary change.
+replacement. The completed first pass is also the final current-epoch pass when
+no material repair, revision, scope, or trust-boundary change follows it; after
+such a change, run one fresh final pass. Do not duplicate an unchanged review
+only to label it final.
+
+Before the substantive assignment, run a separate fresh worker-readiness canary
+with `fork_context=false`. It receives no repository task and must return the
+exact `REVIEWER_CANARY_OK` sentinel within one 30-second budget, after which its
+id is closed exactly once. A control-plane doctor/canary only proves host
+control; it does not prove that a reviewer worker can execute and return a
+report. If the worker canary times out, returns malformed output, or cannot be
+closed, record `defer-external` and do not dispatch the larger review.
+
+Substantive review is surface-packeted: one reviewer owns one named surface and
+one primary raw artifact by default, with explicit exclusions, one falsifier,
+and one concrete question. Only a deliberately approved 120-second read may
+pair two small artifacts. Larger work is split into disjoint assignments.
+Reviewers do not run the full repository gate. Their report must
+start with `REVIEWER_REPORT_V1` and include the assigned surface, falsifier,
+evidence artifact, missed surface, authority gap, and one of
+`promote|reopen|defer-external`. Off-scope or malformed output is incomplete
+evidence and cannot be repaired by silently replacing the reviewer.
+
+The local `scripts/reviewer-watchdog.mjs` helper is the executable contract for
+these transitions. It validates the exact worker sentinel and report packet,
+makes timeout terminal, enforces one close call, and exposes a throwing
+`assertDispatchAllowed()` ticket only after a completed host-closed review. The
+final handoff records the canary and host close evidence under
+`reviewerReadiness`; it also records the exact validated complete final report
+and host close evidence bound to the substantive reviewer id. It must pass
+`npm run review:validate` before promotion.
 
 The independent reviewer report must identify a strongest falsifier, a missed
 attack surface, an authority or evidence gap, and a recommendation. It is

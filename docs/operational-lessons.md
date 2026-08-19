@@ -92,6 +92,42 @@ active-rollout, or thread-control checks are a control-plane blocker: do not
 spawn an agent, record defer-external, and repair the app host first. Opening a
 new chat does not create a new host.
 
+## 2026-08-19: green control-plane did not prove reviewer completion
+
+The elevated Codex doctor and child-process canary passed, but two broad,
+no-context reviewer assignments stayed `running` without a final report within
+60 seconds. A minimal reviewer worker canary then returned the exact
+`REVIEWER_CANARY_OK` sentinel, and a one-file reviewer returned within the same
+budget (although its evidence was off-scope). The failure was therefore not a
+total app or spawn outage. The broad assignment exceeded the bounded review
+contract, and the process had no machine-checkable worker-readiness or report
+shape gate.
+
+The durable correction is two-stage admission: pass a fresh 30-second worker
+canary and confirm its close, then dispatch only one-surface packets with one
+primary raw artifact, one falsifier, and an exact
+`REVIEWER_REPORT_V1` report contract. A timeout or off-scope report is terminal
+in that round, its close evidence comes from the host control, and dispatch is
+never allowed again for that assignment; the watchdog's
+`assertDispatchAllowed()` ticket throws unless a completed review has a
+host-verified close. It remains `defer-external`; it is never hidden by a
+replacement or a self-review.
+
+## 2026-08-19: deep-research source-agent forward path remains external
+
+The base-skill planning forward test returned a bounded route/plan after the
+progressive-disclosure refactor. A fresh default subagent asked only for a
+deep-research planning contract still did not return within 60 seconds, even
+after the deep skill gained a planning-only branch and deferred reference load.
+This does not prove the deep skill's local contract is wrong; it isolates a
+remaining execution-lane latency/skill-injection boundary for default deep
+subagents.
+
+The safe rule is to complete planning in the integrator when possible, then
+start source-agent execution only after the base worker canary and research-pass
+packet are admitted. A silent forward/source-agent timeout is recorded once,
+closed once, and deferred; never loop or claim the research execution succeeded.
+
 ## 2026-08-17: malformed repository target during PR monitoring
 
 While monitoring PR #84, the former GitHub CLI path accepted a mistyped owner,

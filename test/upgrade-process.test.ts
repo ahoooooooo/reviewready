@@ -3,13 +3,17 @@ import { describe, expect, it } from "vitest";
 
 describe("open-source upgrade process contract", () => {
   it("keeps the orchestration layer connected to its authoritative sources", async () => {
-    const [process, index, research, plan, base] = await Promise.all([
-      readFile("docs/oss-upgrade-process.md", "utf8"),
-      readFile("docs/research/README.md", "utf8"),
-      readFile("docs/research/deep-research-process.md", "utf8"),
-      readFile("docs/exec-plans/active/post-v1.md", "utf8"),
-      readFile("docs/ai-development.md", "utf8")
-    ]);
+    const [process, index, research, plan, base, deepSkill, reviewerContract, researchMethod] =
+      await Promise.all([
+        readFile("docs/oss-upgrade-process.md", "utf8"),
+        readFile("docs/research/README.md", "utf8"),
+        readFile("docs/research/deep-research-process.md", "utf8"),
+        readFile("docs/exec-plans/active/post-v1.md", "utf8"),
+        readFile("docs/ai-development.md", "utf8"),
+        readFile("skills/reviewready-deep-research/SKILL.md", "utf8"),
+        readFile("skills/reviewready-base-delivery/references/reviewer-contract.md", "utf8"),
+        readFile("skills/reviewready-deep-research/references/research-method.md", "utf8")
+      ]);
 
     expect(index).toContain("[Open-source upgrade lifecycle](../oss-upgrade-process.md)");
     expect(research).toContain("[open-source upgrade lifecycle](../oss-upgrade-process.md)");
@@ -48,12 +52,24 @@ describe("open-source upgrade process contract", () => {
     expect(base).toMatch(/immutable base revision/);
     expect(base).toMatch(/unknown\s+or incomplete evidence fails closed/);
     expect(process).toMatch(/base process\s+has completed its own attack/);
+    expect(deepSkill).toContain("references/research-method.md");
+    expect(deepSkill).toContain("Planning-only path");
+    expect(deepSkill).toContain("process-self-optimization reviewer gate overrides it");
+    expect(deepSkill).toContain("source-to-final handoff");
+    expect(reviewerContract).toContain("REVIEWER_CANARY_OK");
 
     expect(research).toMatch(/shortest reproducible path/);
     expect(research).toMatch(/action boundary is explicit/);
     expect(research).toMatch(/prior report lacks replay metadata/);
     expect(research).toMatch(/candidate\s+cannot approve its own\s+prerequisite/);
     expect(research).toMatch(/external-program or adoption question/);
+    expect(research).toContain("base skill and `AGENTS.md` have precedence");
+    expect(research).toContain("RESEARCH_PASS_V1");
+    expect(research).toContain("npm run research:validate");
+    expect(research).toContain("worker-readiness");
+    expect(researchMethod).toContain("worker-admission");
+    expect(research).not.toContain("Permit one replacement for a timeout");
+    expect(research).toContain("Source-pass reports cannot satisfy");
     const lowerResearch = research.toLowerCase();
     const researchStages = [
       "### anchor and frame the decision",
@@ -94,15 +110,17 @@ describe("open-source upgrade process contract", () => {
     expect(plan).not.toContain("must pass the repository gate before");
   });
   it("keeps external authentication checks visible to every agent run", async () => {
-    const [guide, contract, implementation, base, development, lessons, adr] = await Promise.all([
-      readFile("AGENTS.md", "utf8"),
-      readFile("docs/authentication.md", "utf8"),
-      readFile("scripts/auth-status.mjs", "utf8"),
-      readFile("skills/reviewready-base-delivery/SKILL.md", "utf8"),
-      readFile("docs/ai-development.md", "utf8"),
-      readFile("docs/operational-lessons.md", "utf8"),
-      readFile("docs/adr/0016-authentication-authority-status.md", "utf8")
-    ]);
+    const [guide, contract, implementation, base, development, lessons, adr, reviewerContract] =
+      await Promise.all([
+        readFile("AGENTS.md", "utf8"),
+        readFile("docs/authentication.md", "utf8"),
+        readFile("scripts/auth-status.mjs", "utf8"),
+        readFile("skills/reviewready-base-delivery/SKILL.md", "utf8"),
+        readFile("docs/ai-development.md", "utf8"),
+        readFile("docs/operational-lessons.md", "utf8"),
+        readFile("docs/adr/0016-authentication-authority-status.md", "utf8"),
+        readFile("skills/reviewready-base-delivery/references/reviewer-contract.md", "utf8")
+      ]);
 
     expect(guide).toContain("## Authentication authority and external preflight");
     expect(guide).toContain("npm run auth:status");
@@ -123,16 +141,25 @@ describe("open-source upgrade process contract", () => {
     expect(base).toContain("return to the sandbox");
     expect(base).toContain("ETIMEDOUT");
     expect(base).toContain("REVIEWREADY_NPM_CACHE");
-    expect(base).toContain("Treat a silent timeout as terminal");
-    expect(base).toContain("60 seconds by default");
-    expect(base).toContain("automatically invoke the host close-agent control");
-    expect(base).toContain("never ask the user to close it in the UI");
-    expect(base).toContain("codex.cmd --strict-config doctor --json");
-    expect(base).toContain("approved");
-    expect(base).toContain("connected/elevated host context");
-    expect(base).toContain("sandbox-only no-credentials");
-    expect(base).toMatch(/new\s+chat\s+session/u);
+    expect(base).toContain("references/reviewer-contract.md");
+    expect(reviewerContract).toContain("A silent timeout is terminal");
+    expect(reviewerContract).toContain("60 seconds by default");
+    expect(reviewerContract).toMatch(
+      /close it exactly once through the host\s+close-agent adapter/u
+    );
+    expect(reviewerContract).toContain("codex.cmd --strict-config doctor --json");
+    expect(reviewerContract).toContain("connected/elevated host context");
+    expect(reviewerContract).toContain("sandbox-only no-credentials");
+    expect(reviewerContract).toContain("worker-readiness");
+    expect(reviewerContract).toContain("REVIEWER_CANARY_OK");
+    expect(reviewerContract).toContain("30-second budget");
+    expect(reviewerContract).toContain("one primary raw artifact");
+    expect(reviewerContract).toContain("integrator owns the broad baseline");
+    expect(reviewerContract).toMatch(/deliberately approved\s+120-second read/u);
+    expect(reviewerContract).toContain("REVIEWER_REPORT_V1");
     expect(guide).toContain("Before any reviewer spawn");
+    expect(guide).toContain("REVIEWER_CANARY_OK");
+    expect(guide).toContain("one named surface");
     expect(guide).toMatch(/new\s+chat\s+session\s+is\s+not\s+a\s+fresh\s+host/u);
     expect(development).toContain("first operation in a bounded");
     expect(development).toContain("silent timeout is terminal");
@@ -143,6 +170,8 @@ describe("open-source upgrade process contract", () => {
     expect(lessons).toContain("host close-agent control");
     expect(lessons).toContain("control-plane blocker");
     expect(lessons).toContain("elevated host context");
+    expect(lessons).toContain("green control-plane did not prove reviewer completion");
+    expect(lessons).toContain("two-stage admission");
     expect(adr).toContain("bounded external batch");
     expect(adr).toContain("connected/elevated lane");
     expect(implementation).toContain('ghCli: "forbidden"');

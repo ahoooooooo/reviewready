@@ -14,6 +14,11 @@ being changed, the current method is the frozen baseline and every downstream
 research report or work-order plan remains a candidate until the method passes
 its own replay and promotion gate.
 
+The base skill and `AGENTS.md` have precedence when rules overlap. This research
+method may add source lineage and claim requirements, but it may not loosen
+base worker admission, packet size, timeout, close-agent, retry, report-shape,
+or promotion rules.
+
 ## Shared round protocol
 
 Deep research is a specialization of the base round, not a second lifecycle.
@@ -51,6 +56,14 @@ reveals a new trust, public, current-state, or external-dependency claim. If
 admission is ambiguous, keep the base contract and add this overlay only when
 the unresolved current/external claim could change the decision.
 
+For a planning-only request, return only the route, falsifiable decision, source
+classes, strongest counter-case, bounded budget, and stop condition. Do not load
+the execution reference, search providers, spawn source agents, or perform
+external operations until research execution is explicitly authorized. A later
+execution request starts a new round. If the research method itself is the
+target, the base process-self-optimization reviewer gate overrides this
+planning-only no-agent branch.
+
 ## What the process must accomplish
 
 Deep research is complete only when it can support a decision, explain the
@@ -70,6 +83,8 @@ Anchor the research baseline and frame the decision
     ↓
 Map the source topology
     ↓
+Admit worker and source-pass packets
+    ↓
 Attack the question from independent angles
     ↓
 Build a claim map and action boundary
@@ -78,7 +93,7 @@ Search for counter-evidence and alternate explanations
     ↓
 Resolve or move up the abstraction ladder
     ↓
-Replay, refresh, and independently review
+ Replay, refresh, and base-governed independent review
     ├─ material gap → return to attack with the failed attempt
     └─ no material gap → promote the conclusion and hand off the decision
 ```
@@ -151,6 +166,38 @@ up to four source agents total and two active agents at once. Each assignment
 records its owned and excluded surfaces, artifact ids, falsifier, deadline, and
 review epoch. Sibling reports and the integrator claim map are not passed into a
 new assignment.
+
+This four-pass/two-active cap applies only to evidence-collection source passes.
+The final independent reviewer is a separate base-governed assignment, and the
+worker canary does not count toward either cap. Any source query that contacts
+an external provider still follows the base auth, approval, context, and failure
+routing rules.
+
+Before the first source pass, satisfy the base control-plane and worker-readiness
+canaries. Each source pass uses one named surface and one primary raw artifact
+by default, with one falsifier, one question, and explicit exclusions. A larger
+source set is split into disjoint passes rather than given to one agent.
+Use `createResearchPassWatchdog` for each admitted pass so malformed/off-scope
+output, timeout, and tool failure become closeable terminal outcomes before any
+`RESEARCH_PASS_V1` claims enter the integrator map.
+
+Require this bounded source-pass handoff:
+
+```text
+RESEARCH_PASS_V1
+surface=<one assigned surface>
+sources=<raw source ids or queries>
+claim_ids=<claim ids>
+evidence=<raw artifact id and bounded digest>
+counter_case=<strongest contrary evidence or none>
+freshness=<observation date and refresh trigger>
+outcome=<continue|reopen|defer-external>
+```
+
+Malformed, off-scope, or non-raw evidence is incomplete. Close the pass once
+and defer the round rather than replacing it merely to obtain a better report.
+Validate the pass with `npm run research:validate -- --file <file> --surface
+<surface> --artifact <raw-id>` before adding its claims to the map.
 
 Deep-research handoffs mark source artifacts with the raw: prefix and preserve
 source lineage and claim ids. Derived claim maps, sibling summaries, and
@@ -238,10 +285,17 @@ target, replay the frozen method and its candidate separately; the candidate
 cannot approve its own prerequisite. A timeout or unavailable reviewer is
 defer-external, not self-review.
 
+The final independent reviewer still uses the base worker-readiness canary,
+one-primary-artifact packet by default, exact `REVIEWER_REPORT_V1` output, the
+reviewer watchdog, structured host-close proof, and `reviewerReadiness` handoff
+evidence. Source-pass reports cannot satisfy the final reviewer gate.
+
 The independent handoff must return one of three outcomes: **promote**,
-**reopen**, or **defer-external**. It must name the strongest remaining objection,
-the claim or source it affects, and the next falsifiable action. “Looks good” is
-not a research verdict.
+**reopen**, or **defer-external**. A complete final reviewer assignment carries
+the exact validated `REVIEWER_REPORT_V1` and substantive-agent close evidence;
+completed source assignments carry their validated `RESEARCH_PASS_V1`. It must
+name the strongest remaining objection, the claim or source it affects, and the
+next falsifiable action. “Looks good” is not a research verdict.
 
 For research, proof is traceable sources, reproducible queries, explicit dates,
 counter-evidence, and a stable reasoning path. For implementation, the same
@@ -270,13 +324,14 @@ reason to keep iterating.
 
 The integrator owns scope, synthesis, and promotion. Use the bounded surface
 matrix and smallest team that exposes independent surfaces; add parallel work
-only when it reduces blind spots rather than multiplying summaries. Allow one
-replacement for a failed pass inside the same research budget, then stop without
-closure if evidence remains incomplete. Deduplicate by claim id and canonical
-source/query/revision lineage. Each pass has one independent surface and one
-evidence handoff; the integrator owns the claim map and final promotion. Close
-overlapping or idle work after the evidence is delivered. No agent reviews its
-own argument as the final decision.
+only when it reduces blind spots rather than multiplying summaries. A timeout,
+malformed pass, or unavailable source remains terminal and deferred; only an
+explicit pre-dispatch failure where the pass never started may use one
+replacement inside the same research budget. Deduplicate by claim id and
+canonical source/query/revision lineage. Each pass has one independent surface
+and one evidence handoff; the integrator owns the claim map and final promotion.
+Close overlapping or idle work after the evidence is delivered. No agent
+reviews its own argument as the final decision.
 
 There is no stronger-model escape hatch in this process. Continue with the
 available reasoning path, change perspectives, and require evidence. Model

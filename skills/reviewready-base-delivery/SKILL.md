@@ -131,6 +131,12 @@ research documents for research or process-method changes. Use `rg` to locate
 headings and read bounded ranges. Do not preload all of `docs/`, `src/`, or
 `test/`, and do not reread unchanged context after compaction.
 
+The broad baseline-read rule belongs to the integrator. A fresh reviewer or
+research source pass is a bounded worker: its supplied packet is the raw context
+for that assignment, and it must not preload AGENTS, the full repository, or
+unassigned references. If the packet lacks evidence needed to answer its one
+question, report an evidence gap/defer rather than widening context.
+
 ## Iterative loop
 
 The base loop applies to every task. Phase depth follows the changed surface;
@@ -155,92 +161,42 @@ quietly widening scope.
 
 ### 2.1 Dispatch an independent reviewer when the route requires it
 
-Before spawning any reviewer, run the one-time control-plane preflight
-`codex.cmd --strict-config doctor --json` in the approved
-connected/elevated host context used by scheduling, not inside the restricted
-sandbox. A sandbox-only no-credentials or reachability result is a context
-boundary, not the authority result for the app host. Require the elevated doctor
-to report overall ok, then run one tiny control-plane canary and close it.
-If the elevated doctor or canary fails, reports stale active rollouts, or cannot
-confirm thread control, do not spawn a reviewer. Record defer-external; a new
-chat session does not count as a fresh host. Do not retry in the same host until
-the Codex app/control plane is repaired.
+Read [references/reviewer-contract.md](references/reviewer-contract.md) before
+any reviewer-required route. It is the detailed contract for host/worker
+admission, one-artifact packets, exact report shape, watchdog transitions,
+adaptive scheduling, and `reviewerReadiness` handoff validation.
 
-For process-self-optimization, promotion, consequential, public/release,
-full-project or full-worktree requests, and any explicit independent-review
-request, the integrator must dispatch at least one fresh reviewer after the
-baseline and decision are framed, and before repair or promotion. Use the
-reviewer role with fork_context=false; a full-history fork, same-context
-self-critique, or another agent that receives the integrator's conclusions does
-not satisfy this gate.
+The short routing rule is: doctor and control-plane canary first; worker canary
+second; one bounded substantive packet third; exact report validation and
+host-bound close fourth. If that report completes without a material repair or
+scope/revision change, it is the final current-epoch review; after such a change,
+run one fresh final review before proof or promotion. Do not dispatch a duplicate
+final reviewer merely to rename an unchanged completed report.
+Any timeout, malformed/off-scope report, unconfirmed close, packet mismatch, or
+missing handoff field is incomplete evidence and yields `defer-external`.
 
-Give the reviewer only the target revision, scope, raw artifacts, and concrete
-questions. Do not provide prior findings, intended fixes, or the expected
-answer. Require a read-only report containing the strongest falsifier, missed
-attack surface, authority/evidence gap, and a recommendation. The reviewer must
-not edit, commit, push, approve readiness, merge, or contact a provider. Wait
-for its final report before promotion. A material finding reopens attack; an
-unavailable reviewer is recorded and leaves independent review deferred, so the
-task cannot be promoted as independently reviewed. Bounded routine tasks do not
-pay this coordination cost unless the user requests it.
+These hard invariants apply even when the detailed reference is not loaded:
 
-Use a two-wave adaptive scheduler:
+- `fork_context=false`, elevated doctor/control canary, then exact
+  `REVIEWER_CANARY_OK` worker canary and one confirmed close;
+- one primary raw artifact, one falsifier, one question, and exact
+  `REVIEWER_REPORT_V1` evidence binding by default;
+- timeout is terminal, replacement is forbidden unless the reviewer never
+  started because of an explicit pre-dispatch tool failure, and close-agent is
+  exactly once through an agent-bound host adapter;
+- `assertDispatchAllowed()` must pass before any next dispatch; otherwise the
+  round is `defer-external`; and
+- `reviewerReadiness` plus `npm run review:validate` is required before proof or
+  promotion.
 
-- Start with one fresh reviewer. Do not start a fixed panel for every task.
-- Expand only when the first report identifies an unresolved falsifier that
-  could change the decision and the integrator can name at least two uncovered,
-  decision-changing surfaces with disjoint artifacts and falsifiers.
-- Assign one reviewer per surface. Cap the base route at three reviewers total
-  and two active reviewers at once; close each reviewer after its handoff.
-- Give each reviewer a report-only prompt, a dispatch timestamp, and one total
-  wait budget: 60 seconds by default and never more than 120 seconds for a
-  deliberately approved long read. Do not run the full repository gate inside
-  the reviewer.
-- Treat a silent timeout as terminal for the current round: close the agent
-  once, record the environment failure, and emit a defer-external handoff. Do
-  not keep polling or launch a replacement for a silent timeout. Allow one
-  replacement only for an explicit pre-dispatch tool failure where the
-  reviewer never started and the round budget remains.
-- A failed or partial reviewer is incomplete evidence, never a reason to treat
-  surviving reports as complete.
-- Store each dispatched agent id. On completion, timeout, interruption, or
-  error, automatically invoke the host close-agent control exactly once before
-  any next dispatch; never ask the user to close it in the UI. If closure
-  cannot be confirmed, stop dispatching and mark the agent control plane
-  unavailable.
-- Stop when all material surfaces are covered and another report would not
-  change the claim or defect map. Do not use majority agreement, low confidence,
-  or agent count as a stop condition.
-
-The first review is attack discovery. Before proof or promotion, run a final
-fresh review against the current review epoch, revision, worktree, scope, and
-trust boundary. Any material repair, revision change, scope expansion, or trust
-boundary change invalidates the prior epoch and requires a new final review.
-
-Before proof can close or promotion can begin, record a fresh-review handoff
-with every field below:
-
-- route, review epoch, revision, and worktree state;
-- reviewer assignments with id, role, dispatch context, owned/excluded surfaces,
-  raw artifact ids, and completion status;
-- surface coverage with exactly one owner per surface;
-- commands or evidence sources used;
-- severity-ordered findings keyed to their reviewer and owned surface;
-- strongest falsifier;
-- missed attack surface;
-- authority or evidence gap;
-- recommendation; and
-- exactly one outcome: promote, reopen, or defer-external.
-
-Missing fields, an unknown dispatch context, or a reviewer outcome other than
-the three allowed values means independent review is incomplete and promotion
-must defer. A reviewer status of timeout, tool-failure, or deferred is valid
-only with the defer-external outcome. The handoff records evidence about the
-process; it never delegates readiness, merge, or release authority to the
-reviewer.
-
-Validate the JSON handoff with npm run review:validate -- --file <handoff.json>
-before treating the independent-review gate as complete.
+The minimum reviewer report fields are exactly `surface`, `falsifier`,
+`evidence`, `missed_surface`, `authority_gap`, and `recommendation`, preceded by
+`REVIEWER_REPORT_V1`; evidence must bind to the packet artifact. The minimum
+`reviewerReadiness` fields are canary id, `fork_context=false`, 30-second budget,
+exact sentinel/output, passed/deferred status, closed flag, and agent-bound host
+close evidence. A complete final reviewer assignment in the handoff must also
+carry that exact validated report and host close evidence bound to its
+substantive reviewer id.
 
 ### 3. Attack before repairing
 

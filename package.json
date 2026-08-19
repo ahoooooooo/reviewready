@@ -61,6 +61,7 @@
     "agent:triage": "node scripts/agent-failure.mjs triage --log .reviewready-agent-failures.ndjson",
     "agent:resolve": "node scripts/agent-failure.mjs resolve --log .reviewready-agent-failures.ndjson",
     "review:validate": "node scripts/independent-review-handoff.mjs validate",
+    "research:validate": "node scripts/research-pass.mjs validate",
     "build": "tsc -p tsconfig.build.json",
     "bundle:action": "ncc build src/action.ts -o dist/action --minify --license licenses.txt",
     "bundle": "npm run build && npm run bundle:action",

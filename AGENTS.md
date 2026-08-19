@@ -21,6 +21,10 @@ policy. It never claims code is correct and never approves or merges a PR.
 - `docs/agent-failure-batching.md`: append-only failure recording, stage-boundary
   triage, and batch repair protocol.
 - `scripts/agent-failure.mjs`: local machine-readable failure record/triage tool.
+- `scripts/reviewer-watchdog.mjs`: deterministic reviewer admission and
+  timeout/close lifecycle contract.
+- `scripts/research-pass.mjs`: deterministic raw-source pass, claim handoff
+  validator, and close-once source-pass watchdog.
 - `docs/operational-lessons.md`: recurring integration failures and their
   durable guards; read it before external GitHub/npm operations.
 - `docs/release-evidence-v1.md`: historical local v1 release-candidate verification.
@@ -64,6 +68,26 @@ and never preload all of `docs/`, `src/`, or `test/`.
   ok and one tiny control-plane canary; otherwise do not spawn, record
   defer-external, and repair the Codex host first. A new chat session is not a
   fresh host.
+- Before a substantive reviewer spawn, run one fresh worker-readiness canary
+  with `fork_context=false` and the exact `REVIEWER_CANARY_OK` sentinel. Give it
+  one 30-second budget, save its id, and close it exactly once. Only an exact
+  sentinel plus confirmed closure permits a substantive reviewer; timeout,
+  malformed output, or unconfirmed closure records `defer-external` and stops
+  the round. The control-plane canary alone does not prove worker/report health.
+- Every substantive reviewer gets one named surface and one primary raw
+  artifact by default, plus excluded surfaces, one falsifier, and one question.
+  Only a deliberately approved 120-second read may pair two small artifacts;
+  never give one reviewer a whole-repository scan. Require the `REVIEWER_REPORT_V1`
+  surface/falsifier/evidence/missed-surface/authority-gap/recommendation
+  contract; off-scope or malformed output is incomplete evidence.
+- Use `scripts/reviewer-watchdog.mjs` to validate the worker sentinel, packet
+  binding, terminal timeout, close-once, no-replacement, and the throwing
+  `assertDispatchAllowed()` transition. Record
+  the passed canary and host close evidence in `reviewerReadiness` and validate
+  it with `npm run review:validate` before promotion. A complete final reviewer
+  assignment must also carry its exact validated report and host close evidence
+  bound to that substantive reviewer id; deep completed source assignments carry
+  their validated `RESEARCH_PASS_V1` report.
 - Add `deep-research` only when the user explicitly requests it or a material
   decision needs multi-source current/external evidence. An explicit named-skill
   request always wins; ambiguous scope stays on base and escalates when needed.

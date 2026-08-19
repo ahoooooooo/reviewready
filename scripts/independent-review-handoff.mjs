@@ -5,9 +5,12 @@ import { readFileSync, statSync } from "node:fs";
 import process from "node:process";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { validateReviewerReport } from "./reviewer-watchdog.mjs";
+import { validateResearchPass } from "./research-pass.mjs";
 
 const SCHEMA_VERSION = 2;
 const MAX_TEXT_LENGTH = 4_000;
+const MAX_REPORT_LENGTH = 8_000;
 const MAX_REVIEWERS = 5;
 const ROUTE_CAPS = new Map([
   ["base", 3],
@@ -15,6 +18,9 @@ const ROUTE_CAPS = new Map([
 ]);
 const OUTCOMES = new Set(["promote", "reopen", "defer-external"]);
 const REVIEWER_STATUSES = new Set(["complete", "timeout", "tool-failure", "deferred"]);
+const REVIEWER_READINESS_STATUSES = new Set(["passed", "deferred"]);
+const REVIEWER_CANARY_SENTINEL = "REVIEWER_CANARY_OK";
+const REVIEWER_PACKET_MODES = new Set(["single-artifact", "paired-artifacts"]);
 const SEVERITIES = new Map([
   ["P0", 3],
   ["P1", 2],
@@ -29,6 +35,7 @@ const HANDOFF_FIELDS = new Set([
   "scope",
   "artifacts",
   "evidence",
+  "reviewerReadiness",
   "reviewers",
   "surfaceCoverage",
   "findings",
@@ -46,11 +53,25 @@ const REVIEWER_FIELDS = new Set([
   "excludedSurfaces",
   "artifactIds",
   "artifactBindings",
+  "packetMode",
+  "waitBudgetSeconds",
+  "report",
+  "closeEvidence",
   "status"
 ]);
 const COVERAGE_FIELDS = new Set(["surface", "ownerId"]);
 const FINDING_FIELDS = new Set(["id", "surface", "reviewerId", "severity", "summary"]);
 const ARTIFACT_BINDING_FIELDS = new Set(["artifactId", "sourceLineage", "claimIds"]);
+const REVIEWER_READINESS_FIELDS = new Set([
+  "canaryId",
+  "dispatchContext",
+  "waitBudgetSeconds",
+  "sentinel",
+  "observedOutput",
+  "status",
+  "closed",
+  "closeEvidence"
+]);
 
 /** @typedef {{ artifactId: string, sourceLineage: string[], claimIds: string[] }} ArtifactBinding */
 /**
@@ -62,6 +83,8 @@ const ARTIFACT_BINDING_FIELDS = new Set(["artifactId", "sourceLineage", "claimId
  *   excludedSurfaces: string[],
  *   artifactIds: string[],
  *   artifactBindings: ArtifactBinding[],
+ *   report?: string,
+ *   closeEvidence: string,
  *   status: string
  * }} ReviewerAssignment
  * @typedef {{ reviewers: ReviewerAssignment[], ownedSurfaces: Set<string> }} ReviewerData
@@ -72,9 +95,9 @@ function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** @param {unknown} value @param {string} name */
-function requiredText(value, name) {
-  if (typeof value !== "string" || value.trim().length === 0 || value.length > MAX_TEXT_LENGTH) {
+/** @param {unknown} value @param {string} name @param {number} [maxLength] */
+function requiredText(value, name, maxLength = MAX_TEXT_LENGTH) {
+  if (typeof value !== "string" || value.trim().length === 0 || value.length > maxLength) {
     throw new Error(name + " must be non-empty bounded text");
   }
   return value;
@@ -148,6 +171,90 @@ function requiredArtifactBindings(value, artifactIds, route, index) {
   return bindings;
 }
 
+/** @param {unknown} value */
+function requiredReviewerReadiness(value) {
+  if (!isRecord(value)) throw new Error("reviewerReadiness must be an object");
+  for (const key of Object.keys(value)) {
+    if (!REVIEWER_READINESS_FIELDS.has(key)) {
+      throw new Error("unexpected reviewerReadiness field: " + key);
+    }
+  }
+  const canaryId = requiredText(value.canaryId, "reviewerReadiness.canaryId");
+  const dispatchContext = requiredText(value.dispatchContext, "reviewerReadiness.dispatchContext");
+  if (dispatchContext !== "fork_context=false") {
+    throw new Error("reviewerReadiness must use fork_context=false");
+  }
+  if (
+    typeof value.waitBudgetSeconds !== "number" ||
+    !Number.isInteger(value.waitBudgetSeconds) ||
+    value.waitBudgetSeconds < 1 ||
+    value.waitBudgetSeconds > 30
+  ) {
+    throw new Error("reviewerReadiness.waitBudgetSeconds must be an integer from 1 to 30");
+  }
+  const sentinel = requiredText(value.sentinel, "reviewerReadiness.sentinel");
+  if (sentinel !== REVIEWER_CANARY_SENTINEL) {
+    throw new Error("reviewerReadiness.sentinel is invalid");
+  }
+  const observedOutput = requiredText(value.observedOutput, "reviewerReadiness.observedOutput");
+  const status = requiredText(value.status, "reviewerReadiness.status");
+  if (!REVIEWER_READINESS_STATUSES.has(status)) {
+    throw new Error("reviewerReadiness.status must be passed or deferred");
+  }
+  const closed = value.closed;
+  if (typeof closed !== "boolean") {
+    throw new Error("reviewerReadiness.closed must be boolean");
+  }
+  const closeEvidence = requiredText(value.closeEvidence, "reviewerReadiness.closeEvidence");
+  if (status === "passed" && observedOutput.trim() !== REVIEWER_CANARY_SENTINEL) {
+    throw new Error("passed reviewerReadiness must observe the canary sentinel");
+  }
+  if (!closeEvidence.startsWith("host-close-agent:agent=" + canaryId + ":")) {
+    throw new Error("reviewerReadiness.closeEvidence is not bound to the canary id");
+  }
+  return {
+    canaryId,
+    dispatchContext,
+    waitBudgetSeconds: value.waitBudgetSeconds,
+    sentinel,
+    observedOutput,
+    status,
+    closed,
+    closeEvidence
+  };
+}
+
+/**
+ * @param {unknown} value
+ * @param {string} route
+ * @param {string} role
+ * @param {string[]} ownedSurfaces
+ * @param {string[]} artifactIds
+ * @param {number} index
+ */
+function requiredSubstantiveReport(value, route, role, ownedSurfaces, artifactIds, index) {
+  const report = requiredText(value, "reviewers[" + String(index) + "].report", MAX_REPORT_LENGTH);
+  const validator =
+    route === "deep-research" && role !== "final-review"
+      ? validateResearchPass
+      : validateReviewerReport;
+  let lastError;
+  for (const surface of ownedSurfaces) {
+    try {
+      for (const artifactId of artifactIds) {
+        validator(report, { surface, artifactId });
+      }
+      return report;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw new Error(
+    "reviewer report is invalid: " +
+      (lastError instanceof Error ? lastError.message : "unknown validation error")
+  );
+}
+
 /** @param {unknown} value @param {string} route @returns {ReviewerData} */
 function requiredReviewers(value, route) {
   const maxReviewers = ROUTE_CAPS.get(route) ?? MAX_REVIEWERS;
@@ -189,6 +296,38 @@ function requiredReviewers(value, route) {
         item.artifactIds,
         "reviewers[" + String(index) + "].artifactIds"
       );
+      const packetMode = requiredText(
+        item.packetMode,
+        "reviewers[" + String(index) + "].packetMode"
+      );
+      if (!REVIEWER_PACKET_MODES.has(packetMode)) {
+        throw new Error("reviewers[" + String(index) + "].packetMode is invalid");
+      }
+      const waitBudgetSeconds = item.waitBudgetSeconds;
+      if (
+        typeof waitBudgetSeconds !== "number" ||
+        !Number.isInteger(waitBudgetSeconds) ||
+        waitBudgetSeconds < 1 ||
+        waitBudgetSeconds > 120
+      ) {
+        throw new Error(
+          "reviewers[" + String(index) + "].waitBudgetSeconds must be an integer from 1 to 120"
+        );
+      }
+      if (packetMode === "single-artifact") {
+        if (artifactIds.length !== 1) {
+          throw new Error("single-artifact reviewer packets require exactly one artifact");
+        }
+        if (waitBudgetSeconds > 60) {
+          throw new Error("single-artifact reviewer packets allow at most a 60-second budget");
+        }
+      }
+      if (
+        packetMode === "paired-artifacts" &&
+        (artifactIds.length !== 2 || waitBudgetSeconds !== 120)
+      ) {
+        throw new Error("paired-artifacts packets require two artifacts and a 120-second budget");
+      }
       if (
         route === "deep-research" &&
         artifactIds.some((artifactId) => !artifactId.startsWith("raw:"))
@@ -217,6 +356,21 @@ function requiredReviewers(value, route) {
             "].status must be complete, timeout, tool-failure, or deferred"
         );
       }
+      const closeEvidence = requiredText(
+        item.closeEvidence,
+        "reviewers[" + String(index) + "].closeEvidence"
+      );
+      const closePrefix = "host-close-agent:agent=" + id + ":";
+      if (!closeEvidence.startsWith(closePrefix)) {
+        throw new Error("reviewer close evidence is not bound to reviewer id: " + id);
+      }
+      if (status === "complete" && !closeEvidence.startsWith(closePrefix + "previous_status=")) {
+        throw new Error("complete reviewer close evidence is not host-confirmed: " + id);
+      }
+      const report =
+        status === "complete" && (role === "final-review" || route === "deep-research")
+          ? requiredSubstantiveReport(item.report, route, role, ownedSurfaces, artifactIds, index)
+          : undefined;
       requireUnique(ownedSurfaces, "owned surfaces");
       requireUnique(excludedSurfaces, "excluded surfaces");
       requireUnique(artifactIds, "artifact ids");
@@ -242,6 +396,10 @@ function requiredReviewers(value, route) {
         excludedSurfaces,
         artifactIds,
         artifactBindings,
+        packetMode,
+        waitBudgetSeconds,
+        report,
+        closeEvidence,
         status
       };
     })
@@ -371,6 +529,7 @@ export function validateHandoff(value) {
     throw new Error("deep-research handoff artifacts must be raw");
   }
   const reviewerData = requiredReviewers(value.reviewers, route);
+  const reviewerReadiness = requiredReviewerReadiness(value.reviewerReadiness);
   const artifactSet = new Set(artifacts);
   const assignedArtifacts = /** @type {Set<string>} */ (new Set());
   for (const reviewer of reviewerData.reviewers) {
@@ -391,7 +550,9 @@ export function validateHandoff(value) {
   if (!OUTCOMES.has(outcome)) throw new Error("outcome is invalid");
   if (
     outcome !== "defer-external" &&
-    reviewerData.reviewers.some((reviewer) => reviewer.status !== "complete")
+    (reviewerData.reviewers.some((reviewer) => reviewer.status !== "complete") ||
+      reviewerReadiness.status !== "passed" ||
+      !reviewerReadiness.closed)
   ) {
     throw new Error("incomplete reviewer requires defer-external");
   }
@@ -404,6 +565,7 @@ export function validateHandoff(value) {
     scope: requiredTextList(value.scope, "scope"),
     artifacts,
     evidence: requiredTextList(value.evidence, "evidence"),
+    reviewerReadiness,
     reviewers: reviewerData.reviewers,
     surfaceCoverage,
     findings: requiredFindings(value.findings, reviewerData),

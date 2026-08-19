@@ -2,7 +2,76 @@ import { describe, expect, it } from "vitest";
 
 import { validateHandoff } from "../scripts/independent-review-handoff.mjs";
 
-function validHandoff() {
+const reviewerReport = [
+  "REVIEWER_REPORT_V1",
+  "surface=process-delivery",
+  "falsifier=A fresh reviewer finds a missed process gate.",
+  "evidence=base-skill,process-docs",
+  "missed_surface=product-runtime",
+  "authority_gap=none",
+  "recommendation=promote"
+].join("\n");
+
+const finalReviewReport = reviewerReport
+  .replace("surface=process-delivery", "surface=final-review")
+  .replace("evidence=base-skill,process-docs", "evidence=base-skill,process-docs");
+
+const researchReport = [
+  "RESEARCH_PASS_V1",
+  "surface=research-authority",
+  "sources=raw:source-1",
+  "claim_ids=claim-1",
+  "evidence=raw:source-1:lines=1-2",
+  "counter_case=none",
+  "freshness=2026-08-19; refresh on release change",
+  "outcome=continue"
+].join("\n");
+
+type ReviewerFixture = {
+  id: string;
+  role: string;
+  dispatchContext: string;
+  ownedSurfaces: string[];
+  excludedSurfaces: string[];
+  artifactIds: string[];
+  packetMode: string;
+  waitBudgetSeconds: number;
+  report?: string;
+  closeEvidence: string;
+  artifactBindings?: Array<Record<string, unknown>>;
+  status: string;
+};
+
+type HandoffFixture = {
+  schemaVersion: number;
+  route: string;
+  reviewEpoch: string;
+  revision: string;
+  worktree: string;
+  scope: string[];
+  artifacts: string[];
+  evidence: string[];
+  reviewerReadiness: {
+    canaryId: string;
+    dispatchContext: string;
+    waitBudgetSeconds: number;
+    sentinel: string;
+    observedOutput: string;
+    status: string;
+    closed: boolean;
+    closeEvidence: string;
+  };
+  reviewers: ReviewerFixture[];
+  surfaceCoverage: Array<{ surface: string; ownerId: string }>;
+  findings: Array<Record<string, string>>;
+  strongestFalsifier: string;
+  missedAttackSurface: string;
+  authorityEvidenceGap: string;
+  recommendation: string;
+  outcome: string;
+};
+
+function validHandoff(): HandoffFixture {
   return {
     schemaVersion: 2,
     route: "base",
@@ -12,6 +81,16 @@ function validHandoff() {
     scope: ["process-delivery"],
     artifacts: ["base-skill", "process-docs"],
     evidence: ["git diff --check", "skill validator"],
+    reviewerReadiness: {
+      canaryId: "canary-1",
+      dispatchContext: "fork_context=false",
+      waitBudgetSeconds: 30,
+      sentinel: "REVIEWER_CANARY_OK",
+      observedOutput: "REVIEWER_CANARY_OK",
+      status: "passed",
+      closed: true,
+      closeEvidence: "host-close-agent:agent=canary-1:previous_status=completed"
+    },
     reviewers: [
       {
         id: "reviewer-1",
@@ -20,6 +99,10 @@ function validHandoff() {
         ownedSurfaces: ["process-delivery"],
         excludedSurfaces: ["product-runtime"],
         artifactIds: ["base-skill", "process-docs"],
+        packetMode: "paired-artifacts",
+        waitBudgetSeconds: 120,
+        report: reviewerReport,
+        closeEvidence: "host-close-agent:agent=reviewer-1:previous_status=completed",
         status: "complete"
       }
     ],
@@ -46,9 +129,78 @@ describe("independent review handoff", () => {
     expect(validateHandoff(validHandoff())).toMatchObject({
       schemaVersion: 2,
       reviewEpoch: "epoch-61126ee",
+      reviewerReadiness: { status: "passed", closed: true },
       reviewers: [{ dispatchContext: "fork_context=false", status: "complete" }],
       outcome: "promote"
     });
+  });
+
+  it("requires a real worker canary before substantive review promotion", () => {
+    const missing = validHandoff() as Record<string, unknown>;
+    delete missing.reviewerReadiness;
+    expect(() => validateHandoff(missing)).toThrow("reviewerReadiness");
+
+    const wrongSentinel = validHandoff();
+    wrongSentinel.reviewerReadiness.observedOutput = "READY";
+    expect(() => validateHandoff(wrongSentinel)).toThrow("canary sentinel");
+
+    const missingCloseEvidence = validHandoff();
+    delete (missingCloseEvidence.reviewerReadiness as Record<string, unknown>).closeEvidence;
+    expect(() => validateHandoff(missingCloseEvidence)).toThrow("closeEvidence");
+
+    const wrongCloseEvidence = validHandoff();
+    wrongCloseEvidence.reviewerReadiness.closeEvidence =
+      "host-close-agent:agent=other-canary:previous_status=completed";
+    expect(() => validateHandoff(wrongCloseEvidence)).toThrow("canary id");
+
+    const deferredCanary = validHandoff();
+    deferredCanary.reviewerReadiness.status = "deferred";
+    deferredCanary.reviewerReadiness.closed = false;
+    deferredCanary.outcome = "promote";
+    expect(() => validateHandoff(deferredCanary)).toThrow("incomplete reviewer");
+  });
+
+  it("requires the final report and substantive agent close binding", () => {
+    const missingReport = validHandoff();
+    const missingReportReviewer = missingReport.reviewers[0];
+    if (missingReportReviewer === undefined) throw new Error("test fixture reviewer is missing");
+    delete missingReportReviewer.report;
+    expect(() => validateHandoff(missingReport)).toThrow("report");
+
+    const forgedClose = validHandoff();
+    const forgedCloseReviewer = forgedClose.reviewers[0];
+    if (forgedCloseReviewer === undefined) throw new Error("test fixture reviewer is missing");
+    forgedCloseReviewer.closeEvidence =
+      "host-close-agent:agent=other-reviewer:previous_status=completed";
+    expect(() => validateHandoff(forgedClose)).toThrow("reviewer id");
+
+    const malformedReport = validHandoff();
+    const malformedReportReviewer = malformedReport.reviewers[0];
+    if (malformedReportReviewer === undefined) throw new Error("test fixture reviewer is missing");
+    malformedReportReviewer.report = reviewerReport.replace("REVIEWER_REPORT_V1", "REPORT");
+    expect(() => validateHandoff(malformedReport)).toThrow("reviewer report");
+  });
+
+  it("rejects packet counts and budgets outside the declared mode", () => {
+    const single = validHandoff();
+    const singleReviewer = single.reviewers[0];
+    if (singleReviewer === undefined) throw new Error("test fixture reviewer is missing");
+    singleReviewer.packetMode = "single-artifact";
+    expect(() => validateHandoff(single)).toThrow("single-artifact");
+
+    const paired = validHandoff();
+    const pairedReviewer = paired.reviewers[0];
+    if (pairedReviewer === undefined) throw new Error("test fixture reviewer is missing");
+    pairedReviewer.waitBudgetSeconds = 60;
+    expect(() => validateHandoff(paired)).toThrow("paired-artifacts");
+
+    const singleLong = validHandoff();
+    const singleLongReviewer = singleLong.reviewers[0];
+    if (singleLongReviewer === undefined) throw new Error("test fixture reviewer is missing");
+    singleLongReviewer.packetMode = "single-artifact";
+    singleLongReviewer.artifactIds = ["base-skill"];
+    singleLongReviewer.waitBudgetSeconds = 120;
+    expect(() => validateHandoff(singleLong)).toThrow("60-second budget");
   });
 
   it("rejects missing required evidence fields", () => {
@@ -120,6 +272,9 @@ describe("independent review handoff", () => {
       ownedSurfaces: ["security"],
       excludedSurfaces: ["process-delivery"],
       artifactIds: ["security-docs"],
+      packetMode: "single-artifact",
+      waitBudgetSeconds: 60,
+      closeEvidence: "host-close-agent:agent=reviewer-2:previous_status=completed",
       status: "complete"
     });
     disjoint.surfaceCoverage.push({ surface: "security", ownerId: "reviewer-2" });
@@ -137,6 +292,9 @@ describe("independent review handoff", () => {
       ownedSurfaces: ["process-delivery"],
       excludedSurfaces: [],
       artifactIds: ["security-docs"],
+      packetMode: "single-artifact",
+      waitBudgetSeconds: 60,
+      closeEvidence: "host-close-agent:agent=reviewer-2:previous_status=completed",
       status: "complete"
     });
     expect(() => validateHandoff(overlapping)).toThrow("owned surface");
@@ -159,6 +317,9 @@ describe("independent review handoff", () => {
         ownedSurfaces: [surface],
         excludedSurfaces: [],
         artifactIds: ["artifact-" + String(index)],
+        packetMode: "single-artifact",
+        waitBudgetSeconds: 60,
+        closeEvidence: "host-close-agent:agent=" + reviewerId + ":previous_status=completed",
         status: "complete"
       });
       tooMany.surfaceCoverage.push({ surface, ownerId: reviewerId });
@@ -173,6 +334,9 @@ describe("independent review handoff", () => {
     const reviewer = reviewers[0];
     if (reviewer === undefined) throw new Error("test fixture reviewer is missing");
     reviewer.artifactIds = ["unlisted-artifact"];
+    reviewer.packetMode = "single-artifact";
+    reviewer.waitBudgetSeconds = 60;
+    reviewer.report = reviewerReport.replace("base-skill,process-docs", "unlisted-artifact");
 
     expect(() => validateHandoff(unlisted)).toThrow("not listed");
   });
@@ -208,6 +372,9 @@ describe("independent review handoff", () => {
       ownedSurfaces: ["security"],
       excludedSurfaces: ["process-delivery"],
       artifactIds: ["base-skill"],
+      packetMode: "single-artifact",
+      waitBudgetSeconds: 60,
+      closeEvidence: "host-close-agent:agent=reviewer-2:previous_status=completed",
       status: "complete"
     });
     duplicate.surfaceCoverage.push({ surface: "security", ownerId: "reviewer-2" });
@@ -218,6 +385,10 @@ describe("independent review handoff", () => {
       ownedSurfaces: ["final-review"],
       excludedSurfaces: [],
       artifactIds: ["base-skill", "process-docs"],
+      packetMode: "paired-artifacts",
+      waitBudgetSeconds: 120,
+      report: finalReviewReport,
+      closeEvidence: "host-close-agent:agent=final-reviewer:previous_status=completed",
       status: "complete"
     });
     duplicate.surfaceCoverage.push({ surface: "final-review", ownerId: "final-reviewer" });
@@ -232,6 +403,10 @@ describe("independent review handoff", () => {
       ownedSurfaces: ["final-review"],
       excludedSurfaces: [],
       artifactIds: ["base-skill", "process-docs"],
+      packetMode: "paired-artifacts",
+      waitBudgetSeconds: 120,
+      report: finalReviewReport,
+      closeEvidence: "host-close-agent:agent=reviewer-2:previous_status=completed",
       status: "complete"
     });
     duplicateFinal.surfaceCoverage.push({ surface: "final-review", ownerId: "reviewer-2" });
@@ -265,6 +440,10 @@ describe("independent review handoff", () => {
         ownedSurfaces: ["research-authority"],
         excludedSurfaces: [],
         artifactIds: ["raw:source-1"],
+        packetMode: "single-artifact",
+        waitBudgetSeconds: 60,
+        report: researchReport,
+        closeEvidence: "host-close-agent:agent=researcher-1:previous_status=completed",
         artifactBindings: [
           {
             artifactId: "raw:source-1",
@@ -287,6 +466,10 @@ describe("independent review handoff", () => {
       ownedSurfaces: ["final-review"],
       excludedSurfaces: [],
       artifactIds: ["raw:source-1"],
+      packetMode: "single-artifact",
+      waitBudgetSeconds: 60,
+      report: finalReviewReport.replace("base-skill,process-docs", "raw:source-1"),
+      closeEvidence: "host-close-agent:agent=final-reviewer:previous_status=completed",
       artifactBindings: [
         {
           artifactId: "raw:source-1",
@@ -320,6 +503,7 @@ describe("independent review handoff", () => {
         {
           ...deepReviewers[0],
           artifactIds: ["raw:unlisted-source"],
+          report: researchReport.replaceAll("raw:source-1", "raw:unlisted-source"),
           artifactBindings: [
             {
               artifactId: "raw:unlisted-source",
@@ -376,6 +560,13 @@ describe("independent review handoff", () => {
         ownedSurfaces: [surface],
         excludedSurfaces: [],
         artifactIds: [artifactId],
+        packetMode: "single-artifact",
+        waitBudgetSeconds: 60,
+        report: researchReport
+          .replace("research-authority", surface)
+          .replaceAll("raw:source-1", artifactId)
+          .replace("claim-1", "claim-" + String(index)),
+        closeEvidence: "host-close-agent:agent=" + reviewerId + ":previous_status=completed",
         artifactBindings: [
           {
             artifactId,

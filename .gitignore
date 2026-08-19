@@ -11,6 +11,7 @@ coverage/
 .reviewready-npm-cache/
 .codex/hooks.json
 .codex/hooks/
+.codex/workspace-handoff.md
 test/codex-hook.test.ts
 *.log
 .DS_Store

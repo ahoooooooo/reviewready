@@ -1,4 +1,4 @@
 interface:
   display_name: "ReviewReady Deep Research"
   short_description: "Adversarial research with traceable evidence"
-  default_prompt: "Use $reviewready-deep-research to investigate this decision with primary sources, counter-evidence, and a safe handoff."
+  default_prompt: "Use $reviewready-deep-research over the base process with primary sources, counter-evidence, validated RESEARCH_PASS_V1 source passes, and a freshness-aware handoff."
