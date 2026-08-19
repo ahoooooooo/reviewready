@@ -57,10 +57,13 @@ and never preload all of `docs/`, `src/`, or `test/`.
 - Save every agent id and automatically call the host close-agent control after
   completion, timeout, interruption, or error. Never ask the user to close a
   subagent in the UI; if closure cannot be confirmed, stop dispatching.
-- Before any reviewer spawn, run `codex.cmd --strict-config doctor --json`.
-  If Codex auth, reachability, WebSocket, active-rollout, or thread-control
-  checks fail, do not spawn; record defer-external and repair the Codex host
-  first. A new chat session is not a fresh host.
+- Before any reviewer spawn, run `codex.cmd --strict-config doctor --json`
+  in the approved connected/elevated host context used by scheduling, not the
+  restricted sandbox. A sandbox-only no-credentials result is a context
+  boundary, not the app-host authority result. Require elevated doctor overall
+  ok and one tiny control-plane canary; otherwise do not spawn, record
+  defer-external, and repair the Codex host first. A new chat session is not a
+  fresh host.
 - Add `deep-research` only when the user explicitly requests it or a material
   decision needs multi-source current/external evidence. An explicit named-skill
   request always wins; ambiguous scope stays on base and escalates when needed.

@@ -84,7 +84,10 @@ closure cannot be confirmed, stop dispatching until the agent control plane is
 healthy.
 
 Before any reviewer spawn, run `codex.cmd --strict-config doctor --json`
-once for the current host. Failed Codex auth, reachability, WebSocket,
+once in the approved connected/elevated host context used by scheduling, not
+the restricted sandbox. A sandbox-only no-credentials result is a context
+boundary, not the app-host authority result. Require elevated doctor overall ok
+and one tiny control-plane canary. Failed elevated auth, reachability, WebSocket,
 active-rollout, or thread-control checks are a control-plane blocker: do not
 spawn an agent, record defer-external, and repair the app host first. Opening a
 new chat does not create a new host.

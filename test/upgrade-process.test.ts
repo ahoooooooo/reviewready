@@ -128,9 +128,12 @@ describe("open-source upgrade process contract", () => {
     expect(base).toContain("automatically invoke the host close-agent control");
     expect(base).toContain("never ask the user to close it in the UI");
     expect(base).toContain("codex.cmd --strict-config doctor --json");
-    expect(base).toContain("a new chat session");
+    expect(base).toContain("approved");
+    expect(base).toContain("connected/elevated host context");
+    expect(base).toContain("sandbox-only no-credentials");
+    expect(base).toMatch(/new\s+chat\s+session/u);
     expect(guide).toContain("Before any reviewer spawn");
-    expect(guide).toContain("A new chat session is not a fresh host");
+    expect(guide).toMatch(/new\s+chat\s+session\s+is\s+not\s+a\s+fresh\s+host/u);
     expect(development).toContain("first operation in a bounded");
     expect(development).toContain("silent timeout is terminal");
     expect(lessons).toContain("Bounded external lane and nested npm execution");
@@ -139,6 +142,7 @@ describe("open-source upgrade process contract", () => {
     expect(lessons).toContain("pre-dispatch tool failure");
     expect(lessons).toContain("host close-agent control");
     expect(lessons).toContain("control-plane blocker");
+    expect(lessons).toContain("elevated host context");
     expect(adr).toContain("bounded external batch");
     expect(adr).toContain("connected/elevated lane");
     expect(implementation).toContain('ghCli: "forbidden"');

@@ -156,12 +156,15 @@ quietly widening scope.
 ### 2.1 Dispatch an independent reviewer when the route requires it
 
 Before spawning any reviewer, run the one-time control-plane preflight
-`codex.cmd --strict-config doctor --json` for the current host. If it
-exits non-zero, reports failed Codex auth/reachability/WebSocket checks, stale
-active rollouts, or an unavailable thread-control service, do not spawn an
-agent. Record the environment failure and defer-external; a new chat session
-does not count as a fresh host. Do not retry the doctor or reviewer in the same
-host until the Codex app/control plane is repaired.
+`codex.cmd --strict-config doctor --json` in the approved
+connected/elevated host context used by scheduling, not inside the restricted
+sandbox. A sandbox-only no-credentials or reachability result is a context
+boundary, not the authority result for the app host. Require the elevated doctor
+to report overall ok, then run one tiny control-plane canary and close it.
+If the elevated doctor or canary fails, reports stale active rollouts, or cannot
+confirm thread control, do not spawn a reviewer. Record defer-external; a new
+chat session does not count as a fresh host. Do not retry in the same host until
+the Codex app/control plane is repaired.
 
 For process-self-optimization, promotion, consequential, public/release,
 full-project or full-worktree requests, and any explicit independent-review
