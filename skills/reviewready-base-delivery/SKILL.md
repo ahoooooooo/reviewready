@@ -192,6 +192,11 @@ Use a two-wave adaptive scheduler:
   reviewer never started and the round budget remains.
 - A failed or partial reviewer is incomplete evidence, never a reason to treat
   surviving reports as complete.
+- Store each dispatched agent id. On completion, timeout, interruption, or
+  error, automatically invoke the host close-agent control exactly once before
+  any next dispatch; never ask the user to close it in the UI. If closure
+  cannot be confirmed, stop dispatching and mark the agent control plane
+  unavailable.
 - Stop when all material surfaces are covered and another report would not
   change the claim or defect map. Do not use majority agreement, low confidence,
   or agent count as a stop condition.

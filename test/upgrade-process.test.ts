@@ -125,12 +125,15 @@ describe("open-source upgrade process contract", () => {
     expect(base).toContain("REVIEWREADY_NPM_CACHE");
     expect(base).toContain("Treat a silent timeout as terminal");
     expect(base).toContain("60 seconds by default");
+    expect(base).toContain("automatically invoke the host close-agent control");
+    expect(base).toContain("never ask the user to close it in the UI");
     expect(development).toContain("first operation in a bounded");
     expect(development).toContain("silent timeout is terminal");
     expect(lessons).toContain("Bounded external lane and nested npm execution");
     expect(lessons).toContain("REVIEWREADY_NPM_CACHE");
     expect(lessons).toContain("Reviewer watchdog");
     expect(lessons).toContain("pre-dispatch tool failure");
+    expect(lessons).toContain("host close-agent control");
     expect(adr).toContain("bounded external batch");
     expect(adr).toContain("connected/elevated lane");
     expect(implementation).toContain('ghCli: "forbidden"');

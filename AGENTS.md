@@ -54,6 +54,9 @@ and never preload all of `docs/`, `src/`, or `test/`.
 - Reviewer watchdog: give a report-only reviewer one bounded wait budget; a
   silent timeout is terminal for the round and yields defer-external. Do not
   keep polling or replace a reviewer solely because it timed out.
+- Save every agent id and automatically call the host close-agent control after
+  completion, timeout, interruption, or error. Never ask the user to close a
+  subagent in the UI; if closure cannot be confirmed, stop dispatching.
 - Add `deep-research` only when the user explicitly requests it or a material
   decision needs multi-source current/external evidence. An explicit named-skill
   request always wins; ambiguous scope stays on base and escalates when needed.

@@ -77,6 +77,12 @@ defer-external handoff. Do not poll indefinitely or launch a replacement solely
 because the reviewer timed out; reserve one replacement for an explicit
 pre-dispatch tool failure where the reviewer never started.
 
+Agent ids are lifecycle handles, not disposable notes. Save each id at dispatch
+and invoke the host close-agent control exactly once after completion, timeout,
+interruption, or error. Never make the user clean up a subagent in the UI. If
+closure cannot be confirmed, stop dispatching until the agent control plane is
+healthy.
+
 ## 2026-08-17: malformed repository target during PR monitoring
 
 While monitoring PR #84, the former GitHub CLI path accepted a mistyped owner,
