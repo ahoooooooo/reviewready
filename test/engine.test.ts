@@ -296,16 +296,18 @@ rules:
     ).toBe("missing");
   });
 
-  it.each(["## Testing\n[](#)", "## Testing\n[<!-- hidden -->](https://example.test)"])(
-    "does not count empty Markdown markers as visible section content",
-    (body) => {
-      const result = evaluate(policy, input({ body }));
+  it.each([
+    "## Testing\n[](#)",
+    "## Testing\n[<!-- hidden -->](https://example.test)",
+    "## Testing\n[&#8203;](https://example.org)",
+    "## Testing\n[](foo(and(bar)))"
+  ])("does not count empty Markdown markers as visible section content", (body) => {
+    const result = evaluate(policy, input({ body }));
 
-      expect(
-        result.requirements.find((requirement) => requirement.type === "pr_body_section")?.status
-      ).toBe("missing");
-    }
-  );
+    expect(
+      result.requirements.find((requirement) => requirement.type === "pr_body_section")?.status
+    ).toBe("missing");
+  });
 
   it("ignores headings and attestations inside fenced code blocks", () => {
     const result = evaluate(
@@ -357,6 +359,18 @@ rules:
       expectedAttestation: "missing"
     },
     {
+      name: "named function-application HTML entity",
+      body: "## Testing\n&af;",
+      expectedSection: "missing",
+      expectedAttestation: "missing"
+    },
+    {
+      name: "named invisible MathML entity aliases",
+      body: "## Testing\n&it; &ic; &nmedium; &nthick; &nthin; &nverythin;",
+      expectedSection: "missing",
+      expectedAttestation: "missing"
+    },
+    {
       name: "invisible HTML entity cannot create a heading marker",
       body: "#&#8203;# Testing\nTests passed.",
       expectedSection: "missing",
@@ -377,6 +391,12 @@ rules:
         "- [x] I understand this change.",
         "</div>"
       ].join("\n"),
+      expectedSection: "missing",
+      expectedAttestation: "missing"
+    },
+    {
+      name: "unclosed raw HTML after visible evidence",
+      body: ["## Testing", "Tests passed.", "<div>"].join("\n"),
       expectedSection: "missing",
       expectedAttestation: "missing"
     },

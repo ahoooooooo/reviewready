@@ -100,7 +100,7 @@ const voidHtmlTags = new Set([
   "wbr"
 ]);
 
-function updateRawHtmlTags(line: string, stack: string[]): void {
+function updateRawHtmlTags(line: string, tags: Map<string, number>): void {
   for (const match of line.matchAll(htmlTagPattern)) {
     const tag = match[1]?.toLocaleLowerCase("en-US");
     const rawTag = match[0];
@@ -108,14 +108,16 @@ function updateRawHtmlTags(line: string, stack: string[]): void {
       continue;
     }
     if (rawTag.startsWith("</")) {
-      const index = stack.lastIndexOf(tag);
-      if (index >= 0) {
-        stack.splice(index, 1);
+      const count = tags.get(tag);
+      if (count === undefined) {
+        continue;
       }
+      if (count === 1) tags.delete(tag);
+      else tags.set(tag, count - 1);
       continue;
     }
     if (!rawTag.endsWith("/>") && !voidHtmlTags.has(tag)) {
-      stack.push(tag);
+      tags.set(tag, (tags.get(tag) ?? 0) + 1);
     }
   }
 }
@@ -128,6 +130,7 @@ function isInvisibleCodePoint(codePoint: number): boolean {
 }
 
 const invisibleHtmlEntityNames = new Set([
+  "af",
   "applyfunction",
   "bom",
   "emsp",
@@ -136,9 +139,11 @@ const invisibleHtmlEntityNames = new Set([
   "feff",
   "functionapplication",
   "hairsp",
+  "ic",
   "invisiblecomma",
   "invisibleseparator",
   "invisibletimes",
+  "it",
   "mediumspace",
   "nobreak",
   "nbsp",
@@ -146,8 +151,12 @@ const invisibleHtmlEntityNames = new Set([
   "negativethickspace",
   "negativethinspace",
   "negativeverythinspace",
+  "nmedium",
   "newline",
   "numsp",
+  "nthick",
+  "nthin",
+  "nverythin",
   "puncsp",
   "shy",
   "tab",
@@ -184,7 +193,7 @@ function visibleMarkdownLines(body: string): string[] | undefined {
   const visible: string[] = [];
   let fence: MarkdownFence | undefined;
   let htmlComment = false;
-  const rawHtmlTags: string[] = [];
+  const rawHtmlTags = new Map<string, number>();
   let linkReferenceContinuation = false;
 
   for (const rawLine of body.split(/\r?\n/u)) {
@@ -195,7 +204,7 @@ function visibleMarkdownLines(body: string): string[] | undefined {
       continue;
     }
 
-    if (rawHtmlTags.length > 0 || rawHtmlBlockStartPattern.test(rawLine)) {
+    if (rawHtmlTags.size > 0 || rawHtmlBlockStartPattern.test(rawLine)) {
       updateRawHtmlTags(rawLine, rawHtmlTags);
       continue;
     }
@@ -247,7 +256,7 @@ function visibleMarkdownLines(body: string): string[] | undefined {
     }
   }
 
-  return htmlComment || rawHtmlTags.length > 0 ? undefined : visible;
+  return htmlComment || rawHtmlTags.size > 0 ? undefined : visible;
 }
 
 interface MarkdownHeading {
@@ -258,8 +267,67 @@ interface MarkdownHeading {
 const headingPattern = /^\s{0,3}(#{1,6})[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$/u;
 const visibleMarkdownTextPattern = /[^\p{White_Space}\p{Control}\p{Format}\p{Mark}]/u;
 const indentedCodePattern = /^(?: {4}|\t)/u;
-const emptyInlineMarkdownLinkPattern = /!?\[\s*\]\((?:\\.|[^()\\r\\n]|\([^()\\r\\n]*\))*\)/gu;
 const emptyReferenceMarkdownLinkPattern = /!?\[\s*\]\[[^\]\r\n]*\]/gu;
+const markdownWhitespacePattern = /\s/u;
+
+function emptyInlineLinkEnd(value: string, openIndex: number): number | undefined {
+  let depth = 1;
+  for (let index = openIndex; index < value.length; index += 1) {
+    const character = value[index];
+    if (character === "\r" || character === "\n") {
+      return undefined;
+    }
+    if (character === "\\") {
+      if (index + 1 >= value.length) {
+        return undefined;
+      }
+      index += 1;
+      continue;
+    }
+    if (character === "(") {
+      depth += 1;
+    } else if (character === ")") {
+      depth -= 1;
+      if (depth === 0) {
+        return index + 1;
+      }
+    }
+  }
+  return undefined;
+}
+
+function stripEmptyInlineMarkdownLinks(value: string): string {
+  const pieces: string[] = [];
+  let cursor = 0;
+  let index = 0;
+  while (index < value.length) {
+    const image = value[index] === "!" && value[index + 1] === "[";
+    const opening = image ? index + 1 : value[index] === "[" ? index : -1;
+    if (opening < 0) {
+      index += 1;
+      continue;
+    }
+
+    let labelEnd = opening + 1;
+    while (labelEnd < value.length && markdownWhitespacePattern.test(value[labelEnd] ?? "")) {
+      labelEnd += 1;
+    }
+    if (value[labelEnd] !== "]" || value[labelEnd + 1] !== "(") {
+      index = opening + 1;
+      continue;
+    }
+
+    const end = emptyInlineLinkEnd(value, labelEnd + 2);
+    if (end === undefined) {
+      break;
+    }
+    pieces.push(value.slice(cursor, image ? opening - 1 : opening));
+    cursor = end;
+    index = end;
+  }
+  pieces.push(value.slice(cursor));
+  return pieces.join("");
+}
 
 function markdownHeading(line: string): MarkdownHeading | undefined {
   const match = headingPattern.exec(line);
@@ -278,9 +346,9 @@ function hasVisibleMarkdownText(line: string): boolean {
   if (indentedCodePattern.test(line)) {
     return false;
   }
-  const withoutEmptyMarkdownMarkers = stripInvisibleHtmlEntities(line)
-    .replace(emptyInlineMarkdownLinkPattern, "")
-    .replace(emptyReferenceMarkdownLinkPattern, "");
+  const withoutEmptyMarkdownMarkers = stripEmptyInlineMarkdownLinks(
+    stripInvisibleHtmlEntities(line)
+  ).replace(emptyReferenceMarkdownLinkPattern, "");
   return visibleMarkdownTextPattern.test(withoutEmptyMarkdownMarkers);
 }
 
