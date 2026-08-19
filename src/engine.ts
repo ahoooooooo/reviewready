@@ -270,9 +270,37 @@ const indentedCodePattern = /^(?: {4}|\t)/u;
 const emptyReferenceMarkdownLinkPattern = /!?\[\s*\]\[[^\]\r\n]*\]/gu;
 const markdownWhitespacePattern = /\s/u;
 
-function emptyInlineLinkEnd(value: string, openIndex: number): number | undefined {
-  let depth = 1;
-  for (let index = openIndex; index < value.length; index += 1) {
+function skipMarkdownWhitespace(value: string, start: number): number {
+  let index = start;
+  while (index < value.length && markdownWhitespacePattern.test(value[index] ?? "")) {
+    index += 1;
+  }
+  return index;
+}
+
+function quotedLinkTitleEnd(value: string, start: number, quote: string): number | undefined {
+  for (let index = start + 1; index < value.length; index += 1) {
+    const character = value[index];
+    if (character === "\r" || character === "\n") {
+      return undefined;
+    }
+    if (character === "\\") {
+      if (index + 1 >= value.length) {
+        return undefined;
+      }
+      index += 1;
+      continue;
+    }
+    if (character === quote) {
+      return index + 1;
+    }
+  }
+  return undefined;
+}
+
+function parenthesizedLinkTitleEnd(value: string, start: number): number | undefined {
+  let depth = 0;
+  for (let index = start; index < value.length; index += 1) {
     const character = value[index];
     if (character === "\r" || character === "\n") {
       return undefined;
@@ -291,6 +319,83 @@ function emptyInlineLinkEnd(value: string, openIndex: number): number | undefine
       if (depth === 0) {
         return index + 1;
       }
+    }
+  }
+  return undefined;
+}
+
+function linkEndAfterWhitespace(value: string, start: number): number | undefined {
+  const index = skipMarkdownWhitespace(value, start);
+  if (value[index] === ")") {
+    return index + 1;
+  }
+  const titleQuote = value[index];
+  let titleEnd: number | undefined;
+  if (titleQuote === '"') {
+    titleEnd = quotedLinkTitleEnd(value, index, '"');
+  } else if (titleQuote === "'") {
+    titleEnd = quotedLinkTitleEnd(value, index, "'");
+  } else if (titleQuote === "(") {
+    titleEnd = parenthesizedLinkTitleEnd(value, index);
+  }
+  if (titleEnd === undefined) {
+    return undefined;
+  }
+  const closing = skipMarkdownWhitespace(value, titleEnd);
+  return value[closing] === ")" ? closing + 1 : undefined;
+}
+
+function emptyInlineLinkEnd(value: string, openIndex: number): number | undefined {
+  let index = openIndex + 1;
+  if (value[index] === "<") {
+    const angleStart = index + 1;
+    for (index = angleStart; index < value.length; index += 1) {
+      const character = value[index];
+      if (character === "\r" || character === "\n") {
+        return undefined;
+      }
+      if (character === "\\") {
+        if (index + 1 >= value.length) {
+          return undefined;
+        }
+        index += 1;
+        continue;
+      }
+      if (character === "<") {
+        return undefined;
+      }
+      if (character === ">") {
+        return index === angleStart ? undefined : linkEndAfterWhitespace(value, index + 1);
+      }
+    }
+    return undefined;
+  }
+
+  let depth = 0;
+  for (; index < value.length; index += 1) {
+    const character = value[index];
+    if (character === undefined) {
+      return undefined;
+    }
+    if (character === "\r" || character === "\n") {
+      return undefined;
+    }
+    if (character === "\\") {
+      if (index + 1 >= value.length) {
+        return undefined;
+      }
+      index += 1;
+      continue;
+    }
+    if (character === "(") {
+      depth += 1;
+    } else if (character === ")") {
+      if (depth === 0) {
+        return index + 1;
+      }
+      depth -= 1;
+    } else if (depth === 0 && markdownWhitespacePattern.test(character)) {
+      return linkEndAfterWhitespace(value, index);
     }
   }
   return undefined;
@@ -317,7 +422,7 @@ function stripEmptyInlineMarkdownLinks(value: string): string {
       continue;
     }
 
-    const end = emptyInlineLinkEnd(value, labelEnd + 2);
+    const end = emptyInlineLinkEnd(value, labelEnd + 1);
     if (end === undefined) {
       break;
     }
