@@ -234,6 +234,20 @@ describe("independent review handoff", () => {
     singleLongReviewer.artifactIds = ["base-skill"];
     singleLongReviewer.waitBudgetSeconds = 120;
     expect(() => validateHandoff(singleLong)).toThrow("60-second budget");
+
+    const lunaLong = validHandoff();
+    const lunaLongReviewer = lunaLong.reviewers[0];
+    if (lunaLongReviewer === undefined) throw new Error("test fixture reviewer is missing");
+    lunaLongReviewer.packetMode = "luna-max-long-read";
+    lunaLongReviewer.waitBudgetSeconds = 180;
+    expect(validateHandoff(lunaLong).reviewers[0]?.waitBudgetSeconds).toBe(180);
+
+    const lunaWrongBudget = validHandoff();
+    const lunaWrongReviewer = lunaWrongBudget.reviewers[0];
+    if (lunaWrongReviewer === undefined) throw new Error("test fixture reviewer is missing");
+    lunaWrongReviewer.packetMode = "luna-max-long-read";
+    lunaWrongReviewer.waitBudgetSeconds = 120;
+    expect(() => validateHandoff(lunaWrongBudget)).toThrow("180-second budget");
   });
 
   it("rejects missing required evidence fields", () => {

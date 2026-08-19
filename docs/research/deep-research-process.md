@@ -288,7 +288,8 @@ defer-external, not self-review.
 The final independent reviewer still uses the base worker-readiness canary,
 one-primary-artifact packet by default, exact `REVIEWER_REPORT_V1` output, the
 LUNA MAX reviewer profile (`model=gpt-5.6-luna`, `reasoning_effort=max`),
-reviewer watchdog, structured host-close proof
+reviewer watchdog, and—only after a recorded 120-second LUNA MAX timeout—the
+explicit `luna-max-long-read` 180-second paired profile; structured host-close proof
 (`source`, `agentId`, `previousStatus`, `closed`), and `reviewerReadiness` handoff
 evidence. Source-pass reports cannot satisfy the final reviewer gate.
 

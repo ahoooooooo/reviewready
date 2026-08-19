@@ -82,6 +82,8 @@ and never preload all of `docs/`, `src/`, or `test/`.
 - Every substantive reviewer gets one named surface and one primary raw
   artifact by default, plus excluded surfaces, one falsifier, and one question.
   Only a deliberately approved 120-second read may pair two small artifacts;
+  after a recorded 120-second LUNA MAX timeout, only the explicit
+  `luna-max-long-read` profile may pair two artifacts at 180 seconds;
   never give one reviewer a whole-repository scan. Require the `REVIEWER_REPORT_V1`
   surface/falsifier/evidence/missed-surface/authority-gap/recommendation
   contract; off-scope or malformed output is incomplete evidence.

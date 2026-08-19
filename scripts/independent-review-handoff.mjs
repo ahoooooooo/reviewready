@@ -20,7 +20,11 @@ const OUTCOMES = new Set(["promote", "reopen", "defer-external"]);
 const REVIEWER_STATUSES = new Set(["complete", "timeout", "tool-failure", "deferred"]);
 const REVIEWER_READINESS_STATUSES = new Set(["passed", "deferred"]);
 const REVIEWER_CANARY_SENTINEL = "REVIEWER_CANARY_OK";
-const REVIEWER_PACKET_MODES = new Set(["single-artifact", "paired-artifacts"]);
+const REVIEWER_PACKET_MODES = new Set([
+  "single-artifact",
+  "paired-artifacts",
+  "luna-max-long-read"
+]);
 const SEVERITIES = new Map([
   ["P0", 3],
   ["P1", 2],
@@ -84,6 +88,8 @@ const REVIEWER_READINESS_FIELDS = new Set([
  *   excludedSurfaces: string[],
  *   artifactIds: string[],
  *   artifactBindings: ArtifactBinding[],
+ *   packetMode: string,
+ *   waitBudgetSeconds: number,
  *   report?: string,
  *   closeEvidence: CloseEvidence,
  *   status: string
@@ -318,10 +324,10 @@ function requiredReviewers(value, route) {
         typeof waitBudgetSeconds !== "number" ||
         !Number.isInteger(waitBudgetSeconds) ||
         waitBudgetSeconds < 1 ||
-        waitBudgetSeconds > 120
+        waitBudgetSeconds > 180
       ) {
         throw new Error(
-          "reviewers[" + String(index) + "].waitBudgetSeconds must be an integer from 1 to 120"
+          "reviewers[" + String(index) + "].waitBudgetSeconds must be an integer from 1 to 180"
         );
       }
       if (packetMode === "single-artifact") {
@@ -337,6 +343,12 @@ function requiredReviewers(value, route) {
         (artifactIds.length !== 2 || waitBudgetSeconds !== 120)
       ) {
         throw new Error("paired-artifacts packets require two artifacts and a 120-second budget");
+      }
+      if (
+        packetMode === "luna-max-long-read" &&
+        (artifactIds.length !== 2 || waitBudgetSeconds !== 180)
+      ) {
+        throw new Error("luna-max-long-read packets require two artifacts and a 180-second budget");
       }
       if (
         route === "deep-research" &&
