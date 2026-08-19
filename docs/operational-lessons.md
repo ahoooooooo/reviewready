@@ -83,6 +83,12 @@ interruption, or error. Never make the user clean up a subagent in the UI. If
 closure cannot be confirmed, stop dispatching until the agent control plane is
 healthy.
 
+Before any reviewer spawn, run `codex.cmd --strict-config doctor --json`
+once for the current host. Failed Codex auth, reachability, WebSocket,
+active-rollout, or thread-control checks are a control-plane blocker: do not
+spawn an agent, record defer-external, and repair the app host first. Opening a
+new chat does not create a new host.
+
 ## 2026-08-17: malformed repository target during PR monitoring
 
 While monitoring PR #84, the former GitHub CLI path accepted a mistyped owner,
