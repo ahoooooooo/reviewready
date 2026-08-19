@@ -248,12 +248,14 @@ function requiredSubstantiveReport(value, route, role, ownedSurfaces, artifactId
     route === "deep-research" && role !== "final-review"
       ? validateResearchPass
       : validateReviewerReport;
+  const primaryArtifactId = artifactIds[0];
+  if (primaryArtifactId === undefined) {
+    throw new Error("reviewer report packet has no primary artifact");
+  }
   let lastError;
   for (const surface of ownedSurfaces) {
     try {
-      for (const artifactId of artifactIds) {
-        validator(report, { surface, artifactId });
-      }
+      validator(report, { surface, artifactId: primaryArtifactId });
       return report;
     } catch (error) {
       lastError = error;

@@ -6,15 +6,16 @@ const reviewerReport = [
   "REVIEWER_REPORT_V1",
   "surface=process-delivery",
   "falsifier=A fresh reviewer finds a missed process gate.",
-  "evidence=base-skill,process-docs",
+  "evidence=base-skill",
   "missed_surface=product-runtime",
   "authority_gap=none",
   "recommendation=promote"
 ].join("\n");
 
-const finalReviewReport = reviewerReport
-  .replace("surface=process-delivery", "surface=final-review")
-  .replace("evidence=base-skill,process-docs", "evidence=base-skill,process-docs");
+const finalReviewReport = reviewerReport.replace(
+  "surface=process-delivery",
+  "surface=final-review"
+);
 
 const researchReport = [
   "RESEARCH_PASS_V1",
@@ -383,7 +384,7 @@ describe("independent review handoff", () => {
     reviewer.artifactIds = ["unlisted-artifact"];
     reviewer.packetMode = "single-artifact";
     reviewer.waitBudgetSeconds = 60;
-    reviewer.report = reviewerReport.replace("base-skill,process-docs", "unlisted-artifact");
+    reviewer.report = reviewerReport.replace("base-skill", "unlisted-artifact");
 
     expect(() => validateHandoff(unlisted)).toThrow("not listed");
   });
@@ -526,7 +527,7 @@ describe("independent review handoff", () => {
       artifactIds: ["raw:source-1"],
       packetMode: "single-artifact",
       waitBudgetSeconds: 60,
-      report: finalReviewReport.replace("base-skill,process-docs", "raw:source-1"),
+      report: finalReviewReport.replace("base-skill", "raw:source-1"),
       closeEvidence: closeEvidence("final-reviewer"),
       artifactBindings: [
         {
