@@ -154,8 +154,8 @@ describe("open-source upgrade process contract", () => {
     expect(reviewerContract).toContain("REVIEWER_CANARY_OK");
     expect(reviewerContract).toContain("30-second budget");
     expect(reviewerContract).toContain("one primary raw artifact");
-    expect(reviewerContract).toContain("default agent");
-    expect(reviewerContract).toContain("reasoning_effort=medium");
+    expect(reviewerContract).toContain("model=gpt-5.6-luna");
+    expect(reviewerContract).toContain("reasoning_effort=max");
     expect(reviewerContract).toContain("structured substantive-agent");
     expect(reviewerContract).toContain("integrator owns the broad baseline");
     expect(reviewerContract).toMatch(/deliberately approved\s+120-second read/u);

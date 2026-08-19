@@ -175,5 +175,14 @@ describe("reviewer watchdog", () => {
     });
     watchdog.timeout();
     await expect(watchdog.close()).rejects.toThrow("agent id");
+
+    const unknownStatus = createReviewerWatchdog({
+      agentId: "agent-5",
+      surface: "public-surface",
+      artifactId: "package.json",
+      closeAgent: hostClose("invented", true)
+    });
+    unknownStatus.timeout();
+    await expect(unknownStatus.close()).rejects.toThrow("known host status");
   });
 });

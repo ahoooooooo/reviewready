@@ -204,11 +204,10 @@ control; it does not prove that a reviewer worker can execute and return a
 report. If the worker canary times out, returns malformed output, or cannot be
 closed, record `defer-external` and do not dispatch the larger review.
 
-Normal bounded reviewers use a fresh default agent with
-`fork_context=false` and `reasoning_effort=medium`; reserve the fixed
-high-reasoning reviewer role for an explicitly approved long read. This is a
-latency routing choice only: exact report, watchdog, close, and handoff gates
-remain unchanged.
+Every subagent uses `model=gpt-5.6-luna` and `reasoning_effort=max`. Normal
+bounded reviewers use a fresh default agent with `fork_context=false`; do not
+substitute another model or reasoning profile. This is a latency routing choice
+only: exact report, watchdog, close, and handoff gates remain unchanged.
 
 Substantive review is surface-packeted: one reviewer owns one named surface and
 one primary raw artifact by default, with explicit exclusions, one falsifier,

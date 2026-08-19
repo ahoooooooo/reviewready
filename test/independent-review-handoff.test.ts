@@ -166,7 +166,7 @@ describe("independent review handoff", () => {
     const deferredCanary = validHandoff();
     deferredCanary.reviewerReadiness.status = "deferred";
     deferredCanary.reviewerReadiness.closed = false;
-    deferredCanary.reviewerReadiness.closeEvidence = closeEvidence("canary-1", "timeout", false);
+    deferredCanary.reviewerReadiness.closeEvidence = closeEvidence("canary-1", "running", false);
     deferredCanary.outcome = "promote";
     expect(() => validateHandoff(deferredCanary)).toThrow("incomplete reviewer");
   });
@@ -202,6 +202,16 @@ describe("independent review handoff", () => {
     if (unconfirmedReviewer === undefined) throw new Error("test fixture reviewer is missing");
     unconfirmedReviewer.closeEvidence = closeEvidence("reviewer-1", "completed", false);
     expect(() => validateHandoff(unconfirmedClose)).toThrow("complete close evidence");
+
+    const mismatchedStatus = validHandoff();
+    const mismatchedReviewer = mismatchedStatus.reviewers[0];
+    if (mismatchedReviewer === undefined) throw new Error("test fixture reviewer is missing");
+    mismatchedReviewer.closeEvidence = closeEvidence("reviewer-1", "running", true);
+    expect(() => validateHandoff(mismatchedStatus)).toThrow("previous status");
+
+    const mismatchedCanary = validHandoff();
+    mismatchedCanary.reviewerReadiness.closeEvidence = closeEvidence("canary-1", "running", true);
+    expect(() => validateHandoff(mismatchedCanary)).toThrow("previous status");
   });
 
   it("rejects packet counts and budgets outside the declared mode", () => {
@@ -441,6 +451,7 @@ describe("independent review handoff", () => {
     const reviewer = deferred.reviewers[0];
     if (reviewer === undefined) throw new Error("test fixture reviewer is missing");
     reviewer.status = "timeout";
+    reviewer.closeEvidence = closeEvidence("reviewer-1", "running", true);
     deferred.outcome = "defer-external";
     expect(validateHandoff(deferred).outcome).toBe("defer-external");
 

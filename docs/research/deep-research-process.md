@@ -287,7 +287,8 @@ defer-external, not self-review.
 
 The final independent reviewer still uses the base worker-readiness canary,
 one-primary-artifact packet by default, exact `REVIEWER_REPORT_V1` output, the
-default-medium reviewer profile, reviewer watchdog, structured host-close proof
+LUNA MAX reviewer profile (`model=gpt-5.6-luna`, `reasoning_effort=max`),
+reviewer watchdog, structured host-close proof
 (`source`, `agentId`, `previousStatus`, `closed`), and `reviewerReadiness` handoff
 evidence. Source-pass reports cannot satisfy the final reviewer gate.
 

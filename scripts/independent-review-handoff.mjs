@@ -216,6 +216,12 @@ function requiredReviewerReadiness(value) {
   if ("closed" in closeEvidence && closeEvidence.closed !== closed) {
     throw new Error("reviewerReadiness closed flag does not match close evidence");
   }
+  if (
+    "previousStatus" in closeEvidence &&
+    (closeEvidence.previousStatus === "completed") !== (status === "passed")
+  ) {
+    throw new Error("reviewerReadiness previous status does not match status");
+  }
   return {
     canaryId,
     dispatchContext,
@@ -361,6 +367,12 @@ function requiredReviewers(value, route) {
         );
       }
       const closeEvidence = validateCloseEvidence(item.closeEvidence, id, status === "complete");
+      if (
+        "previousStatus" in closeEvidence &&
+        (closeEvidence.previousStatus === "completed") !== (status === "complete")
+      ) {
+        throw new Error("reviewer previous status does not match status: " + id);
+      }
       const report =
         status === "complete" && (role === "final-review" || route === "deep-research")
           ? requiredSubstantiveReport(item.report, route, role, ownedSurfaces, artifactIds, index)

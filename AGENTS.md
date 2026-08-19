@@ -74,10 +74,11 @@ and never preload all of `docs/`, `src/`, or `test/`.
   sentinel plus confirmed closure permits a substantive reviewer; timeout,
   malformed output, or unconfirmed closure records `defer-external` and stops
   the round. The control-plane canary alone does not prove worker/report health.
-- For a normal bounded reviewer packet, use a fresh default agent with
-  `fork_context=false` and `reasoning_effort=medium`; the fixed high-reasoning
-  `reviewer` role is reserved for an explicitly approved long read. This keeps
-  the 60-second route responsive without lowering the exact report contract.
+- Every subagent spawn must explicitly use `model=gpt-5.6-luna` and
+  `reasoning_effort=max`. For a normal bounded reviewer packet, use a fresh
+  `default` agent with `fork_context=false`; the model and max reasoning profile
+  are fixed by this project and may not be substituted. This routing choice does
+  not lower the exact report contract.
 - Every substantive reviewer gets one named surface and one primary raw
   artifact by default, plus excluded surfaces, one falsifier, and one question.
   Only a deliberately approved 120-second read may pair two small artifacts;
@@ -90,10 +91,11 @@ and never preload all of `docs/`, `src/`, or `test/`.
   the passed canary and host close evidence in `reviewerReadiness` and validate
   it with `npm run review:validate` before promotion. Close evidence is a
   structured host proof (`source`, `agentId`, `previousStatus`, `closed`) or an
-  explicit error shape; complete/passed evidence must say `closed: true`. A
-  complete final reviewer assignment must also carry its exact validated report
-  and structured close evidence bound to that substantive reviewer id; deep
-  completed source assignments carry their validated `RESEARCH_PASS_V1` report.
+  explicit error shape; complete/passed evidence must say `closed: true` and
+  `previousStatus: completed`. A complete final reviewer assignment must also
+  carry its exact validated report and structured close evidence bound to that
+  substantive reviewer id; deep completed source assignments carry their
+  validated `RESEARCH_PASS_V1` report.
 - Add `deep-research` only when the user explicitly requests it or a material
   decision needs multi-source current/external evidence. An explicit named-skill
   request always wins; ambiguous scope stays on base and escalates when needed.

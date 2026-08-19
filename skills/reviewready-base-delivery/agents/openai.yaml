@@ -1,4 +1,4 @@
 interface:
   display_name: "ReviewReady Base Delivery"
   short_description: "Conservative delivery with relevant proof"
-  default_prompt: "Use $reviewready-base-delivery with the conservative loop, default-medium bounded reviewer, worker canary, one-artifact packet, watchdog, structured close proof, and validated reviewerReadiness handoff."
+  default_prompt: "Use $reviewready-base-delivery with the conservative loop, LUNA MAX bounded reviewer, worker canary, one-artifact packet, watchdog, structured close proof, and validated reviewerReadiness handoff."

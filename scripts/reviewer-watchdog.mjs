@@ -15,6 +15,13 @@ const REPORT_FIELDS = new Set([
 ]);
 const RECOMMENDATIONS = new Set(["promote", "reopen", "defer-external"]);
 const TERMINAL_STATES = new Set(["complete", "timeout", "tool-failure"]);
+const CLOSE_PREVIOUS_STATUSES = new Set([
+  "completed",
+  "running",
+  "interrupted",
+  "shutdown",
+  "not_found"
+]);
 
 /** @param {unknown} value @returns {value is Record<string, unknown>} */
 function isRecord(value) {
@@ -55,6 +62,9 @@ export function validateCloseProof(proof, expectedAgentId) {
     throw new Error("close proof agent id does not match the watchdog");
   }
   const previousStatus = requiredText(proof.previousStatus, "close proof previousStatus");
+  if (!CLOSE_PREVIOUS_STATUSES.has(previousStatus)) {
+    throw new Error("close proof previousStatus is not a known host status");
+  }
   if (typeof proof.closed !== "boolean") {
     throw new Error("close proof closed must be boolean");
   }

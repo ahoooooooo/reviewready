@@ -86,14 +86,14 @@ healthy.
 ## 2026-08-19: bounded reviewer execution profile
 
 The fixed `reviewer` role uses high reasoning and intermittently exceeded the
-60-second report-only budget even for one-artifact packets, while a fresh
-`default` agent with `reasoning_effort=medium` completed the same packet within
-the budget and found a real close-proof gap. The durable route is therefore a
-fresh default/medium reviewer for normal bounded packets; reserve the fixed
-high-reasoning role for an explicitly approved long read. This changes latency
-routing only: `fork_context=false`, exact report, watchdog close, structured
-host proof, and handoff validation remain mandatory. A timeout is still
-terminal `defer-external`, never a reason to replace the reviewer.
+60-second report-only budget even for one-artifact packets. A diagnostic
+`default`/medium run completed and found a real close-proof gap, but it is not
+the project profile. The durable route is now a fresh `default` agent with
+`model=gpt-5.6-luna` and `reasoning_effort=max`; use the user's required LUNA MAX
+profile even when it needs the deliberate 120-second paired-artifact budget.
+This changes latency routing only: `fork_context=false`, exact report, watchdog
+close, structured host proof, and handoff validation remain mandatory. A timeout
+is still terminal `defer-external`, never a reason to replace the reviewer.
 
 Before any reviewer spawn, run `codex.cmd --strict-config doctor --json`
 once in the approved connected/elevated host context used by scheduling, not
