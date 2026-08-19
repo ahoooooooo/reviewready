@@ -233,7 +233,9 @@ silent observation expiry does not create a close ticket or a replacement. The
 final handoff records the canary and structured host close proof under
 `reviewerReadiness`; it also records the exact validated complete final report
 and structured close proof bound to the substantive reviewer id. Complete proof
-must contain `source`, `agentId`, `previousStatus`, and `closed=true`. It must pass
+must contain `source`, `agentId`, a known host `previousStatus`, and `closed=true`;
+`running` is valid when the report arrived before close. Observing assignments
+have no close proof yet. It must pass
 `npm run review:validate` before promotion.
 
 The independent reviewer report must identify a strongest falsifier, a missed

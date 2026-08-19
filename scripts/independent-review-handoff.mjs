@@ -91,7 +91,7 @@ const REVIEWER_READINESS_FIELDS = new Set([
  *   packetMode: string,
  *   waitBudgetSeconds: number,
  *   report?: string,
- *   closeEvidence: CloseEvidence,
+ *   closeEvidence?: CloseEvidence,
  *   status: string
  * }} ReviewerAssignment
  * @typedef {{ reviewers: ReviewerAssignment[], ownedSurfaces: Set<string> }} ReviewerData
@@ -221,12 +221,6 @@ function requiredReviewerReadiness(value) {
   const closeEvidence = validateCloseEvidence(value.closeEvidence, canaryId, status === "passed");
   if ("closed" in closeEvidence && closeEvidence.closed !== closed) {
     throw new Error("reviewerReadiness closed flag does not match close evidence");
-  }
-  if (
-    "previousStatus" in closeEvidence &&
-    (closeEvidence.previousStatus === "completed") !== (status === "passed")
-  ) {
-    throw new Error("reviewerReadiness previous status does not match status");
   }
   return {
     canaryId,
@@ -378,12 +372,13 @@ function requiredReviewers(value, route) {
             "].status must be complete, observing, timeout, tool-failure, or deferred"
         );
       }
-      const closeEvidence = validateCloseEvidence(item.closeEvidence, id, status === "complete");
-      if (
-        "previousStatus" in closeEvidence &&
-        (closeEvidence.previousStatus === "completed") !== (status === "complete")
-      ) {
-        throw new Error("reviewer previous status does not match status: " + id);
+      let closeEvidence;
+      if (status === "observing") {
+        if (item.closeEvidence !== undefined) {
+          throw new Error("observing reviewer must not have close evidence: " + id);
+        }
+      } else {
+        closeEvidence = validateCloseEvidence(item.closeEvidence, id, status === "complete");
       }
       const report =
         status === "complete" && (role === "final-review" || route === "deep-research")

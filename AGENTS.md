@@ -94,9 +94,10 @@ and never preload all of `docs/`, `src/`, or `test/`.
   the passed canary and host close evidence in `reviewerReadiness` and validate
   it with `npm run review:validate` before promotion. Close evidence is a
   structured host proof (`source`, `agentId`, `previousStatus`, `closed`) or an
-  explicit error shape; complete/passed evidence must say `closed: true` and
-  `previousStatus: completed`. A complete final reviewer assignment must also
-  carry its exact validated report and structured close evidence bound to that
+  explicit error shape; complete/passed evidence must say `closed: true` and use
+  a known host `previousStatus` (including `running` when the report arrived
+  before close). A complete final reviewer assignment must also carry its exact
+  validated report and structured close evidence bound to that
   substantive reviewer id; deep completed source assignments carry their
   validated `RESEARCH_PASS_V1` report.
 - Add `deep-research` only when the user explicitly requests it or a material

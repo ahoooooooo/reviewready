@@ -103,9 +103,10 @@ The JSON handoff must contain:
 - reviewer assignments with id, role, `fork_context=false`, one-primary or
   deliberately paired packet mode, wait budget, owned/excluded surfaces,
   artifacts, exact validated report when complete, structured substantive-agent
-  close evidence, and status. Complete evidence binds
-  `previousStatus=completed` and `closed=true`; incomplete outcomes may use the
-  explicit error shape.
+  close evidence, and status. Complete evidence binds a known host
+  `previousStatus` and `closed=true`; `running` is valid when the report arrived
+  before close, while observing assignments have no close evidence yet.
+  Incomplete terminal outcomes may use the explicit error shape.
 - exactly one owner per covered surface;
 - severity-ordered findings, strongest falsifier, missed surface, authority gap,
   recommendation, and exactly one outcome.
