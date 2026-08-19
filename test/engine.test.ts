@@ -300,6 +300,7 @@ rules:
     "## Testing\n[](#)",
     "## Testing\n[<!-- hidden -->](https://example.test)",
     "## Testing\n[&#8203;](https://example.org)",
+    "## Testing\n[\u034f](https://example.org)",
     "## Testing\n![](foo)",
     "## Testing\n[](foo\\)bar)",
     "## Testing\n[](<foo\\>bar>)",
@@ -366,6 +367,12 @@ rules:
       expectedAttestation: "missing"
     },
     {
+      name: "named non-breaking-space HTML entity",
+      body: "## Testing\n&NonBreakingSpace;",
+      expectedSection: "missing",
+      expectedAttestation: "missing"
+    },
+    {
       name: "named function-application HTML entity",
       body: "## Testing\n&af;",
       expectedSection: "missing",
@@ -404,6 +411,18 @@ rules:
     {
       name: "unclosed raw HTML after visible evidence",
       body: ["## Testing", "Tests passed.", "<div>"].join("\n"),
+      expectedSection: "missing",
+      expectedAttestation: "missing"
+    },
+    {
+      name: "raw HTML comments cannot close an active tag",
+      body: [
+        "## Testing",
+        "<div>",
+        "<!-- </div> -->",
+        "- [x] I understand this change.",
+        "</div>"
+      ].join("\n"),
       expectedSection: "missing",
       expectedAttestation: "missing"
     },

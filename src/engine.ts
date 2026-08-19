@@ -153,6 +153,7 @@ const invisibleHtmlEntityNames = new Set([
   "negativeverythinspace",
   "nmedium",
   "newline",
+  "nonbreakingspace",
   "numsp",
   "nthick",
   "nthin",
@@ -204,11 +205,6 @@ function visibleMarkdownLines(body: string): string[] | undefined {
       continue;
     }
 
-    if (rawHtmlTags.size > 0 || rawHtmlBlockStartPattern.test(rawLine)) {
-      updateRawHtmlTags(rawLine, rawHtmlTags);
-      continue;
-    }
-
     let line = rawLine;
     let visibleLine = "";
     while (line.length > 0) {
@@ -232,6 +228,11 @@ function visibleMarkdownLines(body: string): string[] | undefined {
       visibleLine += line.slice(0, start);
       htmlComment = true;
       line = line.slice(start + 4);
+    }
+
+    if (rawHtmlTags.size > 0 || rawHtmlBlockStartPattern.test(visibleLine)) {
+      updateRawHtmlTags(visibleLine, rawHtmlTags);
+      continue;
     }
 
     const marker = fenceMarker(visibleLine);
@@ -269,6 +270,17 @@ const visibleMarkdownTextPattern = /[^\p{White_Space}\p{Control}\p{Format}\p{Mar
 const indentedCodePattern = /^(?: {4}|\t)/u;
 const emptyReferenceMarkdownLinkPattern = /!?\[\s*\]\[[^\]\r\n]*\]/gu;
 const markdownWhitespacePattern = /\s/u;
+
+function isInvisibleMarkdownCharacter(value: string | undefined): boolean {
+  if (value === undefined) {
+    return false;
+  }
+  const codePoint = value.codePointAt(0);
+  return (
+    markdownWhitespacePattern.test(value) ||
+    (codePoint !== undefined && isInvisibleCodePoint(codePoint))
+  );
+}
 
 function skipMarkdownWhitespace(value: string, start: number): number {
   let index = start;
@@ -414,7 +426,7 @@ function stripEmptyInlineMarkdownLinks(value: string): string {
     }
 
     let labelEnd = opening + 1;
-    while (labelEnd < value.length && markdownWhitespacePattern.test(value[labelEnd] ?? "")) {
+    while (labelEnd < value.length && isInvisibleMarkdownCharacter(value[labelEnd])) {
       labelEnd += 1;
     }
     if (value[labelEnd] !== "]" || value[labelEnd + 1] !== "(") {
