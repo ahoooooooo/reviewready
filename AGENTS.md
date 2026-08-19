@@ -55,9 +55,10 @@ and never preload all of `docs/`, `src/`, or `test/`.
   reviewer id/role, scope/evidence, falsifier, missed surface, authority gap,
   recommendation, and one outcome. Same-context self-review does not satisfy
   the gate.
-- Reviewer watchdog: give a report-only reviewer one bounded wait budget; a
-  silent timeout is terminal for the round and yields defer-external. Do not
-  keep polling or replace a reviewer solely because it timed out.
+- Reviewer watchdog: give a report-only reviewer an initial observation window;
+  a silent window expiry is non-terminal: keep the agent running, record
+  `observing`, and do not replace it. Only a host-confirmed terminal/error state
+  yields `defer-external` and permits close-agent cleanup.
 - Save every agent id and automatically call the host close-agent control after
   completion, timeout, interruption, or error. Never ask the user to close a
   subagent in the UI; if closure cannot be confirmed, stop dispatching.

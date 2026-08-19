@@ -142,7 +142,7 @@ describe("open-source upgrade process contract", () => {
     expect(base).toContain("ETIMEDOUT");
     expect(base).toContain("REVIEWREADY_NPM_CACHE");
     expect(base).toContain("references/reviewer-contract.md");
-    expect(reviewerContract).toContain("A silent timeout is terminal");
+    expect(reviewerContract).toContain("A silent observation-window expiry is non-terminal");
     expect(reviewerContract).toContain("60 seconds by default");
     expect(reviewerContract).toMatch(
       /close it exactly once through the host\s+close-agent adapter/u
@@ -162,12 +162,13 @@ describe("open-source upgrade process contract", () => {
     expect(reviewerContract).toContain("luna-max-long-read");
     expect(reviewerContract).toContain("300-second budget");
     expect(reviewerContract).toContain("REVIEWER_REPORT_V1");
+    expect(reviewerContract).toContain("observation-window");
     expect(guide).toContain("Before any reviewer spawn");
     expect(guide).toContain("REVIEWER_CANARY_OK");
     expect(guide).toContain("one named surface");
     expect(guide).toMatch(/new\s+chat\s+session\s+is\s+not\s+a\s+fresh\s+host/u);
     expect(development).toContain("first operation in a bounded");
-    expect(development).toContain("silent timeout is terminal");
+    expect(development).toContain("silent observation-window expiry is non-terminal");
     expect(lessons).toContain("Bounded external lane and nested npm execution");
     expect(lessons).toContain("REVIEWREADY_NPM_CACHE");
     expect(lessons).toContain("Reviewer watchdog");
@@ -177,6 +178,7 @@ describe("open-source upgrade process contract", () => {
     expect(lessons).toContain("elevated host context");
     expect(lessons).toContain("green control-plane did not prove reviewer completion");
     expect(lessons).toContain("two-stage admission");
+    expect(lessons).toContain("observing");
     expect(adr).toContain("bounded external batch");
     expect(adr).toContain("connected/elevated lane");
     expect(implementation).toContain('ghCli: "forbidden"');

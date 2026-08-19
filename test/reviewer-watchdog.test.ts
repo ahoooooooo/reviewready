@@ -140,6 +140,33 @@ describe("reviewer watchdog", () => {
     expect(() => watchdog.accept(report)).toThrow("terminal");
   });
 
+  it("keeps a silent observation timeout running without closing the agent", async () => {
+    const watchdog = createReviewerWatchdog({
+      agentId: "agent-observing",
+      surface: "public-surface",
+      artifactId: "package.json",
+      waitBudgetSeconds: 60,
+      closeAgent: hostClose("completed", true)
+    });
+    expect(watchdog.observeTimeout()).toEqual({
+      status: "observing",
+      outcome: "defer-external",
+      replacementAllowed: false,
+      agentRunning: true
+    });
+    expect(watchdog.snapshot()).toMatchObject({
+      state: "waiting",
+      observationExpired: true,
+      closeCalls: 0
+    });
+    await expect(watchdog.close()).rejects.toThrow("terminal");
+    expect(watchdog.accept(report)).toMatchObject({ status: "complete" });
+    await expect(watchdog.close()).resolves.toMatchObject({
+      status: "closed",
+      dispatchAllowed: true
+    });
+  });
+
   it("stops dispatch when close cannot be confirmed", async () => {
     const watchdog = createReviewerWatchdog({
       agentId: "agent-3",

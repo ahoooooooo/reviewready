@@ -72,8 +72,9 @@ product code, credentials, or global sandbox settings to hide the failure.
 A reviewer that stays running without a report is an execution-context failure,
 not independent evidence. Give report-only reviewers one bounded wait budget
 (60 seconds by default, 120 seconds only for a deliberately approved long
-read). On a silent timeout, close once, record the failure, and produce a
-defer-external handoff. Do not poll indefinitely or launch a replacement solely
+read). On a silent observation-window expiry, record `observing` and leave the
+agent running; on a host-confirmed timeout, close once, record the failure, and
+produce a defer-external handoff. Do not poll indefinitely or launch a replacement solely
 because the reviewer timed out; reserve one replacement for an explicit
 pre-dispatch tool failure where the reviewer never started.
 
@@ -118,9 +119,10 @@ shape gate.
 The durable correction is two-stage admission: pass a fresh 30-second worker
 canary and confirm its close, then dispatch only one-surface packets with one
 primary raw artifact, one falsifier, and an exact
-`REVIEWER_REPORT_V1` report contract. A timeout or off-scope report is terminal
-in that round, its close evidence comes from the host control, and dispatch is
-never allowed again for that assignment; the watchdog's
+`REVIEWER_REPORT_V1` report contract. A malformed/off-scope report or
+host-confirmed timeout is terminal in that round; a silent observation-window
+expiry leaves the worker running with `observing`. Close evidence comes from
+the host control, and dispatch is never allowed again for that assignment; the watchdog's
 `assertDispatchAllowed()` ticket throws unless a completed review has a
 host-verified close. It remains `defer-external`; it is never hidden by a
 replacement or a self-review.
@@ -137,8 +139,9 @@ subagents.
 
 The safe rule is to complete planning in the integrator when possible, then
 start source-agent execution only after the base worker canary and research-pass
-packet are admitted. A silent forward/source-agent timeout is recorded once,
-closed once, and deferred; never loop or claim the research execution succeeded.
+packet are admitted. A silent forward/source-agent observation expiry is recorded
+as `observing` and left running; only a host-confirmed terminal failure is closed
+and deferred. Never loop or claim research execution succeeded before its report.
 
 ## 2026-08-17: malformed repository target during PR monitoring
 

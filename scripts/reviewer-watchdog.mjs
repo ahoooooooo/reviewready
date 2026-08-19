@@ -172,6 +172,7 @@ export function createWorkerWatchdog(input) {
   /** @type {Record<string, unknown> | undefined} */
   let closeEvidence;
   let dispatchAllowed = false;
+  let observationExpired = false;
   /** @type {unknown} */
   let report;
 
@@ -216,6 +217,19 @@ export function createWorkerWatchdog(input) {
       terminal();
       state = "tool-failure";
       return { status: state, outcome: "defer-external", replacementAllowed: false };
+    },
+    observeTimeout() {
+      terminal();
+      if (observationExpired) {
+        throw new Error("observation window is already expired");
+      }
+      observationExpired = true;
+      return {
+        status: "observing",
+        outcome: "defer-external",
+        replacementAllowed: false,
+        agentRunning: true
+      };
     },
     async close() {
       if (closeCalls !== 0) throw new Error("close-agent must be called exactly once");
@@ -269,6 +283,7 @@ export function createWorkerWatchdog(input) {
         closeConfirmed,
         closeEvidence,
         dispatchAllowed,
+        observationExpired,
         replacementAllowed: false,
         report
       };

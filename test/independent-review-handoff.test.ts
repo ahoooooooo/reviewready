@@ -471,6 +471,16 @@ describe("independent review handoff", () => {
 
     const unsafe = { ...deferred, outcome: "promote" };
     expect(() => validateHandoff(unsafe)).toThrow("incomplete reviewer");
+
+    const observing = validHandoff();
+    const observingReviewer = observing.reviewers[0];
+    if (observingReviewer === undefined) throw new Error("test fixture reviewer is missing");
+    observingReviewer.status = "observing";
+    observingReviewer.closeEvidence = closeEvidence("reviewer-1", "running", true);
+    observing.outcome = "defer-external";
+    expect(validateHandoff(observing).outcome).toBe("defer-external");
+    const observingUnsafe = { ...observing, outcome: "promote" };
+    expect(() => validateHandoff(observingUnsafe)).toThrow("incomplete reviewer");
   });
 
   it("requires raw artifacts and lineage for deep research", () => {

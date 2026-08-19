@@ -113,9 +113,10 @@ with one primary raw artifact by default, the LUNA MAX profile
 `REVIEWER_REPORT_V1`, watchdog close/dispatch gates, and structured
 `reviewerReadiness` close proof. Source-pass reports cannot satisfy this gate.
 
-The final reviewer must be able to reject the conclusion. A timeout, partial or
-off-scope report, unavailable pass, or unconfirmed close is `defer-external`,
-not self-review. A material repair, revision, scope, source set, or action
+The final reviewer must be able to reject the conclusion. A host-confirmed
+timeout, partial or off-scope report, unavailable pass, or unconfirmed close is
+`defer-external`, not self-review. A silent observation-window expiry leaves the
+worker running and keeps the handoff incomplete. A material repair, revision, scope, source set, or action
 boundary change starts a new review epoch.
 
 ## Report, handoff, and promotion

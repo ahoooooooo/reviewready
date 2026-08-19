@@ -172,8 +172,10 @@ host-bound close fourth. If that report completes without a material repair or
 scope/revision change, it is the final current-epoch review; after such a change,
 run one fresh final review before proof or promotion. Do not dispatch a duplicate
 final reviewer merely to rename an unchanged completed report.
-Any timeout, malformed/off-scope report, unconfirmed close, packet mismatch, or
-missing handoff field is incomplete evidence and yields `defer-external`.
+Any host-confirmed timeout, malformed/off-scope report, unconfirmed close,
+packet mismatch, or missing handoff field is incomplete evidence and yields
+`defer-external`; a silent observation expiry yields `observing` and keeps the
+agent running.
 
 For every subagent spawn, set `model=gpt-5.6-luna` and
 `reasoning_effort=max`. For the normal bounded packet, dispatch a fresh
@@ -189,9 +191,11 @@ These hard invariants apply even when the detailed reference is not loaded:
   `REVIEWER_CANARY_OK` worker canary and one confirmed close;
 - one primary raw artifact, one falsifier, one question, and exact
   `REVIEWER_REPORT_V1` evidence binding by default;
-- timeout is terminal, replacement is forbidden unless the reviewer never
-  started because of an explicit pre-dispatch tool failure, and close-agent is
-  exactly once through an agent-bound host adapter;
+- a host-confirmed timeout/tool-failure is terminal, replacement is forbidden
+  unless the reviewer never started because of an explicit pre-dispatch tool
+  failure, and close-agent is exactly once through an agent-bound host adapter;
+  a silent observation-window expiry is non-terminal and leaves the worker
+  running;
 - `assertDispatchAllowed()` must pass before any next dispatch; otherwise the
   round is `defer-external`; and
 - `reviewerReadiness` plus `npm run review:validate` is required before proof or

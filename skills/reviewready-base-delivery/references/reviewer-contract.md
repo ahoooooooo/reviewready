@@ -71,8 +71,10 @@ solely to obtain a better-shaped report.
   seconds only for a deliberately approved paired-artifact read. After a
   recorded LUNA MAX 120-second timeout, use only the explicit
   `luna-max-long-read` two-artifact profile with a 300-second budget.
-- A silent timeout is terminal. Close once, record the environment failure, and
-  defer-external. Never poll indefinitely or replace solely for timeout.
+- A silent observation-window expiry is non-terminal: record `observing`, keep
+  the worker running, and do not close or replace it. Only a host-confirmed
+  terminal/error state is a timeout failure that closes once and yields
+  `defer-external`; never poll indefinitely in the parent turn.
 - One replacement is allowed only for an explicit pre-dispatch tool failure
   where the reviewer never started and the round budget remains.
 - Store every id. On completion, timeout, interruption, or error, invoke the
@@ -108,7 +110,7 @@ The JSON handoff must contain:
 - severity-ordered findings, strongest falsifier, missed surface, authority gap,
   recommendation, and exactly one outcome.
 
-Validate with `npm run review:validate -- --file <handoff.json>`. A timeout,
-tool failure, deferred worker, malformed report, missing canary, unconfirmed
-close, or packet mismatch is valid only with `defer-external`; it cannot be
-promoted as independently reviewed.
+Validate with `npm run review:validate -- --file <handoff.json>`. A
+host-confirmed timeout, observing/deferred worker, tool failure, malformed
+report, missing canary, unconfirmed close, or packet mismatch is valid only with
+`defer-external`; it cannot be promoted as independently reviewed.

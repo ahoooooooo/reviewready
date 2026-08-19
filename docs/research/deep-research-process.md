@@ -178,8 +178,9 @@ canaries. Each source pass uses one named surface and one primary raw artifact
 by default, with one falsifier, one question, and explicit exclusions. A larger
 source set is split into disjoint passes rather than given to one agent.
 Use `createResearchPassWatchdog` for each admitted pass so malformed/off-scope
-output, timeout, and tool failure become closeable terminal outcomes before any
-`RESEARCH_PASS_V1` claims enter the integrator map.
+output, host-confirmed timeout, and tool failure become closeable terminal
+outcomes before any `RESEARCH_PASS_V1` claims enter the integrator map. A silent
+observation-window expiry leaves the pass running and cannot be promoted yet.
 
 Require this bounded source-pass handoff:
 
@@ -327,8 +328,9 @@ reason to keep iterating.
 
 The integrator owns scope, synthesis, and promotion. Use the bounded surface
 matrix and smallest team that exposes independent surfaces; add parallel work
-only when it reduces blind spots rather than multiplying summaries. A timeout,
-malformed pass, or unavailable source remains terminal and deferred; only an
+only when it reduces blind spots rather than multiplying summaries. A
+host-confirmed timeout, malformed pass, or unavailable source remains terminal
+and deferred; a silent observation expiry remains running as `observing`; only an
 explicit pre-dispatch failure where the pass never started may use one
 replacement inside the same research budget. Deduplicate by claim id and
 canonical source/query/revision lineage. Each pass has one independent surface

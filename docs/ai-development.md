@@ -189,9 +189,10 @@ uncovered surfaces have disjoint artifacts and falsifiers. Allow one replacement
 only for an explicit pre-dispatch tool failure where the reviewer never started
 and the round budget remains. Give each report-only reviewer one total wait
 budget: 60 seconds by default and never more than 120 seconds for a deliberately
-approved long read. A silent timeout is terminal for the round; close once,
-record the environment failure, and defer-external without repeated polling or
-replacement. The completed first pass is also the final current-epoch pass when
+approved long read. A silent observation-window expiry is non-terminal: keep the
+agent running with `observing`, do not close or replace it, and continue in a
+later turn. Only a host-confirmed terminal/error state is closed and deferred.
+The completed first pass is also the final current-epoch pass when
 no material repair, revision, scope, or trust-boundary change follows it; after
 such a change, run one fresh final pass. Do not duplicate an unchanged review
 only to label it final.
@@ -225,8 +226,10 @@ evidence and cannot be repaired by silently replacing the reviewer.
 
 The local `scripts/reviewer-watchdog.mjs` helper is the executable contract for
 these transitions. It validates the exact worker sentinel and report packet,
-makes timeout terminal, enforces one close call, and exposes a throwing
-`assertDispatchAllowed()` ticket only after a completed host-closed review. The
+keeps silent observation expiry non-terminal, makes host-confirmed timeout
+terminal, enforces one close call, and exposes a throwing
+`assertDispatchAllowed()` ticket only after a completed host-closed review. A
+silent observation expiry does not create a close ticket or a replacement. The
 final handoff records the canary and structured host close proof under
 `reviewerReadiness`; it also records the exact validated complete final report
 and structured close proof bound to the substantive reviewer id. Complete proof
@@ -242,8 +245,9 @@ surface coverage, raw artifacts, commands/evidence, severity-ordered findings,
 the strongest falsifier, missed attack surface, authority/evidence gap,
 recommendation, and exactly one outcome: promote, reopen, or defer-external.
 Missing or ambiguous handoff fields fail closed for the independent-review gate.
-An assignment with status timeout, tool-failure, or deferred is valid only with
-the defer-external outcome; it cannot be promoted as complete.
+An assignment with status observing, timeout, tool-failure, or deferred is valid
+only with the defer-external outcome; observing remains running and cannot be
+promoted as complete.
 Validate the JSON handoff with npm run review:validate -- --file <handoff.json>
 before treating that gate as complete.
 

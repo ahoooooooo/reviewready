@@ -17,7 +17,7 @@ const ROUTE_CAPS = new Map([
   ["deep-research", 5]
 ]);
 const OUTCOMES = new Set(["promote", "reopen", "defer-external"]);
-const REVIEWER_STATUSES = new Set(["complete", "timeout", "tool-failure", "deferred"]);
+const REVIEWER_STATUSES = new Set(["complete", "observing", "timeout", "tool-failure", "deferred"]);
 const REVIEWER_READINESS_STATUSES = new Set(["passed", "deferred"]);
 const REVIEWER_CANARY_SENTINEL = "REVIEWER_CANARY_OK";
 const REVIEWER_PACKET_MODES = new Set([
@@ -375,7 +375,7 @@ function requiredReviewers(value, route) {
         throw new Error(
           "reviewers[" +
             String(index) +
-            "].status must be complete, timeout, tool-failure, or deferred"
+            "].status must be complete, observing, timeout, tool-failure, or deferred"
         );
       }
       const closeEvidence = validateCloseEvidence(item.closeEvidence, id, status === "complete");
