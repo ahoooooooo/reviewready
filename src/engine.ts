@@ -79,10 +79,9 @@ function closesFence(line: string, fence: MarkdownFence): boolean {
   return marker !== undefined && marker[0] === fence.marker && marker.length >= fence.length;
 }
 
-const htmlTagPattern =
-  /<\/?([A-Za-z][A-Za-z0-9-]*)(?:\s+[^\s"'=<>]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'=<>]+))?)*\s*\/?\s*>/gu;
+const htmlTagPattern = /<\/?([A-Za-z][A-Za-z0-9-]*)(?:[^"'<>]|"[^"]*"|'[^']*')*\/?>/gu;
 const rawHtmlBlockStartPattern =
-  /^\s{0,3}<\/?[A-Za-z][A-Za-z0-9-]*(?:\s+[^\s"'=<>]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'=<>]+))?)*\s*\/?\s*>/u;
+  /^\s{0,3}<\/?[A-Za-z][A-Za-z0-9-]*(?:[^"'<>]|"[^"]*"|'[^']*')*\/?>/u;
 const voidHtmlTags = new Set([
   "area",
   "base",
