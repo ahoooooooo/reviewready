@@ -5,36 +5,13 @@
   "document_type": "REVIEWREADY_CANONICAL_AGENT_HANDOFF",
   "schema_version": 1,
   "project": "ReviewReady",
-  "updated_at": "2026-08-20T05:49:49.700Z",
-  "revision": "0a52f289a8d6be972eda0626c7656c73731fb287",
+  "updated_at": "2026-08-20T05:53:01.605Z",
+  "revision": "924c86dc10aa0fbf918cf71f50d50f0b4b3ddbb0",
   "branch": "codex/reviewready-context-and-skills",
-  "worktree_state": "dirty",
-  "changed_paths": [
-    ".gitignore",
-    "AGENTS.md",
-    "docs/adr/0017-canonical-agent-handoff.md",
-    "docs/agent-handoff.schema.json",
-    "docs/ai-development.md",
-    "docs/current-status.md",
-    "docs/operational-lessons.md",
-    "docs/oss-upgrade-process.md",
-    "docs/research/deep-research-process.md",
-    "package.json",
-    "scripts/agent-handoff.mjs",
-    "scripts/reviewer-admission.mjs",
-    "scripts/reviewer-watchdog.mjs",
-    "scripts/windows-child-canary.mjs",
-    "skills/reviewready-base-delivery/SKILL.md",
-    "skills/reviewready-base-delivery/references/reviewer-contract.md",
-    "skills/reviewready-deep-research/SKILL.md",
-    "skills/reviewready-deep-research/references/research-method.md",
-    "test/agent-handoff.test.ts",
-    "test/reviewer-admission.test.ts",
-    "test/reviewer-watchdog.test.ts",
-    "test/upgrade-process.test.ts"
-  ],
-  "change_digest": "sha256:e0069677a5aaba0227fd1177756578579b0406a8927a62338ef85ed68e9ad24f",
-  "handoff_digest": "sha256:a3f1d0d1eed91735ee31180db3271020fac74011c1048ce78344e5b0aa144ad7",
+  "worktree_state": "clean",
+  "changed_paths": [],
+  "change_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "handoff_digest": "sha256:9bb012696a7e2efbc3c5927301c77a764edd62dca20e56c1f9b3bd78a1d3c513",
   "route": "base+deep-research",
   "phase": "handoff",
   "outcome": "defer-external",
@@ -56,9 +33,9 @@
     "exit_gate": "The final diff review and complete npm gate pass, only confirmed paths are committed, the current feature branch is pushed through the authorized HTTPS/GCM route, and the post-push remote ref plus clean handoff are verified."
   },
   "next_action": {
-    "action": "Run the final complete gate, stage only the confirmed repair batch, commit it, push the current feature branch, then finalize and verify the clean handoff; do not update PR #99.",
+    "action": "Finalize the canonical handoff-only commit, push the current feature branch, then verify the remote ref and clean sealed handoff; do not update PR #99.",
     "owner": "integrator",
-    "gate": "The final independent reviewer is still current for the unchanged code digest, the complete gate and failure ledger are current, and commit/push authorization is explicit for this batch."
+    "gate": "Repair commit 924c86d contains the reviewed 23-path batch; the complete gate passed 42 files with 952 tests, the failure ledger is closed, and only the explicitly authorized push remains."
   },
   "blockers": [
     {
@@ -114,7 +91,7 @@
       "class": "evidence",
       "status": "resolved",
       "symptom": "The append-only ledger retains historical groups and the current promotion slice recorded staging, patch, focused-test, and reviewer-handoff evidence events.",
-      "evidence": "All new non-zero exits and wrapper failures were recorded before retry; the final triage result reports 464 total groups, resolvedGroups=464, and openGroups=[].",
+      "evidence": "All new non-zero exits and wrapper failures were recorded before retry; the final triage result reports 467 total groups, resolvedGroups=467, and openGroups=[].",
       "next_action": "For future failures, record at the boundary, do not retry an open fingerprint, and resolve only after focused proof in the matching authority context."
     }
   ],
@@ -173,6 +150,11 @@
       "id": "handoff-digest-independent-review",
       "summary": "The content-bound handoff digest repair passed a fresh independent no-context LUNA MAX review.",
       "evidence": "Reviewer 01a01dac-7157-7cd0-95df-109a90c57d26 returned REVIEWER_REPORT_V1 recommendation=promote for raw:scripts/agent-handoff.mjs after the initial observation window was silent; the same agent was host-closed exactly once and .reviewready-reviewer-handoff-digest.json passed review:validate."
+    },
+    {
+      "id": "repair-batch-commit",
+      "summary": "The reviewed repair batch is recorded in source commit 924c86d.",
+      "evidence": "The first promotion commit contains exactly the 23 reviewed paths; the canonical handoff-only finalization remains the only local commit step before push."
     }
   ],
   "validation": [
@@ -297,35 +279,35 @@
     },
     {
       "command": "npm run handoff:validate -- --file HANDOFF.md (current promotion digest)",
-      "status": "passed",
+      "status": "deferred",
       "observed_at": "2026-08-20 Asia/Taipei",
       "revision": "0a52f289a8d6be972eda0626c7656c73731fb287",
       "change_digest": "sha256:e0069677a5aaba0227fd1177756578579b0406a8927a62338ef85ed68e9ad24f"
     },
     {
       "command": "npm run review:validate -- --file .reviewready-reviewer-handoff-digest.json (fresh independent reviewer)",
-      "status": "passed",
+      "status": "deferred",
       "observed_at": "2026-08-20 Asia/Taipei",
       "revision": "0a52f289a8d6be972eda0626c7656c73731fb287",
       "change_digest": "sha256:e0069677a5aaba0227fd1177756578579b0406a8927a62338ef85ed68e9ad24f"
     },
     {
       "command": "focused handoff/admission/watchdog/upgrade/research tests (29 passed)",
-      "status": "passed",
+      "status": "deferred",
       "observed_at": "2026-08-20 Asia/Taipei",
       "revision": "0a52f289a8d6be972eda0626c7656c73731fb287",
       "change_digest": "sha256:e0069677a5aaba0227fd1177756578579b0406a8927a62338ef85ed68e9ad24f"
     },
     {
       "command": "npm run check (approved elevated context after handoff digest repair; 42 files, 952 passed, 6 skipped)",
-      "status": "passed",
+      "status": "deferred",
       "observed_at": "2026-08-20 Asia/Taipei",
       "revision": "0a52f289a8d6be972eda0626c7656c73731fb287",
       "change_digest": "sha256:e0069677a5aaba0227fd1177756578579b0406a8927a62338ef85ed68e9ad24f"
     },
     {
       "command": "final npm run agent:triage (append-only failure ledger)",
-      "status": "passed",
+      "status": "deferred",
       "observed_at": "2026-08-20 Asia/Taipei",
       "revision": "0a52f289a8d6be972eda0626c7656c73731fb287",
       "change_digest": "sha256:e0069677a5aaba0227fd1177756578579b0406a8927a62338ef85ed68e9ad24f"
@@ -333,7 +315,7 @@
   ],
   "external_writes": {
     "pr": "forbidden-this-round",
-    "commit": "authorized-not-done",
+    "commit": "done",
     "push": "authorized-not-done"
   },
   "read_order": [
