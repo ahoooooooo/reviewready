@@ -15,7 +15,8 @@ for a product contract. It does not change readiness semantics or grant an LLM
 authority. It does not execute pull-request code or replace GitHub's authority,
 and it does not turn a research conclusion into a release permission. The
 current node order and individual release rules remain authoritative in their
-existing documents.
+existing documents. The live cross-turn state is the root
+[canonical agent handoff](../HANDOFF.md), not this lifecycle document.
 
 ## What the lifecycle optimizes
 
@@ -71,9 +72,10 @@ Start from one trusted repository revision and one observed project state. Read
 the applicable instructions, product and architecture contracts, active node
 plan, relevant issues, tests, release coordinates, and existing evidence.
 Record the public and external state that matters to the decision, including
-its observation time and limitations. Authentication may be checked without
-exposing credentials; a failed login is an external dependency, not a product
-fact.
+its observation time and limitations. Run the local machine-readable auth
+contract before provider work. A sandbox or connected-channel failure is an
+external/context dependency, not logout evidence or a product fact, and it is
+never retried through a different authority channel.
 
 The baseline includes the current node, worktree, source and generated
 artifacts, public package and Action coordinates, open-work classification, and
@@ -192,10 +194,10 @@ Proof is layered to match the outcome:
 - revision-bound live observations for settings or provider behavior; and
 - an independent adversarial review from a separate reasoning path.
 
-For this repository, the local handoff is explicit: run the focused validation
-first, then `npm run check`, then `git diff --check`, and inspect any generated
-or public artifacts included in the candidate. A green focused test alone never
-promotes a change.
+For this repository, the local handoff is explicit: refresh and validate the
+root `HANDOFF.md`, run focused validation, then `npm run check`, then
+`git diff --check`, and inspect any generated or public artifacts included in the
+candidate. A green focused test alone never promotes a change.
 
 Prerequisite results settle before dependent results are interpreted. A stale,
 superseded, incomplete, race-affected, oversized, or ambiguous result cannot
@@ -280,8 +282,10 @@ evidence tier.
 Reasoning effort follows consequence and novelty. Use the ordinary path for
 bounded implementation and routine coverage; reserve the deepest independent
 attack for trust-root, public-contract, migration, release, and other decisions
-whose failure would invalidate many downstream results. Do not hard-code a
-model name in the repository or treat model agreement as authority.
+whose failure would invalidate many downstream results. This repository's
+delegated-agent route is intentionally fixed by `AGENTS.md` to
+`model=gpt-5.6-luna` with `reasoning_effort=max`; that is a routing constraint,
+not evidence or authority. Model agreement never decides readiness.
 
 When the lifecycle itself is being improved, freeze this version, replay it
 against completed work, and attack missed risks, repeated coordination,

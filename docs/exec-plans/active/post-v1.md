@@ -17,6 +17,15 @@ tag movement, or deployment by itself. The completed v1 plans and release
 evidence remain historical records; this file is the source of truth for future
 node order and promotion gates.
 
+For the cross-surface current snapshot, including the distinction between
+last-known and currently reachable external state, see
+[docs/current-status.md](../../current-status.md). This plan remains the source
+of truth for node order and promotion gates only.
+
+Current authentication authority is [docs/authentication.md](../../authentication.md)
+and `npm run auth:status`. GitHub CLI and local npm-session observations later
+in this plan are historical baselines, not current login or retry instructions.
+
 The project-wide handoff between research, work slices, implementation, proof,
 integration, release, and adoption is defined by the
 [open-source upgrade lifecycle](../../oss-upgrade-process.md). This file still
@@ -54,9 +63,9 @@ The operating rule is one active issue, one branch, one PR, one promotion gate.
 Research may explain a parked item, but it cannot create a second execution
 lane or change the v1 public contract without a new explicit decision.
 
-## TA-1 current repair batch
+## TA-1 completed repair batch
 
-The active batch covers the retained v1 issues #18, #25, #26, #27, and #54.
+The completed batch covered the retained v1 issues #18, #25, #26, #27, and #54.
 Local evidence includes direct CLI raw-byte/device-boundary regressions,
 independent v1 JSON compatibility assertions, Action/CLI JSON parity, latest
 reviewer-state permission selection with bounded concurrency, and a real
@@ -483,34 +492,36 @@ publication authority, and no claim that one pilot proves universal security.
 
 ## Legacy issue reconciliation
 
-The dispositions below are based on observable behavior, not unchecked boxes or
-issue age:
+The dispositions below were recorded during PL-0 and are retained as historical
+reconciliation evidence, not as a second active tracker. Current node state is
+at the top of this plan; the cross-surface state is in
+[docs/current-status.md](../../current-status.md).
 
-| Issue | PL-0 disposition    | Evidence or successor                                                                                                          |
-| ----- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| #4    | completed           | Files/checks are bounded and fail closed; exact platform limits are intentionally rejected when completeness cannot be proved. |
-| #12   | completed           | Visible Markdown state machine and adversarial parser tests.                                                                   |
-| #13   | completed           | Old/new rename paths are normalized, deduplicated, bounded, and tested.                                                        |
-| #14   | completed           | Legacy statuses paginate, reduce to latest state, combine conservatively, and fail closed at uncertainty.                      |
-| #15   | superseded          | Self-policy/workflow exist; authoritative live dogfood is the single outcome in #55 after #54.                                 |
-| #16   | completed           | Exact-artifact release workflow and v1.0.7 evidence exist; future public reconciliation is #60.                                |
-| #17   | completed           | Action JSON/summary UTF-8 bounds and sink ordering are tested.                                                                 |
-| #18   | retained for TA-1   | Add the remaining direct CLI raw-input/device/boundary regression evidence.                                                    |
-| #19   | completed           | Pinned Windows packed-artifact workflow covers CRLF, ready/not-ready/invalid exits and passed on current remote main.          |
-| #20   | superseded          | Mixed manual issue split into governance #54 and public delivery #60.                                                          |
-| #25   | retained for TA-1   | Add all-five-requirement v1 golden JSON and CLI/Action compatibility proof.                                                    |
-| #26   | retained for TA-1   | Finish latest-review permission planning and explicit call/resident-work evidence.                                             |
-| #27   | retained for TA-1   | Add runtime-versus-Draft-2020-12 validator corpus parity.                                                                      |
-| #28   | retained for AD-1   | Map files, Action-only dependencies, package surface, types, and exact Node minimum remain observable delivery work.           |
-| #29   | completed           | Shared deterministic matching budget and compiled-glob cache are tested.                                                       |
-| #32   | completed           | COMMENTED and dismissal no longer overwrite latest opinionated review state.                                                   |
-| #33   | completed           | Non-collaborator 404 maps to none; forbidden/unknown errors fail closed.                                                       |
-| #34   | completed           | Latest check/status reduction and same-name cross-provider ambiguity are conservative.                                         |
-| #35   | design completed    | ADR 0001/reference workflow exist; operational governance is #54 and dedicated provider authority is TA-3.                     |
-| #37   | completed           | Literal backslashes/traversal are rejected across direct and rename paths.                                                     |
-| #38   | completed           | Base/head/updated-at snapshots are rechecked around double-collected evidence with bounded retry.                              |
-| #41   | v1 design completed | ADR 0008 and current wording are complete; stronger versioned provenance is #59.                                               |
-| #42   | v1 design completed | ADR 0007 and visible no-match reporting are complete; versioned strategy is #58.                                               |
+| Issue | Historical PL-0 disposition | Evidence or successor                                                                                                           |
+| ----- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| #4    | completed                   | Files/checks are bounded and fail closed; exact platform limits are intentionally rejected when completeness cannot be proved.  |
+| #12   | completed                   | Visible Markdown state machine and adversarial parser tests.                                                                    |
+| #13   | completed                   | Old/new rename paths are normalized, deduplicated, bounded, and tested.                                                         |
+| #14   | completed                   | Legacy statuses paginate, reduce to latest state, combine conservatively, and fail closed at uncertainty.                       |
+| #15   | superseded                  | Self-policy/workflow exist; TA-2 evidence is recorded under #55, while external authority remains a separate boundary.          |
+| #16   | completed                   | Exact-artifact release workflow and v1.0.7 evidence exist; later public reconciliation is recorded by #60 and v1.0.11 evidence. |
+| #17   | completed                   | Action JSON/summary UTF-8 bounds and sink ordering are tested.                                                                  |
+| #18   | completed                   | Direct CLI raw-input, device, and boundary regression evidence is covered by the current CLI/input tests.                       |
+| #19   | completed                   | Pinned Windows packed-artifact workflow covers CRLF, ready/not-ready/invalid exits and passed on current remote main.           |
+| #20   | superseded                  | Mixed manual issue split into governance #54 and public delivery #60.                                                           |
+| #25   | completed                   | All-five-requirement v1 golden JSON, CLI/Action parity, and package schema compatibility are covered.                           |
+| #26   | completed                   | Latest-review permission selection, bounded concurrency, and resident-work evidence are covered.                                |
+| #27   | completed                   | Runtime-versus-Draft-2020-12 validator corpus parity is covered by schema tests.                                                |
+| #28   | retained for AD-1           | Map files, Action-only dependencies, package surface, types, and exact Node minimum remain observable delivery work.            |
+| #29   | completed                   | Shared deterministic matching budget and compiled-glob cache are tested.                                                        |
+| #32   | completed                   | COMMENTED and dismissal no longer overwrite latest opinionated review state.                                                    |
+| #33   | completed                   | Non-collaborator 404 maps to none; forbidden/unknown errors fail closed.                                                        |
+| #34   | completed                   | Latest check/status reduction and same-name cross-provider ambiguity are conservative.                                          |
+| #35   | design completed            | ADR 0001/reference workflow exist; operational governance is #54 and dedicated provider authority is TA-3.                      |
+| #37   | completed                   | Literal backslashes/traversal are rejected across direct and rename paths.                                                      |
+| #38   | completed                   | Base/head/updated-at snapshots are rechecked around double-collected evidence with bounded retry.                               |
+| #41   | v1 design completed         | ADR 0008 and current wording are complete; stronger versioned provenance is #59.                                                |
+| #42   | v1 design completed         | ADR 0007 and visible no-match reporting are complete; versioned strategy is #58.                                                |
 
 ## PL-0 stop point
 

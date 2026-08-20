@@ -3,15 +3,45 @@ import { describe, expect, it } from "vitest";
 
 describe("open-source upgrade process contract", () => {
   it("keeps the orchestration layer connected to its authoritative sources", async () => {
-    const [process, index, research, plan, base] = await Promise.all([
+    const [
+      process,
+      index,
+      research,
+      plan,
+      base,
+      deepSkill,
+      reviewerContract,
+      researchMethod,
+      handoff,
+      handoffSchema,
+      handoffScript,
+      handoffAdr
+    ] = await Promise.all([
       readFile("docs/oss-upgrade-process.md", "utf8"),
       readFile("docs/research/README.md", "utf8"),
       readFile("docs/research/deep-research-process.md", "utf8"),
       readFile("docs/exec-plans/active/post-v1.md", "utf8"),
-      readFile("docs/ai-development.md", "utf8")
+      readFile("docs/ai-development.md", "utf8"),
+      readFile("skills/reviewready-deep-research/SKILL.md", "utf8"),
+      readFile("skills/reviewready-base-delivery/references/reviewer-contract.md", "utf8"),
+      readFile("skills/reviewready-deep-research/references/research-method.md", "utf8"),
+      readFile("HANDOFF.md", "utf8"),
+      readFile("docs/agent-handoff.schema.json", "utf8"),
+      readFile("scripts/agent-handoff.mjs", "utf8"),
+      readFile("docs/adr/0017-canonical-agent-handoff.md", "utf8")
     ]);
 
     expect(index).toContain("[Open-source upgrade lifecycle](../oss-upgrade-process.md)");
+    expect(handoff).toContain("CANONICAL AGENT HANDOFF");
+    expect(handoff).toContain("npm run handoff:refresh");
+    expect(handoff).toContain("npm run handoff:validate");
+    expect(handoffSchema).toContain("REVIEWREADY_CANONICAL_AGENT_HANDOFF");
+    expect(handoffSchema).toContain("additionalProperties");
+    expect(handoffSchema).toContain("change_digest");
+    expect(handoffScript).toContain("change_digest");
+    expect(handoffScript).toContain("content changed without running handoff:refresh");
+    expect(handoffAdr).toContain("ADR-0017: Canonical agent handoff state");
+    expect(handoffAdr).toContain("strongest counter-case");
     expect(research).toContain("[open-source upgrade lifecycle](../oss-upgrade-process.md)");
     expect(plan).toContain("[open-source upgrade lifecycle](../../oss-upgrade-process.md)");
 
@@ -48,12 +78,30 @@ describe("open-source upgrade process contract", () => {
     expect(base).toMatch(/immutable base revision/);
     expect(base).toMatch(/unknown\s+or incomplete evidence fails closed/);
     expect(process).toMatch(/base process\s+has completed its own attack/);
+    expect(deepSkill).toContain("references/research-method.md");
+    expect(deepSkill).toContain("Planning-only path");
+    expect(deepSkill).toContain("process-self-optimization reviewer gate overrides it");
+    expect(deepSkill).toContain("source-to-final handoff");
+    expect(reviewerContract).toContain("REVIEWER_CANARY_OK");
+    expect(reviewerContract).toContain("initial observation window");
+    expect(reviewerContract).toContain("not completion deadlines");
+    expect(reviewerContract).toContain("timeout(hostStatus)");
+    expect(reviewerContract).toContain("`running` or a missing host status is rejected");
+    expect(process).toContain("model=gpt-5.6-luna");
+    expect(process).toContain("reasoning_effort=max");
 
     expect(research).toMatch(/shortest reproducible path/);
     expect(research).toMatch(/action boundary is explicit/);
     expect(research).toMatch(/prior report lacks replay metadata/);
-    expect(research).toMatch(/candidate cannot approve its own\s+prerequisite/);
+    expect(research).toMatch(/candidate\s+cannot approve its own\s+prerequisite/);
     expect(research).toMatch(/external-program or adoption question/);
+    expect(research).toContain("base skill and `AGENTS.md` have precedence");
+    expect(research).toContain("RESEARCH_PASS_V1");
+    expect(research).toContain("npm run research:validate");
+    expect(research).toContain("worker-readiness");
+    expect(researchMethod).toContain("worker-admission");
+    expect(research).not.toContain("Permit one replacement for a timeout");
+    expect(research).toContain("Source-pass reports cannot satisfy");
     const lowerResearch = research.toLowerCase();
     const researchStages = [
       "### anchor and frame the decision",
@@ -94,13 +142,79 @@ describe("open-source upgrade process contract", () => {
     expect(plan).not.toContain("must pass the repository gate before");
   });
   it("keeps external authentication checks visible to every agent run", async () => {
-    const guide = await readFile("AGENTS.md", "utf8");
+    const [guide, contract, implementation, base, development, lessons, adr, reviewerContract] =
+      await Promise.all([
+        readFile("AGENTS.md", "utf8"),
+        readFile("docs/authentication.md", "utf8"),
+        readFile("scripts/auth-status.mjs", "utf8"),
+        readFile("skills/reviewready-base-delivery/SKILL.md", "utf8"),
+        readFile("docs/ai-development.md", "utf8"),
+        readFile("docs/operational-lessons.md", "utf8"),
+        readFile("docs/adr/0016-authentication-authority-status.md", "utf8"),
+        readFile("skills/reviewready-base-delivery/references/reviewer-contract.md", "utf8")
+      ]);
 
-    expect(guide).toContain("## External authentication preflight");
-    expect(guide).toContain("gh auth status --hostname github.com");
-    expect(guide).toContain("gh api user --jq .login");
-    expect(guide).toMatch(/[Bb]rowser login does not prove CLI login/);
-    expect(guide).toContain("npm Trusted Publishing");
-    expect(guide).toMatch(/[Nn]ever print\s+tokens/);
+    expect(guide).toContain("## Authentication authority and external preflight");
+    expect(guide).toContain("npm run auth:status");
+    expect(guide).toContain("npm run agent:record");
+    expect(guide).toContain("npm run agent:triage");
+    expect(guide).toMatch(/Windows Git\s+Credential Manager/u);
+    expect(guide).toContain("connected GitHub provider/browser channel");
+    expect(guide).toMatch(/npm\s+Trusted Publishing/u);
+    expect(guide).not.toContain("gh auth status");
+    expect(guide).not.toContain("gh api user");
+    expect(contract).toContain("same-context retries");
+    expect(contract).toContain("Local npm authentication is intentionally irrelevant");
+    expect(contract).toContain("External lane routing");
+    expect(contract).toContain("bounded batch");
+    expect(guide).toContain("bounded external batch");
+    expect(guide).toContain("connected/elevated");
+    expect(base).toContain("Keep ordinary work in the local sandbox");
+    expect(base).toContain("return to the sandbox");
+    expect(base).toContain("ETIMEDOUT");
+    expect(base).toContain("REVIEWREADY_NPM_CACHE");
+    expect(base).toContain("references/reviewer-contract.md");
+    expect(reviewerContract).toContain("A silent observation-window expiry is non-terminal");
+    expect(reviewerContract).toContain("60 seconds by default");
+    expect(reviewerContract).toMatch(
+      /close it exactly once through the host\s+close-agent adapter/u
+    );
+    expect(reviewerContract).toContain("codex.cmd --strict-config doctor --json");
+    expect(reviewerContract).toContain("connected/elevated host context");
+    expect(reviewerContract).toContain("sandbox-only no-credentials");
+    expect(reviewerContract).toContain("worker-readiness");
+    expect(reviewerContract).toContain("REVIEWER_CANARY_OK");
+    expect(reviewerContract).toContain("30-second budget");
+    expect(reviewerContract).toContain("one primary raw artifact");
+    expect(reviewerContract).toContain("model=gpt-5.6-luna");
+    expect(reviewerContract).toContain("reasoning_effort=max");
+    expect(reviewerContract).toContain("structured substantive-agent");
+    expect(reviewerContract).toContain("integrator owns the broad baseline");
+    expect(reviewerContract).toMatch(/deliberately approved\s+120-second read/u);
+    expect(reviewerContract).toContain("luna-max-long-read");
+    expect(reviewerContract).toContain("300-second observation window");
+    expect(reviewerContract).toContain("REVIEWER_REPORT_V1");
+    expect(reviewerContract).toContain("observation-window");
+    expect(guide).toContain("Before any reviewer spawn");
+    expect(guide).toContain("REVIEWER_CANARY_OK");
+    expect(guide).toContain("one named surface");
+    expect(guide).toMatch(/new\s+chat\s+session\s+is\s+not\s+a\s+fresh\s+host/u);
+    expect(development).toContain("first operation in a bounded");
+    expect(development).toMatch(/observation\s+window may be recorded as `observing` repeatedly/u);
+    expect(development).toContain("This is not a completion deadline");
+    expect(lessons).toContain("Bounded external lane and nested npm execution");
+    expect(lessons).toContain("REVIEWREADY_NPM_CACHE");
+    expect(lessons).toContain("Reviewer watchdog");
+    expect(lessons).toContain("pre-dispatch tool failure");
+    expect(lessons).toContain("host close-agent control");
+    expect(lessons).toContain("control-plane blocker");
+    expect(lessons).toContain("elevated host context");
+    expect(lessons).toContain("green control-plane did not prove reviewer completion");
+    expect(lessons).toContain("two-stage admission");
+    expect(lessons).toContain("observing");
+    expect(adr).toContain("bounded external batch");
+    expect(adr).toContain("connected/elevated lane");
+    expect(implementation).toContain('ghCli: "forbidden"');
+    expect(implementation).toContain('npmWhoami: "forbidden"');
   });
 });

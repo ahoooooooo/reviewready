@@ -79,10 +79,9 @@ function closesFence(line: string, fence: MarkdownFence): boolean {
   return marker !== undefined && marker[0] === fence.marker && marker.length >= fence.length;
 }
 
-const htmlTagPattern =
-  /<\/?([A-Za-z][A-Za-z0-9-]*)(?:\s+[^\s"'=<>]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'=<>]+))?)*\s*\/?\s*>/gu;
+const htmlTagPattern = /<\/?([A-Za-z][A-Za-z0-9-]*)(?:[^"'<>]|"[^"]*"|'[^']*')*\/?>/gu;
 const rawHtmlBlockStartPattern =
-  /^\s{0,3}<\/?[A-Za-z][A-Za-z0-9-]*(?:\s+[^\s"'=<>]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'=<>]+))?)*\s*\/?\s*>/u;
+  /^\s{0,3}<\/?[A-Za-z][A-Za-z0-9-]*(?:[^"'<>]|"[^"]*"|'[^']*')*\/?>/u;
 const voidHtmlTags = new Set([
   "area",
   "base",
@@ -100,7 +99,7 @@ const voidHtmlTags = new Set([
   "wbr"
 ]);
 
-function updateRawHtmlTags(line: string, stack: string[]): void {
+function updateRawHtmlTags(line: string, tags: Map<string, number>): void {
   for (const match of line.matchAll(htmlTagPattern)) {
     const tag = match[1]?.toLocaleLowerCase("en-US");
     const rawTag = match[0];
@@ -108,14 +107,16 @@ function updateRawHtmlTags(line: string, stack: string[]): void {
       continue;
     }
     if (rawTag.startsWith("</")) {
-      const index = stack.lastIndexOf(tag);
-      if (index >= 0) {
-        stack.splice(index, 1);
+      const count = tags.get(tag);
+      if (count === undefined) {
+        continue;
       }
+      if (count === 1) tags.delete(tag);
+      else tags.set(tag, count - 1);
       continue;
     }
     if (!rawTag.endsWith("/>") && !voidHtmlTags.has(tag)) {
-      stack.push(tag);
+      tags.set(tag, (tags.get(tag) ?? 0) + 1);
     }
   }
 }
@@ -128,6 +129,7 @@ function isInvisibleCodePoint(codePoint: number): boolean {
 }
 
 const invisibleHtmlEntityNames = new Set([
+  "af",
   "applyfunction",
   "bom",
   "emsp",
@@ -136,9 +138,11 @@ const invisibleHtmlEntityNames = new Set([
   "feff",
   "functionapplication",
   "hairsp",
+  "ic",
   "invisiblecomma",
   "invisibleseparator",
   "invisibletimes",
+  "it",
   "mediumspace",
   "nobreak",
   "nbsp",
@@ -146,8 +150,13 @@ const invisibleHtmlEntityNames = new Set([
   "negativethickspace",
   "negativethinspace",
   "negativeverythinspace",
+  "nmedium",
   "newline",
+  "nonbreakingspace",
   "numsp",
+  "nthick",
+  "nthin",
+  "nverythin",
   "puncsp",
   "shy",
   "tab",
@@ -184,7 +193,7 @@ function visibleMarkdownLines(body: string): string[] | undefined {
   const visible: string[] = [];
   let fence: MarkdownFence | undefined;
   let htmlComment = false;
-  const rawHtmlTags: string[] = [];
+  const rawHtmlTags = new Map<string, number>();
   let linkReferenceContinuation = false;
 
   for (const rawLine of body.split(/\r?\n/u)) {
@@ -192,11 +201,6 @@ function visibleMarkdownLines(body: string): string[] | undefined {
       if (closesFence(rawLine, fence)) {
         fence = undefined;
       }
-      continue;
-    }
-
-    if (rawHtmlTags.length > 0 || rawHtmlBlockStartPattern.test(rawLine)) {
-      updateRawHtmlTags(rawLine, rawHtmlTags);
       continue;
     }
 
@@ -225,6 +229,11 @@ function visibleMarkdownLines(body: string): string[] | undefined {
       line = line.slice(start + 4);
     }
 
+    if (rawHtmlTags.size > 0 || rawHtmlBlockStartPattern.test(visibleLine)) {
+      updateRawHtmlTags(visibleLine, rawHtmlTags);
+      continue;
+    }
+
     const marker = fenceMarker(visibleLine);
     if (marker !== undefined) {
       fence = marker;
@@ -247,7 +256,7 @@ function visibleMarkdownLines(body: string): string[] | undefined {
     }
   }
 
-  return htmlComment || rawHtmlTags.length > 0 ? undefined : visible;
+  return htmlComment || rawHtmlTags.size > 0 ? undefined : visible;
 }
 
 interface MarkdownHeading {
@@ -258,8 +267,183 @@ interface MarkdownHeading {
 const headingPattern = /^\s{0,3}(#{1,6})[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$/u;
 const visibleMarkdownTextPattern = /[^\p{White_Space}\p{Control}\p{Format}\p{Mark}]/u;
 const indentedCodePattern = /^(?: {4}|\t)/u;
-const emptyInlineMarkdownLinkPattern = /!?\[\s*\]\((?:\\.|[^()\\r\\n]|\([^()\\r\\n]*\))*\)/gu;
 const emptyReferenceMarkdownLinkPattern = /!?\[\s*\]\[[^\]\r\n]*\]/gu;
+const markdownWhitespacePattern = /\s/u;
+
+function isInvisibleMarkdownCharacter(value: string | undefined): boolean {
+  if (value === undefined) {
+    return false;
+  }
+  const codePoint = value.codePointAt(0);
+  return (
+    markdownWhitespacePattern.test(value) ||
+    (codePoint !== undefined && isInvisibleCodePoint(codePoint))
+  );
+}
+
+function skipMarkdownWhitespace(value: string, start: number): number {
+  let index = start;
+  while (index < value.length && markdownWhitespacePattern.test(value[index] ?? "")) {
+    index += 1;
+  }
+  return index;
+}
+
+function quotedLinkTitleEnd(value: string, start: number, quote: string): number | undefined {
+  for (let index = start + 1; index < value.length; index += 1) {
+    const character = value[index];
+    if (character === "\r" || character === "\n") {
+      return undefined;
+    }
+    if (character === "\\") {
+      if (index + 1 >= value.length) {
+        return undefined;
+      }
+      index += 1;
+      continue;
+    }
+    if (character === quote) {
+      return index + 1;
+    }
+  }
+  return undefined;
+}
+
+function parenthesizedLinkTitleEnd(value: string, start: number): number | undefined {
+  let depth = 0;
+  for (let index = start; index < value.length; index += 1) {
+    const character = value[index];
+    if (character === "\r" || character === "\n") {
+      return undefined;
+    }
+    if (character === "\\") {
+      if (index + 1 >= value.length) {
+        return undefined;
+      }
+      index += 1;
+      continue;
+    }
+    if (character === "(") {
+      depth += 1;
+    } else if (character === ")") {
+      depth -= 1;
+      if (depth === 0) {
+        return index + 1;
+      }
+    }
+  }
+  return undefined;
+}
+
+function linkEndAfterWhitespace(value: string, start: number): number | undefined {
+  const index = skipMarkdownWhitespace(value, start);
+  if (value[index] === ")") {
+    return index + 1;
+  }
+  const titleQuote = value[index];
+  let titleEnd: number | undefined;
+  if (titleQuote === '"') {
+    titleEnd = quotedLinkTitleEnd(value, index, '"');
+  } else if (titleQuote === "'") {
+    titleEnd = quotedLinkTitleEnd(value, index, "'");
+  } else if (titleQuote === "(") {
+    titleEnd = parenthesizedLinkTitleEnd(value, index);
+  }
+  if (titleEnd === undefined) {
+    return undefined;
+  }
+  const closing = skipMarkdownWhitespace(value, titleEnd);
+  return value[closing] === ")" ? closing + 1 : undefined;
+}
+
+function emptyInlineLinkEnd(value: string, openIndex: number): number | undefined {
+  let index = openIndex + 1;
+  if (value[index] === "<") {
+    const angleStart = index + 1;
+    for (index = angleStart; index < value.length; index += 1) {
+      const character = value[index];
+      if (character === "\r" || character === "\n") {
+        return undefined;
+      }
+      if (character === "\\") {
+        if (index + 1 >= value.length) {
+          return undefined;
+        }
+        index += 1;
+        continue;
+      }
+      if (character === "<") {
+        return undefined;
+      }
+      if (character === ">") {
+        return index === angleStart ? undefined : linkEndAfterWhitespace(value, index + 1);
+      }
+    }
+    return undefined;
+  }
+
+  let depth = 0;
+  for (; index < value.length; index += 1) {
+    const character = value[index];
+    if (character === undefined) {
+      return undefined;
+    }
+    if (character === "\r" || character === "\n") {
+      return undefined;
+    }
+    if (character === "\\") {
+      if (index + 1 >= value.length) {
+        return undefined;
+      }
+      index += 1;
+      continue;
+    }
+    if (character === "(") {
+      depth += 1;
+    } else if (character === ")") {
+      if (depth === 0) {
+        return index + 1;
+      }
+      depth -= 1;
+    } else if (depth === 0 && markdownWhitespacePattern.test(character)) {
+      return linkEndAfterWhitespace(value, index);
+    }
+  }
+  return undefined;
+}
+
+function stripEmptyInlineMarkdownLinks(value: string): string {
+  const pieces: string[] = [];
+  let cursor = 0;
+  let index = 0;
+  while (index < value.length) {
+    const image = value[index] === "!" && value[index + 1] === "[";
+    const opening = image ? index + 1 : value[index] === "[" ? index : -1;
+    if (opening < 0) {
+      index += 1;
+      continue;
+    }
+
+    let labelEnd = opening + 1;
+    while (labelEnd < value.length && isInvisibleMarkdownCharacter(value[labelEnd])) {
+      labelEnd += 1;
+    }
+    if (value[labelEnd] !== "]" || value[labelEnd + 1] !== "(") {
+      index = opening + 1;
+      continue;
+    }
+
+    const end = emptyInlineLinkEnd(value, labelEnd + 1);
+    if (end === undefined) {
+      break;
+    }
+    pieces.push(value.slice(cursor, image ? opening - 1 : opening));
+    cursor = end;
+    index = end;
+  }
+  pieces.push(value.slice(cursor));
+  return pieces.join("");
+}
 
 function markdownHeading(line: string): MarkdownHeading | undefined {
   const match = headingPattern.exec(line);
@@ -278,9 +462,9 @@ function hasVisibleMarkdownText(line: string): boolean {
   if (indentedCodePattern.test(line)) {
     return false;
   }
-  const withoutEmptyMarkdownMarkers = stripInvisibleHtmlEntities(line)
-    .replace(emptyInlineMarkdownLinkPattern, "")
-    .replace(emptyReferenceMarkdownLinkPattern, "");
+  const withoutEmptyMarkdownMarkers = stripEmptyInlineMarkdownLinks(
+    stripInvisibleHtmlEntities(line)
+  ).replace(emptyReferenceMarkdownLinkPattern, "");
   return visibleMarkdownTextPattern.test(withoutEmptyMarkdownMarkers);
 }
 

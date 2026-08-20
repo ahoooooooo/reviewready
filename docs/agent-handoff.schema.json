@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ahoooooooo/reviewready/blob/main/docs/agent-handoff.schema.json",
+  "title": "ReviewReady canonical agent handoff",
+  "description": "The machine-readable JSON payload for the repository's single live agent handoff.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "document_type",
+    "schema_version",
+    "project",
+    "updated_at",
+    "revision",
+    "branch",
+    "worktree_state",
+    "changed_paths",
+    "change_digest",
+    "handoff_digest",
+    "route",
+    "phase",
+    "outcome",
+    "active_slice",
+    "next_action",
+    "blockers",
+    "completed",
+    "validation",
+    "external_writes",
+    "read_order"
+  ],
+  "properties": {
+    "document_type": { "const": "REVIEWREADY_CANONICAL_AGENT_HANDOFF" },
+    "schema_version": { "const": 1 },
+    "project": { "const": "ReviewReady" },
+    "updated_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{3})?(?:Z|[+-][0-9]{2}:[0-9]{2})$"
+    },
+    "revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "branch": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "worktree_state": { "enum": ["clean", "dirty"] },
+    "changed_paths": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "maxLength": 500 }
+    },
+    "change_digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "handoff_digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "route": { "enum": ["base", "base+deep-research"] },
+    "phase": { "enum": ["research", "repair", "proof", "handoff", "defer-external"] },
+    "outcome": { "enum": ["promote", "reopen", "defer-external"] },
+    "active_slice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "objective", "scope", "non_goals", "falsifier", "exit_gate"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "objective": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "scope": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 300 }
+        },
+        "non_goals": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 300 }
+        },
+        "falsifier": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "exit_gate": { "type": "string", "minLength": 1, "maxLength": 1000 }
+      }
+    },
+    "next_action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "owner", "gate"],
+      "properties": {
+        "action": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "owner": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "gate": { "type": "string", "minLength": 1, "maxLength": 1000 }
+      }
+    },
+    "blockers": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "class", "status", "symptom", "evidence", "next_action"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "class": { "enum": ["product", "process", "environment", "evidence", "external"] },
+          "status": { "enum": ["open", "deferred", "resolved"] },
+          "symptom": { "type": "string", "minLength": 1, "maxLength": 1000 },
+          "evidence": { "type": "string", "minLength": 1, "maxLength": 1200 },
+          "next_action": { "type": "string", "minLength": 1, "maxLength": 1000 }
+        }
+      }
+    },
+    "completed": {
+      "type": "array",
+      "maxItems": 30,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "summary", "evidence"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "summary": { "type": "string", "minLength": 1, "maxLength": 1000 },
+          "evidence": { "type": "string", "minLength": 1, "maxLength": 1200 }
+        }
+      }
+    },
+    "validation": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 30,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["command", "status", "observed_at", "revision", "change_digest"],
+        "properties": {
+          "command": { "type": "string", "minLength": 1, "maxLength": 500 },
+          "status": { "enum": ["passed", "failed", "deferred"] },
+          "observed_at": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "revision": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "change_digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+        }
+      }
+    },
+    "external_writes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pr", "commit", "push"],
+      "properties": {
+        "pr": { "enum": ["not-in-scope", "forbidden-this-round", "authorized-not-done", "done"] },
+        "commit": {
+          "enum": ["not-in-scope", "forbidden-this-round", "authorized-not-done", "done"]
+        },
+        "push": { "enum": ["not-in-scope", "forbidden-this-round", "authorized-not-done", "done"] }
+      }
+    },
+    "read_order": {
+      "type": "array",
+      "minItems": 3,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "maxLength": 300 }
+    }
+  }
+}

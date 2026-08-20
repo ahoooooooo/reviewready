@@ -26,9 +26,71 @@ Settings grow only in response to observed failures:
 - a repeated multi-step workflow becomes a repo skill;
 - external live data earns an MCP integration only when local tools cannot provide it.
 
-Do not pin a model or reasoning setting in repository configuration. Model choices
-change faster than the product contract and belong to the operator unless a measured
-compatibility problem requires a temporary project constraint.
+Do not pin the operator's global default model or reasoning setting in repository
+configuration. The independent-review and research-worker route is a deliberate
+project constraint: every admitted subagent uses
+`model=gpt-5.6-luna` with `reasoning_effort=max`, as required by `AGENTS.md` and
+the two project skills. This route rule does not mutate global Codex settings or
+grant permission to substitute another model.
+
+## Shared round contract and routing
+
+The base loop and the deep-research lane use one compact decision record. The
+current cross-turn instance is always the root [canonical agent handoff](../HANDOFF.md),
+validated by `npm run handoff:validate`; it is not an additional approval form or
+a new authority. For a routine change it may still link to a short issue,
+pull-request, plan, or research-note entry. A non-trivial round records:
+
+- **baseline**: the exact revision, worktree state, public or provider snapshot,
+  observation time, and freshness or refresh trigger;
+- **decision**: one observable outcome, work kind, trust boundary, non-goals, and
+  prerequisites;
+- **surface map**: which source, tests, generated files, package/public coordinates,
+  or external settings may change, and which evidence tier each surface needs;
+- **attack map**: independent attack surfaces, the strongest falsifier for each,
+  bounded effort, and the condition that ends the attack batch;
+- **claim/defect ledger**: each finding's status, evidence path, uncertainty, owner,
+  and next action; and
+- **proof and handoff**: focused proof, complete gate, artifact or external checks,
+  acceptance condition, remaining authority, and the exact next decision.
+
+### Prompt admission gate
+
+Every user prompt enters the base decision contract. Route breadth then selects
+the evidence required; it is not a shortcut around baseline, one outcome, or
+focused proof:
+
+1. **process self-optimization**: the prompt asks to change, optimize, compare,
+   or route a workflow, prompt, skill, agent method, or repository rule;
+2. **promotion**: the prompt asks to publish, commit, push, merge, tag, deploy,
+   change settings or permissions, use credentials/secrets, or contact a
+   provider with a state-changing operation;
+3. **deep research**: the decision depends on a material current or external
+   claim requiring multi-source search, synthesis, comparison, or authority;
+4. **consequential scope**: the prompt involves security, trust, provenance,
+   authority, release, package, workflow, Action, schema, public API,
+   compatibility, migration, architecture, or multiple repository surfaces;
+5. **bounded local scope**: only a bounded local task or known single-source
+   status/fact check with a clear acceptance condition, no trust or public-
+   contract boundary, no process-rule change, and no destructive or external
+   mutation. It still uses the base contract; only its evidence breadth stays
+   focused.
+
+Examples: “understand the whole project status” requires a dated baseline;
+“查最新” or “recommend a strategy” adds deep research; “optimize the
+prompt/process” adds process self-optimization; “publish the package” adds
+promotion. An explicit request to use a named skill overrides route inference.
+Multiple overlays may apply. If a bounded condition cannot be proved, keep the
+base contract and add the stronger applicable overlay rather than taking a
+shortcut. Record `base`, the overlays, and the prompt trigger before proceeding.
+
+Each stage updates the same handoff record. Run `npm run handoff:refresh` after
+each meaningful slice and validate it before handing work to another agent.
+Consequential and research promotion is not allowed
+while the record lacks the current revision and freshness, the strongest
+unresolved objection, the proof that could falsify the result, the evidence tier
+supporting the claim, or the next authority boundary. Every base handoff still
+needs its current baseline, decision, focused proof, and escalation boundary.
 
 ## Adversarial delivery loop
 
@@ -114,12 +176,92 @@ authority or decision is isolated. Do not convert an unresolved result into a
 pass by renaming it, lowering the standard, or hiding it behind stale evidence.
 
 The integrator owns scope, synthesis, and promotion. Start with the smallest
-team that can do the work and add an agent only for a genuinely independent
-surface or an independent challenge. Before dispatch, each parallel task must
-have a distinct attack surface and a concrete evidence handoff. No agent may
-review its own patch or argument as the final review; overlapping or idle work
-is closed after its evidence is delivered. A new round starts from the
-accumulated evidence and failed attempts, never from an unexamined reset.
+team that can do the work and add agents only for genuinely independent
+surfaces. For process-self-optimization, promotion, consequential,
+public/release, full-project, or explicit independent-review requests, the
+integrator must dispatch one fresh reviewer with no conversation context after
+baseline/framing and before repair or promotion. Pass only raw task-local
+artifacts and questions; do not leak prior findings or intended fixes. No agent
+may review its own patch or argument as the final review, and a same-context
+self-critique does not satisfy the independent-review gate. If the reviewer
+finds a material objection, return to attack; if it is unavailable, record the
+deferred review and do not promote. Overlapping or idle work is closed after
+its evidence is delivered. A new round starts from the accumulated evidence and
+failed attempts, never from an unexamined reset.
+
+The default delegation schedule is one reviewer, not a fixed panel. Expand to a
+maximum of three total reviewers and two concurrent reviewers only when the
+first report names an unresolved decision-changing falsifier and at least two
+uncovered surfaces have disjoint artifacts and falsifiers. Allow one replacement
+only for an explicit pre-dispatch tool failure where the reviewer never started
+and the round budget remains. Give each report-only reviewer one initial
+observation window: 60 seconds by default and 120 seconds only for a deliberately
+approved long read. This is not a completion deadline. A silent observation
+window may be recorded as `observing` repeatedly; keep the same agent running,
+do not close or replace it, and continue in a later turn. Only a host-reported
+terminal/error status may enter the timeout state; elapsed time, `running`, or a
+missing host status must never close the worker. Only a host-confirmed
+terminal/error state is closed and deferred.
+The completed first pass is also the final current-epoch pass when
+no material repair, revision, scope, or trust-boundary change follows it; after
+such a change, run one fresh final pass. Do not duplicate an unchanged review
+only to label it final.
+
+Before the substantive assignment, run a separate fresh worker-readiness canary
+with `fork_context=false`. It receives no repository task and must return the
+exact `REVIEWER_CANARY_OK` sentinel within one 30-second budget, after which its
+id is closed exactly once. A control-plane doctor/canary only proves host
+control; it does not prove that a reviewer worker can execute and return a
+report. If the worker canary times out, returns malformed output, or cannot be
+closed, record `defer-external` and do not dispatch the larger review.
+
+Every subagent uses `model=gpt-5.6-luna` and `reasoning_effort=max`. Normal
+bounded reviewers use a fresh default agent with `fork_context=false`; do not
+substitute another model or reasoning profile. This is a latency routing choice
+only: exact report, watchdog, close, and handoff gates remain unchanged.
+After a recorded host-confirmed LUNA MAX 120-second timeout, only `luna-max-long-read` may
+pair two small artifacts at 300 seconds.
+
+Substantive review is surface-packeted: one reviewer owns one named surface and
+one primary raw artifact by default, with explicit exclusions, one falsifier,
+and one concrete question. Only a deliberately approved 120-second read may
+pair two small artifacts; after a recorded LUNA MAX timeout, the explicit
+`luna-max-long-read` profile may pair two at 300 seconds. Larger work is split
+into disjoint assignments.
+Reviewers do not run the full repository gate. Their report must
+start with `REVIEWER_REPORT_V1` and include the assigned surface, falsifier,
+evidence artifact, missed surface, authority gap, and one of
+`promote|reopen|defer-external`. Off-scope or malformed output is incomplete
+evidence and cannot be repaired by silently replacing the reviewer.
+
+The local `scripts/reviewer-watchdog.mjs` helper is the executable contract for
+these transitions. It validates the exact worker sentinel and report packet,
+keeps silent observation expiry non-terminal, makes host-confirmed timeout
+terminal, enforces one close call, and exposes a throwing
+`assertDispatchAllowed()` ticket only after a completed host-closed review. A
+silent observation expiry does not create a close ticket or a replacement. The
+final handoff records the canary and structured host close proof under
+`reviewerReadiness`; it also records the exact validated complete final report
+and structured close proof bound to the substantive reviewer id. Complete proof
+must contain `source`, `agentId`, a known host `previousStatus`, and `closed=true`;
+`running` is valid when the report arrived before close. Observing assignments
+have no close proof yet. It must pass
+`npm run review:validate` before promotion.
+
+The independent reviewer report must identify a strongest falsifier, a missed
+attack surface, an authority or evidence gap, and a recommendation. It is
+evidence for the integrator, not an approval or readiness decision. Before
+promotion, the integrator records a multi-reviewer handoff containing the route,
+review epoch, current revision/worktree, assignments, owned/excluded surfaces,
+surface coverage, raw artifacts, commands/evidence, severity-ordered findings,
+the strongest falsifier, missed attack surface, authority/evidence gap,
+recommendation, and exactly one outcome: promote, reopen, or defer-external.
+Missing or ambiguous handoff fields fail closed for the independent-review gate.
+An assignment with status observing, timeout, tool-failure, or deferred is valid
+only with the defer-external outcome; observing remains running and cannot be
+promoted as complete.
+Validate the JSON handoff with npm run review:validate -- --file <handoff.json>
+before treating that gate as complete.
 
 The loop ends only when another credible finding would not change the decision
 within scope, or when the only remaining action belongs to a named external
@@ -135,15 +277,21 @@ it. Dependent plans remain candidates until the foundational process is
 promoted; they may guide experiments but may not certify their own prerequisite.
 Attack the process through real past tasks, looking for missed risks, repeated
 work, premature stops, stale evidence, idle coordination, and unnecessary
-external mutations. The replay must cover materially different failure modes,
-such as a trust or security change, a release or artifact change, an external
-evidence decision, and the process change itself. Batch those findings, design
-a materially different improvement, and replay the same tasks against the
-candidate process while the old process remains unchanged. Promote the new
-process only when it improves the outcome without weakening evidence, safety,
-or scope control; one successful replay is not proof that it is best. If the
-candidates are equivalent, keep the simpler one. Once remaining changes are
-only cosmetic, keep the current process and return to product work.
+external mutations. The replay must cover at least four materially different
+cases: a local behavior or security task, including a trust or security change,
+a release or public-artifact task, an external-authority or adoption decision,
+and a research-to-work-order handoff.
+Include the process-change task itself when the candidate changes this method.
+For each case, compare the frozen method and candidate on missed attacks, stale
+or unsupported claims, duplicated work, handoff completeness, unnecessary
+external actions, and scope control. Batch those findings, design a materially
+different process candidate, and replay the same cases against it while the old
+process remains unchanged. Promote the new process only when the replay shows at
+least one meaningful safety, evidence-quality, or coordination improvement and
+no regression in authority, scope, or fail-closed behavior; one successful
+replay is not proof that it is best. If the candidates are equivalent, keep the
+simpler process. Once remaining changes are only cosmetic, keep the current
+process and return to product work.
 
 ## Git promotion protocol
 
@@ -152,12 +300,13 @@ the owner for every local mutation while high-impact external changes remain
 deliberately gated.
 
 The routine branch lane covers the already authorized task scope: inspect the
-trusted checkout, edit repository files, run focused and complete validation,
-create commits, push the current feature branch, and update its existing PR or
-draft PR. The integrator may continue through those actions without requesting a
-new approval for each commit or push. This lane never authorizes protected-branch
-merges, tag movement, releases, package publication, ruleset changes, secrets,
-credentials, or deployment.
+trusted checkout, edit repository files, run focused validation, and create
+commits or push the current feature branch when authorized. Run complete
+validation before final PR/promotion or when the changed surface requires it.
+The integrator may continue through retry-safe commits and pushes in that named
+batch without requesting a new approval for each one. This lane never authorizes
+protected-branch merges, tag movement, releases, package publication, ruleset
+changes, secrets, credentials, or deployment.
 
 The promotion lane begins only after the candidate has passed local proof and
 the owner gives one explicit authorization for the named merge or release
@@ -166,6 +315,14 @@ reconciliation inside that named batch proceed without repeated approval prompts
 GitHub environment reviewers, two-factor authentication, and other provider
 controls remain external gates; an agent must not work around them or turn a
 failed session into an implicit authorization.
+
+Authentication probes are not retry-safe reads. Keep local work in the sandbox
+and run `npm run auth:status` once before the first operation in a bounded
+external batch. Reuse the result only while provider authority, resource scope,
+network context, and credential context remain unchanged. On a context result,
+stop sandbox retries, use the exact GCM or connected provider channel it names
+through one approved connected/elevated operation, then return to the sandbox.
+Never substitute GitHub CLI or local npm login for an unavailable authority.
 
 The CI order is part of the proof rather than a timing assumption. Untrusted
 pull-request CI may check out and test the proposed revision with read-only
@@ -190,7 +347,12 @@ independent product example or previously observed failure.
 ### Bootstrap
 
 - `AGENTS.md`, `.codex/config.toml`, specifications, tests, and quality commands.
-- No hooks, skills, MCP servers, custom agents, or repo model pin.
+- At the initial bootstrap there were no repository hooks, project skills, MCP
+  servers, or custom agents. The current repository has the two versioned
+  process skills and the canonical handoff described by `AGENTS.md`; that
+  later state supersedes the bootstrap snapshot. Repository configuration
+  still does not set a global model default, while the reviewer/research route
+  intentionally fixes its admitted workers to LUNA MAX as documented above.
 
 ### Stabilization
 

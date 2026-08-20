@@ -25,6 +25,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 import { auditPackageEntries, extractPackResult } from "./verify-package.mjs";
+import { localNpmEnvironment } from "./npm-runtime.mjs";
 
 const MAX_TARBALL_BYTES = 20 * 1024 * 1024;
 const MAX_TARBALL_ENTRIES = 512;
@@ -771,10 +772,12 @@ export function normalizePackagedPath(value) {
  * @returns {string}
  */
 function runNpm(args, cwd) {
+  const env = localNpmEnvironment(cwd);
   const npmExecPath = process.env.npm_execpath;
   if (npmExecPath) {
     return execFileSync(process.execPath, [npmExecPath, ...args], {
       cwd,
+      env,
       encoding: "utf8",
       maxBuffer: MAX_SIGNATURE_OUTPUT_BYTES,
       timeout: MAX_CHILD_PROCESS_MS,
@@ -792,6 +795,7 @@ function runNpm(args, cwd) {
     if (existsSync(bundledNpmCli)) {
       return execFileSync(process.execPath, [bundledNpmCli, ...args], {
         cwd,
+        env,
         encoding: "utf8",
         timeout: MAX_CHILD_PROCESS_MS,
         maxBuffer: MAX_SIGNATURE_OUTPUT_BYTES,
@@ -801,6 +805,7 @@ function runNpm(args, cwd) {
   }
   return execFileSync(process.platform === "win32" ? "npm.cmd" : "npm", args, {
     cwd,
+    env,
     encoding: "utf8",
     timeout: MAX_CHILD_PROCESS_MS,
     maxBuffer: MAX_SIGNATURE_OUTPUT_BYTES,

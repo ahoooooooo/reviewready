@@ -22,6 +22,8 @@ import { tmpdir } from "node:os";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
+import { localNpmEnvironment } from "./npm-runtime.mjs";
+
 const MAX_ARTIFACT_BYTES = 20 * 1024 * 1024;
 const MAX_CHILD_PROCESS_MS = 180_000;
 const NO_FOLLOW = typeof constants.O_NOFOLLOW === "number" ? constants.O_NOFOLLOW : 0;
@@ -236,10 +238,12 @@ function verifyInstalledSourceMaps(packageRoot) {
  * @returns {void}
  */
 function runNpm(arguments_, cwd) {
+  const env = localNpmEnvironment(cwd);
   const npmExecPath = process.env.npm_execpath;
   if (npmExecPath !== undefined && !npmExecPath.toLowerCase().endsWith(".cmd")) {
     execFileSync(process.execPath, [npmExecPath, ...arguments_], {
       cwd,
+      env,
       stdio: ["ignore", "ignore", "inherit"],
       windowsHide: true,
       timeout: MAX_CHILD_PROCESS_MS
@@ -251,6 +255,7 @@ function runNpm(arguments_, cwd) {
     if (existsSync(bundledNpm)) {
       execFileSync(process.execPath, [bundledNpm, ...arguments_], {
         cwd,
+        env,
         stdio: ["ignore", "ignore", "inherit"],
         windowsHide: true,
         timeout: MAX_CHILD_PROCESS_MS
@@ -260,6 +265,7 @@ function runNpm(arguments_, cwd) {
   }
   execFileSync(process.platform === "win32" ? "npm.cmd" : "npm", arguments_, {
     cwd,
+    env,
     stdio: ["ignore", "ignore", "inherit"],
     windowsHide: true,
     timeout: MAX_CHILD_PROCESS_MS

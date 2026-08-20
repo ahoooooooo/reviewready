@@ -6,6 +6,16 @@ dist/action/*
 !dist/action/package.json
 !dist/action/licenses.txt
 coverage/
+.reviewready-agent-failures.ndjson
+.reviewready-reviewer-lifecycle.json
+.reviewready-reviewer-streaming-lifecycle.json
+.reviewready-reviewer-handoff-digest.json
+.reviewready-hook-observations.ndjson
+.reviewready-npm-cache/
+.codex/hooks.json
+.codex/hooks/
+.codex/workspace-handoff.md
+test/codex-hook.test.ts
 *.log
 .DS_Store
 .env

@@ -296,16 +296,26 @@ rules:
     ).toBe("missing");
   });
 
-  it.each(["## Testing\n[](#)", "## Testing\n[<!-- hidden -->](https://example.test)"])(
-    "does not count empty Markdown markers as visible section content",
-    (body) => {
-      const result = evaluate(policy, input({ body }));
+  it.each([
+    "## Testing\n[](#)",
+    "## Testing\n[<!-- hidden -->](https://example.test)",
+    "## Testing\n[&#8203;](https://example.org)",
+    "## Testing\n[\u034f](https://example.org)",
+    "## Testing\n![](foo)",
+    "## Testing\n[](foo\\)bar)",
+    "## Testing\n[](<foo\\>bar>)",
+    "## Testing\n[](foo(and(bar)))",
+    "## Testing\n[](<foo)>)",
+    '## Testing\n[](foo "title )")',
+    "## Testing\n[](foo (title ))",
+    '## Testing\n[](<foo)> "title )")'
+  ])("does not count empty Markdown markers as visible section content", (body) => {
+    const result = evaluate(policy, input({ body }));
 
-      expect(
-        result.requirements.find((requirement) => requirement.type === "pr_body_section")?.status
-      ).toBe("missing");
-    }
-  );
+    expect(
+      result.requirements.find((requirement) => requirement.type === "pr_body_section")?.status
+    ).toBe("missing");
+  });
 
   it("ignores headings and attestations inside fenced code blocks", () => {
     const result = evaluate(
@@ -357,6 +367,24 @@ rules:
       expectedAttestation: "missing"
     },
     {
+      name: "named non-breaking-space HTML entity",
+      body: "## Testing\n&NonBreakingSpace;",
+      expectedSection: "missing",
+      expectedAttestation: "missing"
+    },
+    {
+      name: "named function-application HTML entity",
+      body: "## Testing\n&af;",
+      expectedSection: "missing",
+      expectedAttestation: "missing"
+    },
+    {
+      name: "named invisible MathML entity aliases",
+      body: "## Testing\n&it; &ic; &nmedium; &nthick; &nthin; &nverythin;",
+      expectedSection: "missing",
+      expectedAttestation: "missing"
+    },
+    {
       name: "invisible HTML entity cannot create a heading marker",
       body: "#&#8203;# Testing\nTests passed.",
       expectedSection: "missing",
@@ -378,6 +406,78 @@ rules:
         "</div>"
       ].join("\n"),
       expectedSection: "missing",
+      expectedAttestation: "missing"
+    },
+    {
+      name: "unclosed raw HTML after visible evidence",
+      body: ["## Testing", "Tests passed.", "<div>"].join("\n"),
+      expectedSection: "missing",
+      expectedAttestation: "missing"
+    },
+    {
+      name: "raw HTML comments cannot close an active tag",
+      body: [
+        "## Testing",
+        "<div>",
+        "<!-- </div> -->",
+        "- [x] I understand this change.",
+        "</div>"
+      ].join("\n"),
+      expectedSection: "missing",
+      expectedAttestation: "missing"
+    },
+    {
+      name: "orphan raw HTML close is ignored",
+      body: ["## Testing", "Tests passed.", "</span>"].join("\n"),
+      expectedSection: "satisfied",
+      expectedAttestation: "missing"
+    },
+    {
+      name: "same-tag raw HTML remains incomplete",
+      body: ["## Testing", "Tests passed.", "<div>", "<div>", "</div>"].join("\n"),
+      expectedSection: "missing",
+      expectedAttestation: "missing"
+    },
+    {
+      name: "self-closing raw HTML does not hide previous evidence",
+      body: ["## Testing", "Tests passed.", "<div/>"].join("\n"),
+      expectedSection: "satisfied",
+      expectedAttestation: "missing"
+    },
+    {
+      name: "empty angle destination remains conservative",
+      body: "## Testing\n[](<>)",
+      expectedSection: "satisfied",
+      expectedAttestation: "missing"
+    },
+    {
+      name: "unclosed angle destination remains visible",
+      body: "## Testing\n[](<foo)",
+      expectedSection: "satisfied",
+      expectedAttestation: "missing"
+    },
+    {
+      name: "invalid unangle title remains visible",
+      body: "## Testing\n[](foo invalid)",
+      expectedSection: "satisfied",
+      expectedAttestation: "missing"
+    },
+    {
+      name: "unclosed quoted title remains visible",
+      body: '## Testing\n[](foo "title)',
+      expectedSection: "satisfied",
+      expectedAttestation: "missing"
+    },
+    {
+      name: "unmatched destination remains visible",
+      body: "## Testing\n[](",
+      expectedSection: "satisfied",
+      expectedAttestation: "missing"
+    },
+    {
+      name: "non-empty link label remains visible",
+      body: "## Testing\n[x](foo)",
+      expectedSection: "satisfied",
       expectedAttestation: "missing"
     },
     {

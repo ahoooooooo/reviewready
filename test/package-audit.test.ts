@@ -108,6 +108,33 @@ describe("auditPackageEntries", () => {
     expect(workflow).not.toContain("run: npm run verify:dist");
   });
 
+  it("keeps Vitest config loading out of the restricted node_modules temp path", async () => {
+    const packageJson = JSON.parse(await readFile("package.json", "utf8")) as {
+      scripts?: { test?: string; [key: string]: unknown };
+    };
+
+    expect(packageJson.scripts?.test).toContain("--configLoader runner");
+    expect(packageJson.scripts?.["test:coverage"]).toContain("--configLoader runner");
+    expect(packageJson.scripts?.["test:watch"]).toContain("--configLoader runner");
+  });
+
+  it("isolates local coverage reports for concurrent validation runs", async () => {
+    const config = await readFile("vitest.config.ts", "utf8");
+
+    expect(config).toContain("REVIEWREADY_COVERAGE_DIRECTORY");
+    expect(config).toContain("process.pid");
+  });
+
+  it("keeps child npm cache selection process-local", async () => {
+    const packageSmoke = await readFile("scripts/package-smoke.mjs", "utf8");
+    const releasePreflight = await readFile("scripts/release-preflight.mjs", "utf8");
+    const verifyPackage = await readFile("scripts/verify-package.mjs", "utf8");
+
+    expect(packageSmoke).toContain("localNpmEnvironment");
+    expect(releasePreflight).toContain("localNpmEnvironment");
+    expect(verifyPackage).toContain("localNpmEnvironment");
+  });
+
   it("keeps the compatibility gate from rebuilding generated parity", async () => {
     const packageJson = JSON.parse(await readFile("package.json", "utf8")) as {
       scripts?: { check?: string; ["check:compat"]?: string };

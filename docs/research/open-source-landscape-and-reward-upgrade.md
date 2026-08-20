@@ -245,6 +245,11 @@ attestation 串接，卻不需要宣稱取代它們。
 
 ## 4. 目前進度診斷
 
+本節與其中的版本、採用數據及 repository state 都是 **2026-08-16 的研究
+快照**，不是今日 live status。跨 local、release、npm 與 GitHub 的最新狀態
+以 [current-status](../current-status.md) 為準；研究文件保留當時觀察，不回填
+成後來的版本。
+
 ### 技術信任核心：強
 
 從 repository 的 product spec、architecture、tests、release evidence 與
@@ -264,8 +269,8 @@ attestation 串接，卻不需要宣稱取代它們。
 - read-only audit、exact revision policy/workflow read、offline replay 與
   不執行 workflow source 的限制。
 
-本地最近一次完整 gate 的結果是 847 tests passed、6 skipped；這是
-repository validation evidence，不是外部採用證據。
+截至該研究快照，本地最近一次完整 gate 的結果是 847 tests passed、6
+skipped；這是 repository validation evidence，不是外部採用證據。
 
 ### Trusted root 與外部權威：仍有明確邊界
 
@@ -285,7 +290,8 @@ GitHub App enforcement 或經外部 authority 驗證的 webhook deployment。
 
 ### 公開分發與證據表面：中等，且是近期最高 ROI
 
-目前 local origin/main 與 package metadata 是 v1.0.10；repository 的
+在 2026-08-16 研究快照中，local origin/main 與 package metadata 是
+v1.0.10；repository 的
 published README、Action ref、schema、tag、GitHub Release、npm tarball
 與 dist 仍需要在每次 release 以同一個 canonical revision 重新核對。
 README 也保留部分歷史 v1.0.6/v1.0.7 reference，這是不可改寫已發布 bytes
