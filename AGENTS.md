@@ -8,10 +8,16 @@ policy. It never claims code is correct and never approves or merges a PR.
 
 - `docs/product-spec.md`: v1 behavior and non-goals.
 - `docs/architecture.md`: trust boundaries and module rules.
+- `HANDOFF.md`: the single canonical live agent handoff; read it after this
+  file and before deciding the current task state.
+- `docs/agent-handoff.schema.json` and `scripts/agent-handoff.mjs`: the
+  machine-readable handoff contract and its refresh/validation commands.
 - `skills/reviewready-base-delivery/SKILL.md`: adaptive delivery protocol
   applied to every repository task.
 - `skills/reviewready-deep-research/SKILL.md`: source-traceable research overlay
   for current, external, strategic, and authority-dependent decisions.
+- `docs/adr/0017-canonical-agent-handoff.md`: the durable decision and research
+  record for the handoff contract.
 - `docs/ai-development.md`: how humans and coding agents evolve this repository.
 - `docs/exec-plans/active/post-v1.md`: fixed post-v1 node order and promotion gates.
 - `docs/exec-plans/completed/v1.md`: historical v1 delivery plan and decision log.
@@ -23,6 +29,9 @@ policy. It never claims code is correct and never approves or merges a PR.
 - `scripts/agent-failure.mjs`: local machine-readable failure record/triage tool.
 - `scripts/reviewer-watchdog.mjs`: deterministic reviewer admission and
   timeout/close lifecycle contract.
+- scripts/reviewer-admission.mjs: required doctor-check admission validator.
+- scripts/windows-child-canary.mjs: no-shell spawn and large-output pipe
+  lifecycle canaries.
 - `scripts/research-pass.mjs`: deterministic raw-source pass, claim handoff
   validator, and close-once source-pass watchdog.
 - `docs/operational-lessons.md`: recurring integration failures and their
@@ -35,11 +44,12 @@ policy. It never claims code is correct and never approves or merges a PR.
 
 ## Context loading
 
-The source map is not a preload list. Default context is this file plus
-`skills/reviewready-base-delivery/SKILL.md`. An explicit named-skill request is
-a route signal: load it and announce it; load deep research for that request or
-its trigger. Load rationale/evidence on demand, use `rg` with bounded sections,
-and never preload all of `docs/`, `src/`, or `test/`.
+The source map is not a preload list. Default context is this file, the root
+`HANDOFF.md`, and `skills/reviewready-base-delivery/SKILL.md`. An explicit
+named-skill request is a route signal: load it and announce it; load deep
+research for that request or its trigger. Load rationale/evidence on demand,
+use `rg` with bounded sections, and never preload all of `docs/`, `src/`, or
+`test/`.
 
 ## Working rules
 
@@ -49,6 +59,13 @@ and never preload all of `docs/`, `src/`, or `test/`.
   conservative by default: establish a baseline, one outcome, relevant attack,
   focused proof, and handoff. Do not infer a reduced path from a
   short prompt, casual wording, or familiar file name.
+- Treat root `HANDOFF.md` as the only live cross-turn project handoff. Read its
+  marked JSON payload before acting; obey its one `next_action`, `outcome`,
+  `blockers`, and `external_writes`. After every meaningful discovery, repair,
+  validation, or external attempt, run `npm run handoff:refresh`, update the
+  state if the slice changed, and run `npm run handoff:validate`. A stale or
+  invalid handoff is an incomplete task. `docs/current-status.md` is a dated
+  snapshot and must not be used as a substitute.
 - For process, promotion, consequential, public/release, full-project, or
   explicit independent-review work, dispatch a fresh reviewer with literal
   fork_context=false before repair or promotion; record revision/worktree,
@@ -56,19 +73,30 @@ and never preload all of `docs/`, `src/`, or `test/`.
   recommendation, and one outcome. Same-context self-review does not satisfy
   the gate.
 - Reviewer watchdog: give a report-only reviewer an initial observation window;
-  a silent window expiry is non-terminal: keep the agent running, record
-  `observing`, and do not replace it. Only a host-confirmed terminal/error state
-  yields `defer-external` and permits close-agent cleanup.
+  the 60/120/300-second value is not a completion deadline. A silent window
+  expiry is non-terminal: keep the same agent running, record `observing`, and
+  allow another observation window. Never call timeout or close merely because
+  a window elapsed. Only a host-confirmed terminal/error state yields
+  `defer-external` and permits close-agent cleanup.
 - Save every agent id and automatically call the host close-agent control after
   completion, timeout, interruption, or error. Never ask the user to close a
   subagent in the UI; if closure cannot be confirmed, stop dispatching.
 - Before any reviewer spawn, run `codex.cmd --strict-config doctor --json`
   in the approved connected/elevated host context used by scheduling, not the
   restricted sandbox. A sandbox-only no-credentials result is a context
-  boundary, not the app-host authority result. Require elevated doctor overall
-  ok and one tiny control-plane canary; otherwise do not spawn, record
-  defer-external, and repair the Codex host first. A new chat session is not a
+  boundary, not the app-host authority result. Doctor admission requires every
+  required check to be healthy; an overall warning is allowed only when the
+  warning is a known non-functional advisory. If a non-interactive host reports
+  TERM=dumb, use a process-local TERM=xterm-256color for doctor and never
+  persist that environment change. Validate the JSON with
+  node scripts/reviewer-admission.mjs doctor. A new chat session is not a
   fresh host.
+- Control-plane admission is multi-angle: use one small app/control canary
+  (for example list_projects) and then the actual worker-readiness canary.
+  list_threads is an inventory path, not the only proof that reviewer dispatch
+  works. If that path hangs, record a path-specific external failure, do not
+  retry its fingerprint in the same context, and do not block a proven worker
+  route on an unrelated inventory call.
 - Before a substantive reviewer spawn, run one fresh worker-readiness canary
   with `fork_context=false` and the exact `REVIEWER_CANARY_OK` sentinel. Give it
   one 30-second budget, save its id, and close it exactly once. Only an exact
@@ -148,6 +176,8 @@ impact/dependency-ordered batch, then run `npm run agent:resolve` only after
 focused proof. P0 security/data-loss/corruption/required-gate failures stop
 immediately. A sandbox or provider-context failure is deferred, not repaired by
 changing ACLs, credentials, auth authority, or global Codex configuration.
+Dependent handoff commands are serial: complete handoff:refresh before starting
+handoff:validate; never run them concurrently.
 
 The project hook is an observer only: it records a failure only when the
 PostToolUse payload contains an explicit non-zero exit code. Missing exit-code
@@ -212,7 +242,7 @@ failure before changing product code.
 2. Run one read-only child-process canary in the current context:
 
    ```powershell
-   node -e "const { spawnSync } = require('node:child_process'); const r = spawnSync(process.execPath, ['-e', 'process.stdout.write(\"codex-spawn-ok\")'], { encoding: 'utf8' }); if (r.error) { console.error(r.error.code || r.error.message); process.exit(1); } process.stdout.write(r.stdout);"
+   node scripts/windows-child-canary.mjs
    ```
 
 3. If the canary fails, do not repeat the same child-spawning command in the
@@ -228,10 +258,32 @@ failure before changing product code.
 5. Run npm run check only after the canary passes; otherwise report the
    validation as environment-blocked rather than as a product failure.
 
+The canonical child canary runs both a small spawnSync check and a large
+streaming-output check without shell indirection. The streaming check attaches
+stdout and stderr readers before waiting for the child, closes stdin, checks the
+exit code and output size, hides the Windows console, and applies one bounded
+child timeout. Any wrapper that captures a doctor or reviewer JSON report must
+follow the same order; waiting for exit before draining both pipes can fill a
+Windows pipe and create a false timeout. Do not replace the canary with a
+PowerShell-embedded command string. If a timeout kill is requested, the
+adapter must wait for the child close event before returning; a
+close-unconfirmed result is not a completed cleanup proof.
+
+For Windows process observation, prefer Get-Process with ErrorAction
+SilentlyContinue, tasklist, a known process handle, an explicit marker file, or
+a child exit code. Do not depend on Get-CimInstance Win32_Process command-line
+inspection or treat a process count as proof of shutdown. For a process tree,
+use a bounded child runner or a Windows Job Object; terminating a parent alone
+does not prove its children ended. Restart and scheduled-task canaries must be
+staged as create/observe/verify/cleanup with a unique target and an independent
+post-state check; do not combine stop, restart, doctor, and inspection into one
+timeout-prone command.
+
 ## Validation
 
-Run focused validation first. For source, behavior, security, public, release,
-or final PR work, run `npm run check`; for documentation, skill, or process-only
+Run focused validation first. Always run `npm run handoff:validate` before
+handoff or completion. For source, behavior, security, public, release, or
+final PR work, run `npm run check`; for documentation, skill, or process-only
 changes, run the relevant validator plus format/diff review. Run the complete
 gate before final PR/promotion or escalation; inspect generated artifacts in the
 diff.

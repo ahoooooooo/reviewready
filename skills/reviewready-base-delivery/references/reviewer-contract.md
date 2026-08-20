@@ -12,6 +12,18 @@ control-plane child canary. A sandbox-only no-credentials result is a context
 boundary, not logout evidence. If doctor, reachability, WebSocket, active
 rollout, or thread control is not usable, record `defer-external` and do not
 spawn.
+Doctor admission is evaluated by scripts/reviewer-admission.mjs: required
+checks must be ok; only an explicitly listed non-functional advisory may leave
+the overall status at warning. When the host is non-interactive, normalize
+TERM for that process only. Use a small app/control canary plus the worker
+canary; a hanging inventory path such as list_threads is path-specific
+evidence, not proof that the actual worker dispatch path is unusable.
+If a host wrapper captures doctor JSON, attach stdout and stderr readers before
+waiting for process exit and close stdin first. Waiting before draining a large
+report can fill a Windows pipe and create a false control-plane timeout; the
+streaming child canary is required evidence for this wrapper path. A timeout
+kill must then await the child close event; returning before close is not
+valid cleanup evidence.
 
 Before a substantive reviewer, run one fresh worker-readiness canary with
 `fork_context=false`. Give it one 30-second budget and require the exact output
@@ -67,19 +79,31 @@ solely to obtain a better-shaped report.
   decision-changing falsifier and the new surface has disjoint artifacts and
   falsifiers.
 - Cap the base route at three substantive reviewers and two active reviewers.
-- Give each reviewer one total wait budget: 60 seconds by default, or 120
-  seconds only for a deliberately approved paired-artifact read. After a
-  recorded LUNA MAX 120-second timeout, use only the explicit
-  `luna-max-long-read` two-artifact profile with a 300-second budget.
+- Give each reviewer one initial observation window: 60 seconds by default, or
+  120 seconds only for a deliberately approved paired-artifact read. These
+  values are not completion deadlines. After a recorded host-confirmed LUNA MAX
+  120-second timeout, use only the explicit `luna-max-long-read` two-artifact
+  profile with a 300-second observation window.
 - A silent observation-window expiry is non-terminal: record `observing`, keep
-  the worker running, and do not close or replace it. Only a host-confirmed
-  terminal/error state is a timeout failure that closes once and yields
-  `defer-external`; never poll indefinitely in the parent turn.
+  the same worker running, and allow another observation window. Never call
+  `timeout()` or close merely because the observation window elapsed. The
+  watchdog accepts only a host-confirmed terminal status in `timeout(hostStatus)`;
+  `running` or a missing host status is rejected. Only that terminal path closes
+  once and yields `defer-external`; never poll indefinitely in the parent turn.
 - One replacement is allowed only for an explicit pre-dispatch tool failure
   where the reviewer never started and the round budget remains.
 - Store every id. On completion, timeout, interruption, or error, invoke the
   host close-agent adapter exactly once. If close cannot be confirmed, stop
   dispatching.
+  Use one bounded wait call per observation window and continue with the same
+  agent id using backoff. The wait duration is an observer budget, not a worker
+  completion deadline; a parent turn may yield while the host worker remains
+  running. Do not close, replace, or dispatch a second worker because a wait
+  call returned without a final report.
+  A host not_found result proves that no live worker is currently addressable,
+  but it is not a synthetic passed close proof. Record the explicit error shape
+  and keep that historical review out of promotion; future workers still need
+  the normal one-call structured close evidence.
 
 Use `scripts/reviewer-watchdog.mjs` for exact worker/report validation,
 terminal timeout, close-once, host proof binding, no replacement, and the

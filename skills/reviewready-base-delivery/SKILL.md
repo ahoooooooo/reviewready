@@ -105,7 +105,7 @@ child process reports ETIMEDOUT:
 2. Run one read-only child-process canary in the current context:
 
    ```powershell
-   node -e "const { spawnSync } = require('node:child_process'); const r = spawnSync(process.execPath, ['-e', 'process.stdout.write(\"codex-spawn-ok\")'], { encoding: 'utf8' }); if (r.error) { console.error(r.error.code || r.error.message); process.exit(1); } process.stdout.write(r.stdout);"
+   node scripts/windows-child-canary.mjs
    ```
 
 3. If it fails, preserve the error and retry the original command at most once
@@ -120,16 +120,31 @@ child process reports ETIMEDOUT:
 5. Run repository validation only after the canary passes; otherwise mark the
    result environment-blocked, not product-passing or product-failing.
 
+The canary includes a large-output child to prove that stdout and stderr are
+drained before waiting for close. Close a captured child's stdin before waiting
+as well. A doctor or reviewer JSON report can fill a Windows pipe; a parent
+that calls WaitForExit before reading both streams will manufacture a timeout
+even when the child is healthy. After a timeout kill request, return only after
+the child close event; an unconfirmed cleanup is not a terminal success or
+failure proof.
+
 ## Context budget
 
-Keep the default context small: `AGENTS.md`, this skill, the exact active plan,
-and only the files needed for the current slice. Load `reviewready-deep-research`
-only for its overlay. Load rationale documents on demand rather than alongside
-the skill: use product/architecture for behavior or trust, post-v1 for node
-planning, release/operational/status documents for public or external work, and
-research documents for research or process-method changes. Use `rg` to locate
-headings and read bounded ranges. Do not preload all of `docs/`, `src/`, or
-`test/`, and do not reread unchanged context after compaction.
+Keep the default context small: `AGENTS.md`, the root `HANDOFF.md`, this skill,
+the exact active plan, and only the files needed for the current slice. Load
+`reviewready-deep-research` only for its overlay. Load rationale documents on
+demand rather than alongside the skill: use product/architecture for behavior
+or trust, post-v1 for node planning, release/operational/status documents for
+public or external work, and research documents for research or process-method
+changes. Use `rg` to locate headings and read bounded ranges. Do not preload
+all of `docs/`, `src/`, or `test/`, and do not reread unchanged context after
+compaction.
+
+`HANDOFF.md` is the only live cross-turn project state. Its marked JSON payload
+is machine-validated, and its one `next_action` is the only default continuation
+point. After each meaningful discovery, repair, validation, or external attempt,
+refresh and validate it; a stale handoff is incomplete evidence. The per-review
+JSON handoff and dated `current-status.md` remain separate contracts.
 
 The broad baseline-read rule belongs to the integrator. A fresh reviewer or
 research source pass is a bounded worker: its supplied packet is the raw context
@@ -181,8 +196,10 @@ For every subagent spawn, set `model=gpt-5.6-luna` and
 `reasoning_effort=max`. For the normal bounded packet, dispatch a fresh
 `default` agent with `fork_context=false`; do not substitute another model or
 reasoning profile. Use `luna-max-long-read` only after a recorded 120-second
-LUNA MAX timeout, with exactly two small artifacts and a 300-second budget.
-This routing choice does not loosen the report, watchdog, or handoff
+host-confirmed LUNA MAX timeout, with exactly two small artifacts and a
+300-second observation window. These durations are observation windows, not
+completion deadlines: repeated silent observations keep the same worker
+running. This routing choice does not loosen the report, watchdog, or handoff
 requirements.
 
 These hard invariants apply even when the detailed reference is not loaded:
@@ -191,11 +208,18 @@ These hard invariants apply even when the detailed reference is not loaded:
   `REVIEWER_CANARY_OK` worker canary and one confirmed close;
 - one primary raw artifact, one falsifier, one question, and exact
   `REVIEWER_REPORT_V1` evidence binding by default;
-- a host-confirmed timeout/tool-failure is terminal, replacement is forbidden
+- a host-confirmed terminal status is required before `timeout(hostStatus)` can
+  become terminal; a timeout/tool-failure is then terminal, replacement is forbidden
   unless the reviewer never started because of an explicit pre-dispatch tool
   failure, and close-agent is exactly once through an agent-bound host adapter;
-  a silent observation-window expiry is non-terminal and leaves the worker
-  running;
+  a silent observation-window expiry is non-terminal, can be repeated, and
+  leaves the worker running;
+- Admission is deliberately multi-angle: a small control-plane canary proves
+  the app path, the exact worker canary proves spawn/report readiness, and the
+  substantive report plus host close proves the reviewer lifecycle. An
+  inventory path such as list_threads is not the sole dispatch authority.
+  A hanging inventory adapter is recorded as path-specific and must not block
+  a separately proven worker route.
 - `assertDispatchAllowed()` must pass before any next dispatch; otherwise the
   round is `defer-external`; and
 - `reviewerReadiness` plus `npm run review:validate` is required before proof or
@@ -301,6 +325,14 @@ Use route-appropriate proof:
   independent evidence;
 - research overlay: primary sources, reproducible queries, dates, revisions,
   counter-evidence, claim boundaries, and refresh triggers;
+- handoff contract: `npm run handoff:validate` must pass after
+  `npm run handoff:refresh`; the current revision, branch, changed paths, and
+  worktree digest must match before the result is handed to another agent.
+  Every `passed` validation entry must also carry that exact `change_digest`;
+  refreshing the handoff never upgrades an old green result to current proof;
+- Refresh and validation are dependent commands: complete handoff refresh and
+  inspect its success before starting handoff validation. Running them in
+  parallel can create a false stale-content failure and is forbidden.
 - package, Action, release, or public surface: exact artifact, generated parity,
   clean-room/package checks, public-coordinate verification, and authorization.
 
@@ -340,6 +372,9 @@ on demand, and pressure-test old versus candidate behavior with a few realistic
 prompts. Compare skipped gates, unnecessary work, stale claims, handoff quality,
 and completion claims. Record the result as process evidence; do not add tests
 that only assert skill prose, and keep the simpler version without material gain.
+The process state itself belongs in the root `HANDOFF.md`; update and validate it
+at every slice boundary so a new model does not have to infer which document is
+current. `npm run check` includes this validation for executable or final work.
 Forward-test the candidate with a fresh no-context reviewer; do not let the
 candidate process certify its own dispatch or promotion gate.
 

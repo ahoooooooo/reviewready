@@ -32,7 +32,7 @@ not the final independent reviewer.
 ## Context budget
 
 Keep this overlay incremental. Start with the user's decision, the base skill,
-and the smallest source set that covers the material source classes. Expand only
+the root `HANDOFF.md`, and the smallest source set that covers the material source classes. Expand only
 when a named unresolved claim could change the decision, a source conflict needs
 adjudication, or freshness/authority remains uncertain. Budget exhaustion is not
 permission to promote; return `reopen` or `defer-external` when evidence is still
@@ -40,7 +40,26 @@ incomplete. Read the full research rationale documents only when reviewing or
 changing the method; otherwise use relevant bounded sections. Summarize source
 findings into the claim handoff instead of carrying full source pages forward.
 
+The root `HANDOFF.md` is the project-level live handoff, not a source-pass report.
+Every research slice records its current phase, one next action, source freshness,
+counter-case, and external blocker there; refresh and validate it before handing
+the slice to another agent. Its `passed` validation entries must bind to the
+current worktree `change_digest`; a refresh cannot turn an older green proof into
+current evidence. `RESEARCH_PASS_V1` remains the separate raw-artifact contract
+for an individual source assignment.
+
 ## Admit the research overlay
+
+Research execution uses the same multi-angle admission as the base route:
+a small control-plane canary, a fresh worker readiness canary, and the
+source-pass lifecycle are separate proofs. A hanging thread-inventory adapter
+is recorded as a path-specific external observation; it does not invalidate a
+proven worker route or justify repeating the same fingerprint in one context.
+When a research or doctor subprocess is wrapped for JSON capture, drain stdout
+and stderr concurrently before waiting for close and close stdin first. A full
+report can fill a Windows pipe and masquerade as an external timeout; the base
+streaming child canary covers this execution-environment boundary. A timeout
+kill must await the child close event before the research adapter returns.
 
 Add this overlay when the user's decision depends on facts outside the trusted
 checkout or on claims whose meaning can change with time. Triggers include:
@@ -114,6 +133,11 @@ raw artifacts/claim ids for the final packet; run the base final reviewer; then
 validate the final `reviewerReadiness` handoff. The minimum source-pass fields are
 `surface`, `sources`, `claim_ids`, `evidence`, `counter_case`, `freshness`, and
 `outcome`; source-pass output never counts as the final independent review.
+
+Before report-and-handoff, run `npm run handoff:refresh` and
+`npm run handoff:validate`. A research report cannot replace the canonical live
+handoff, and a stale handoff cannot be promoted merely because its sources are
+valid.
 
 ## Promotion and handoff
 

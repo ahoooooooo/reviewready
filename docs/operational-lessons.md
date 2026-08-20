@@ -70,13 +70,15 @@ product code, credentials, or global sandbox settings to hide the failure.
 ## Reviewer watchdog
 
 A reviewer that stays running without a report is an execution-context failure,
-not independent evidence. Give report-only reviewers one bounded wait budget
-(60 seconds by default, 120 seconds only for a deliberately approved long
-read). On a silent observation-window expiry, record `observing` and leave the
-agent running; on a host-confirmed timeout, close once, record the failure, and
-produce a defer-external handoff. Do not poll indefinitely or launch a replacement solely
-because the reviewer timed out; reserve one replacement for an explicit
-pre-dispatch tool failure where the reviewer never started.
+not independent evidence. Give report-only reviewers one initial observation
+window (60 seconds by default, 120 seconds only for a deliberately approved
+long read), not a completion deadline. On each silent window expiry, record
+`observing` and leave the same agent running; on a host-confirmed terminal
+status, call the terminal timeout path, close once, record the failure, and
+produce a defer-external handoff. Elapsed time, `running`, or a missing host
+status cannot trigger timeout or close. Do not poll indefinitely or launch a
+replacement solely because a window expired; reserve one replacement for an
+explicit pre-dispatch tool failure where the reviewer never started.
 
 Agent ids are lifecycle handles, not disposable notes. Save each id at dispatch
 and invoke the host close-agent control exactly once after completion, timeout,
@@ -87,11 +89,12 @@ healthy.
 ## 2026-08-19: bounded reviewer execution profile
 
 The fixed `reviewer` role uses high reasoning and intermittently exceeded the
-60-second report-only budget even for one-artifact packets. A diagnostic
+60-second initial observation window even for one-artifact packets. A diagnostic
 `default`/medium run completed and found a real close-proof gap, but it is not
 the project profile. The durable route is now a fresh `default` agent with
 `model=gpt-5.6-luna` and `reasoning_effort=max`; use the user's required LUNA MAX
-profile even when it needs the deliberate 300-second paired-artifact budget.
+profile even when it needs the deliberate 300-second paired-artifact observation
+window.
 This changes latency routing only: `fork_context=false`, exact report, watchdog
 close, structured host proof, and handoff validation remain mandatory. A timeout
 is still terminal `defer-external`, never a reason to replace the reviewer.
@@ -173,3 +176,49 @@ replayable check when the behavior can be tested locally. Then repair the
 smallest safe boundary, validate the exact attempt, and keep the lesson linked
 from the active process. Do not turn a one-off workaround into a permanent
 credential, global configuration, or bypass of an external safety control.
+
+## 2026-08-20: reviewer admission must separate health, dispatch, and lifecycle
+
+The elevated doctor initially returned a failure only because the non-interactive
+host exposed TERM=dumb. A process-local terminal normalization changed that to
+warning-only; required auth, WebSocket, state, MCP, runtime, and sandbox checks
+remained healthy. The durable rule is to validate required check ids rather than
+treat every advisory warning as a total control-plane outage.
+
+A list_threads inventory call then remained unresolved while list_projects and a
+fresh worker canary succeeded. The inventory adapter is therefore a path-specific
+observability failure, not proof that reviewer dispatch is unusable. The current
+route records both facts and uses the actual worker canary as the dispatch proof.
+
+A fresh no-context gpt-5.6-luna max reviewer read one artifact, remained alive
+through its first observation window, returned REVIEWER_REPORT_V1 in the next
+window, and was host-closed exactly once. This is the required proof that an
+observation window is not a completion deadline; the previous broad reviewer
+failure must not be repaired by shortening the window or replacing the worker.
+The admission and child-process adapters are scripts/reviewer-admission.mjs and
+scripts/windows-child-canary.mjs. Handoff refresh and validation are dependent
+commands and must run serially.
+
+## 2026-08-20: captured doctor output can create a false timeout
+
+A cold doctor launched through a PowerShell ProcessStartInfo wrapper first
+failed because the cmd quoting was malformed. After that was corrected, both
+the codex.cmd wrapper and the direct Codex JavaScript entrypoint stayed alive
+until their bounded waits expired. The decisive replay captured the large JSON
+report while draining stdout and stderr concurrently, closed stdin before the
+wait, and passed doctor admission with exit code zero. The failure was a
+parent-side pipe backpressure deadlock, not a slow reviewer or a broken
+doctor.
+
+The durable guard is scripts/windows-child-canary.mjs: it now runs a large
+streaming child and fails unless the parent drains both output streams before
+close. Any future external wrapper must use that ordering; increasing a wait
+window alone is not a repair.
+
+The first independent review of that guard found two gaps before promotion:
+the child only exercised stdout backpressure, and timeout cleanup returned
+immediately after kill without confirming the close event. The repair now
+writes 128 KiB to both streams and waits for the close event after timeout
+cleanup. It does not return a close-unconfirmed result: without the close event
+there is no truthful terminal result for this child lifecycle.
+Focused tests cover both the normal stream path and the timeout-close path.

@@ -16,7 +16,7 @@ const report = [
   "recommendation=reopen"
 ].join("\n");
 
-function hostClose(previousStatus: string, closed: boolean) {
+function hostClose(previousStatus: unknown, closed: boolean) {
   return (agentId: string) => ({
     source: "host-close-agent",
     agentId,
@@ -98,7 +98,7 @@ describe("reviewer watchdog", () => {
       agentId: "agent-malformed",
       surface: "public-surface",
       artifactId: "package.json",
-      closeAgent: hostClose("running", true)
+      closeAgent: hostClose("interrupted", true)
     });
     expect(() => watchdog.accept("malformed")).toThrow("header is invalid");
     expect(watchdog.snapshot()).toMatchObject({
@@ -119,9 +119,9 @@ describe("reviewer watchdog", () => {
       surface: "public-surface",
       artifactId: "package.json",
       waitBudgetSeconds: 60,
-      closeAgent: hostClose("running", true)
+      closeAgent: hostClose("interrupted", true)
     });
-    expect(watchdog.timeout()).toEqual({
+    expect(watchdog.timeout("interrupted")).toEqual({
       status: "timeout",
       outcome: "defer-external",
       replacementAllowed: false
@@ -132,12 +132,37 @@ describe("reviewer watchdog", () => {
       closeEvidence: {
         source: "host-close-agent",
         agentId: "agent-2",
-        previousStatus: "running",
+        previousStatus: "interrupted",
         closed: true
       }
     });
     expect(() => watchdog.assertDispatchAllowed()).toThrow("dispatch is forbidden");
     expect(() => watchdog.accept(report)).toThrow("terminal");
+  });
+
+  it("requires host confirmation before converting silence into timeout", async () => {
+    const watchdog = createReviewerWatchdog({
+      agentId: "agent-host-status",
+      surface: "public-surface",
+      artifactId: "package.json",
+      closeAgent: hostClose({ errored: "worker failed" }, true)
+    });
+    expect(() => watchdog.timeout()).toThrow("host-confirmed terminal");
+    expect(() => watchdog.timeout("running")).toThrow("host-confirmed terminal");
+    expect(watchdog.snapshot()).toMatchObject({ state: "waiting", closeCalls: 0 });
+    expect(watchdog.timeout({ errored: "worker failed" })).toMatchObject({
+      status: "timeout",
+      outcome: "defer-external",
+      replacementAllowed: false
+    });
+    await expect(watchdog.close()).resolves.toMatchObject({
+      status: "closed",
+      dispatchAllowed: false,
+      closeEvidence: {
+        previousStatus: "errored",
+        closed: true
+      }
+    });
   });
 
   it("keeps a silent observation timeout running without closing the agent", async () => {
@@ -154,9 +179,16 @@ describe("reviewer watchdog", () => {
       replacementAllowed: false,
       agentRunning: true
     });
+    expect(watchdog.observeTimeout()).toEqual({
+      status: "observing",
+      outcome: "defer-external",
+      replacementAllowed: false,
+      agentRunning: true
+    });
     expect(watchdog.snapshot()).toMatchObject({
-      state: "waiting",
+      state: "observing",
       observationExpired: true,
+      observationCount: 2,
       closeCalls: 0
     });
     await expect(watchdog.close()).rejects.toThrow("terminal");
@@ -200,7 +232,7 @@ describe("reviewer watchdog", () => {
         closed: true
       })
     });
-    watchdog.timeout();
+    watchdog.timeout("interrupted");
     await expect(watchdog.close()).rejects.toThrow("agent id");
 
     const unknownStatus = createReviewerWatchdog({
@@ -209,7 +241,7 @@ describe("reviewer watchdog", () => {
       artifactId: "package.json",
       closeAgent: hostClose("invented", true)
     });
-    unknownStatus.timeout();
+    unknownStatus.timeout("interrupted");
     await expect(unknownStatus.close()).rejects.toThrow("known host status");
   });
 });

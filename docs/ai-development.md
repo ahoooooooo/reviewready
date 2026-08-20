@@ -26,15 +26,20 @@ Settings grow only in response to observed failures:
 - a repeated multi-step workflow becomes a repo skill;
 - external live data earns an MCP integration only when local tools cannot provide it.
 
-Do not pin a model or reasoning setting in repository configuration. Model choices
-change faster than the product contract and belong to the operator unless a measured
-compatibility problem requires a temporary project constraint.
+Do not pin the operator's global default model or reasoning setting in repository
+configuration. The independent-review and research-worker route is a deliberate
+project constraint: every admitted subagent uses
+`model=gpt-5.6-luna` with `reasoning_effort=max`, as required by `AGENTS.md` and
+the two project skills. This route rule does not mutate global Codex settings or
+grant permission to substitute another model.
 
 ## Shared round contract and routing
 
-The base loop and the deep-research lane use one compact decision record. It is not
-an additional approval form or a new authority; for a routine change it may be a
-short issue, pull-request, plan, or research-note entry. A non-trivial round records:
+The base loop and the deep-research lane use one compact decision record. The
+current cross-turn instance is always the root [canonical agent handoff](../HANDOFF.md),
+validated by `npm run handoff:validate`; it is not an additional approval form or
+a new authority. For a routine change it may still link to a short issue,
+pull-request, plan, or research-note entry. A non-trivial round records:
 
 - **baseline**: the exact revision, worktree state, public or provider snapshot,
   observation time, and freshness or refresh trigger;
@@ -79,7 +84,9 @@ Multiple overlays may apply. If a bounded condition cannot be proved, keep the
 base contract and add the stronger applicable overlay rather than taking a
 shortcut. Record `base`, the overlays, and the prompt trigger before proceeding.
 
-Each stage updates the same record. Consequential and research promotion is not allowed
+Each stage updates the same handoff record. Run `npm run handoff:refresh` after
+each meaningful slice and validate it before handing work to another agent.
+Consequential and research promotion is not allowed
 while the record lacks the current revision and freshness, the strongest
 unresolved objection, the proof that could falsify the result, the evidence tier
 supporting the claim, or the next authority boundary. Every base handoff still
@@ -187,11 +194,14 @@ maximum of three total reviewers and two concurrent reviewers only when the
 first report names an unresolved decision-changing falsifier and at least two
 uncovered surfaces have disjoint artifacts and falsifiers. Allow one replacement
 only for an explicit pre-dispatch tool failure where the reviewer never started
-and the round budget remains. Give each report-only reviewer one total wait
-budget: 60 seconds by default and never more than 120 seconds for a deliberately
-approved long read. A silent observation-window expiry is non-terminal: keep the
-agent running with `observing`, do not close or replace it, and continue in a
-later turn. Only a host-confirmed terminal/error state is closed and deferred.
+and the round budget remains. Give each report-only reviewer one initial
+observation window: 60 seconds by default and 120 seconds only for a deliberately
+approved long read. This is not a completion deadline. A silent observation
+window may be recorded as `observing` repeatedly; keep the same agent running,
+do not close or replace it, and continue in a later turn. Only a host-reported
+terminal/error status may enter the timeout state; elapsed time, `running`, or a
+missing host status must never close the worker. Only a host-confirmed
+terminal/error state is closed and deferred.
 The completed first pass is also the final current-epoch pass when
 no material repair, revision, scope, or trust-boundary change follows it; after
 such a change, run one fresh final pass. Do not duplicate an unchanged review
@@ -209,7 +219,7 @@ Every subagent uses `model=gpt-5.6-luna` and `reasoning_effort=max`. Normal
 bounded reviewers use a fresh default agent with `fork_context=false`; do not
 substitute another model or reasoning profile. This is a latency routing choice
 only: exact report, watchdog, close, and handoff gates remain unchanged.
-After a recorded LUNA MAX 120-second timeout, only `luna-max-long-read` may
+After a recorded host-confirmed LUNA MAX 120-second timeout, only `luna-max-long-read` may
 pair two small artifacts at 300 seconds.
 
 Substantive review is surface-packeted: one reviewer owns one named surface and
@@ -337,7 +347,12 @@ independent product example or previously observed failure.
 ### Bootstrap
 
 - `AGENTS.md`, `.codex/config.toml`, specifications, tests, and quality commands.
-- No hooks, skills, MCP servers, custom agents, or repo model pin.
+- At the initial bootstrap there were no repository hooks, project skills, MCP
+  servers, or custom agents. The current repository has the two versioned
+  process skills and the canonical handoff described by `AGENTS.md`; that
+  later state supersedes the bootstrap snapshot. Repository configuration
+  still does not set a global model default, while the reviewer/research route
+  intentionally fixes its admitted workers to LUNA MAX as documented above.
 
 ### Stabilization
 

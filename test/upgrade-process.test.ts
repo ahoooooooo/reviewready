@@ -3,19 +3,45 @@ import { describe, expect, it } from "vitest";
 
 describe("open-source upgrade process contract", () => {
   it("keeps the orchestration layer connected to its authoritative sources", async () => {
-    const [process, index, research, plan, base, deepSkill, reviewerContract, researchMethod] =
-      await Promise.all([
-        readFile("docs/oss-upgrade-process.md", "utf8"),
-        readFile("docs/research/README.md", "utf8"),
-        readFile("docs/research/deep-research-process.md", "utf8"),
-        readFile("docs/exec-plans/active/post-v1.md", "utf8"),
-        readFile("docs/ai-development.md", "utf8"),
-        readFile("skills/reviewready-deep-research/SKILL.md", "utf8"),
-        readFile("skills/reviewready-base-delivery/references/reviewer-contract.md", "utf8"),
-        readFile("skills/reviewready-deep-research/references/research-method.md", "utf8")
-      ]);
+    const [
+      process,
+      index,
+      research,
+      plan,
+      base,
+      deepSkill,
+      reviewerContract,
+      researchMethod,
+      handoff,
+      handoffSchema,
+      handoffScript,
+      handoffAdr
+    ] = await Promise.all([
+      readFile("docs/oss-upgrade-process.md", "utf8"),
+      readFile("docs/research/README.md", "utf8"),
+      readFile("docs/research/deep-research-process.md", "utf8"),
+      readFile("docs/exec-plans/active/post-v1.md", "utf8"),
+      readFile("docs/ai-development.md", "utf8"),
+      readFile("skills/reviewready-deep-research/SKILL.md", "utf8"),
+      readFile("skills/reviewready-base-delivery/references/reviewer-contract.md", "utf8"),
+      readFile("skills/reviewready-deep-research/references/research-method.md", "utf8"),
+      readFile("HANDOFF.md", "utf8"),
+      readFile("docs/agent-handoff.schema.json", "utf8"),
+      readFile("scripts/agent-handoff.mjs", "utf8"),
+      readFile("docs/adr/0017-canonical-agent-handoff.md", "utf8")
+    ]);
 
     expect(index).toContain("[Open-source upgrade lifecycle](../oss-upgrade-process.md)");
+    expect(handoff).toContain("CANONICAL AGENT HANDOFF");
+    expect(handoff).toContain("npm run handoff:refresh");
+    expect(handoff).toContain("npm run handoff:validate");
+    expect(handoffSchema).toContain("REVIEWREADY_CANONICAL_AGENT_HANDOFF");
+    expect(handoffSchema).toContain("additionalProperties");
+    expect(handoffSchema).toContain("change_digest");
+    expect(handoffScript).toContain("change_digest");
+    expect(handoffScript).toContain("content changed without running handoff:refresh");
+    expect(handoffAdr).toContain("ADR-0017: Canonical agent handoff state");
+    expect(handoffAdr).toContain("strongest counter-case");
     expect(research).toContain("[open-source upgrade lifecycle](../oss-upgrade-process.md)");
     expect(plan).toContain("[open-source upgrade lifecycle](../../oss-upgrade-process.md)");
 
@@ -57,6 +83,12 @@ describe("open-source upgrade process contract", () => {
     expect(deepSkill).toContain("process-self-optimization reviewer gate overrides it");
     expect(deepSkill).toContain("source-to-final handoff");
     expect(reviewerContract).toContain("REVIEWER_CANARY_OK");
+    expect(reviewerContract).toContain("initial observation window");
+    expect(reviewerContract).toContain("not completion deadlines");
+    expect(reviewerContract).toContain("timeout(hostStatus)");
+    expect(reviewerContract).toContain("`running` or a missing host status is rejected");
+    expect(process).toContain("model=gpt-5.6-luna");
+    expect(process).toContain("reasoning_effort=max");
 
     expect(research).toMatch(/shortest reproducible path/);
     expect(research).toMatch(/action boundary is explicit/);
@@ -160,7 +192,7 @@ describe("open-source upgrade process contract", () => {
     expect(reviewerContract).toContain("integrator owns the broad baseline");
     expect(reviewerContract).toMatch(/deliberately approved\s+120-second read/u);
     expect(reviewerContract).toContain("luna-max-long-read");
-    expect(reviewerContract).toContain("300-second budget");
+    expect(reviewerContract).toContain("300-second observation window");
     expect(reviewerContract).toContain("REVIEWER_REPORT_V1");
     expect(reviewerContract).toContain("observation-window");
     expect(guide).toContain("Before any reviewer spawn");
@@ -168,7 +200,8 @@ describe("open-source upgrade process contract", () => {
     expect(guide).toContain("one named surface");
     expect(guide).toMatch(/new\s+chat\s+session\s+is\s+not\s+a\s+fresh\s+host/u);
     expect(development).toContain("first operation in a bounded");
-    expect(development).toContain("silent observation-window expiry is non-terminal");
+    expect(development).toMatch(/observation\s+window may be recorded as `observing` repeatedly/u);
+    expect(development).toContain("This is not a completion deadline");
     expect(lessons).toContain("Bounded external lane and nested npm execution");
     expect(lessons).toContain("REVIEWREADY_NPM_CACHE");
     expect(lessons).toContain("Reviewer watchdog");

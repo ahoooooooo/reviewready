@@ -7,6 +7,9 @@ dist/action/*
 !dist/action/licenses.txt
 coverage/
 .reviewready-agent-failures.ndjson
+.reviewready-reviewer-lifecycle.json
+.reviewready-reviewer-streaming-lifecycle.json
+.reviewready-reviewer-handoff-digest.json
 .reviewready-hook-observations.ndjson
 .reviewready-npm-cache/
 .codex/hooks.json

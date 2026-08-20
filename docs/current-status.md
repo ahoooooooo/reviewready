@@ -2,6 +2,9 @@
 
 Status: **canonical mainline cross-surface snapshot**
 
+> Live agent handoff: [root `HANDOFF.md`](../HANDOFF.md). This document is a
+> dated public/mainline snapshot, not the current cross-turn task state.
+
 This document is the single index for the mainline/public project state at the
 dated snapshot below. It separates local mainline facts, public release facts,
 and time-bound external provider observations. It is not a live checkout status

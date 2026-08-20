@@ -19,6 +19,12 @@ method may add source lineage and claim requirements, but it may not loosen
 base worker admission, packet size, timeout, close-agent, retry, report-shape,
 or promotion rules.
 
+The root [canonical agent handoff](../../HANDOFF.md) is the live project state
+for the current research round. It is separate from each `RESEARCH_PASS_V1`
+source handoff and from the final independent-review JSON. Refresh and validate
+it after every source, attack, repair, or authority boundary so a new agent can
+resume without guessing which research document is current.
+
 ## Shared round protocol
 
 Deep research is a specialization of the base round, not a second lifecycle.
@@ -163,9 +169,9 @@ The integrator converts these into a surface matrix. Start with two
 raw-artifact-only passes for a multi-source decision: authority/primary-source
 and counter-evidence/alternative. Add one pass per additional material surface,
 up to four source agents total and two active agents at once. Each assignment
-records its owned and excluded surfaces, artifact ids, falsifier, deadline, and
-review epoch. Sibling reports and the integrator claim map are not passed into a
-new assignment.
+records its owned and excluded surfaces, artifact ids, falsifier, initial
+observation window, and review epoch. Sibling reports and the integrator claim
+map are not passed into a new assignment.
 
 This four-pass/two-active cap applies only to evidence-collection source passes.
 The final independent reviewer is a separate base-governed assignment, and the

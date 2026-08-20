@@ -49,8 +49,10 @@ cap does not include the base-governed final reviewer or its worker canary.
 
 Before the first pass, complete the base control-plane and worker canaries. Each
 pass owns one surface and one primary raw artifact by default, with explicit
-exclusions, one falsifier, one question, and one deadline. Larger evidence is
-split into disjoint passes. Research passes are not final independent reviews.
+exclusions, one falsifier, one question, and one initial observation window.
+The window is not a completion deadline; repeated silent observations keep the
+pass running. Larger evidence is split into disjoint passes. Research passes
+are not final independent reviews.
 Use `createResearchPassWatchdog` for each admitted source pass so valid,
 malformed/off-scope, timeout, and tool-failure outcomes all reach the same
 close-once terminal lifecycle before `RESEARCH_PASS_V1` claims enter the map.

@@ -20,12 +20,42 @@ const CLOSE_PREVIOUS_STATUSES = new Set([
   "running",
   "interrupted",
   "shutdown",
-  "not_found"
+  "not_found",
+  "errored"
+]);
+const TERMINAL_HOST_STATUSES = new Set([
+  "completed",
+  "interrupted",
+  "shutdown",
+  "not_found",
+  "errored"
 ]);
 
 /** @param {unknown} value @returns {value is Record<string, unknown>} */
 function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** @param {unknown} value @returns {string} */
+function normalizeHostStatus(value) {
+  if (typeof value === "string" && CLOSE_PREVIOUS_STATUSES.has(value)) {
+    return value;
+  }
+  if (isRecord(value)) {
+    const keys = Object.keys(value);
+    if (keys.length === 1 && keys[0] === "completed") return "completed";
+    if (keys.length === 1 && keys[0] === "errored") return "errored";
+  }
+  throw new Error("host status is not a known host status");
+}
+
+/** @param {unknown} value @returns {boolean} */
+function isHostTerminalStatus(value) {
+  try {
+    return TERMINAL_HOST_STATUSES.has(normalizeHostStatus(value));
+  } catch {
+    return false;
+  }
 }
 
 /** @param {unknown} value @param {string} name */
@@ -61,10 +91,7 @@ export function validateCloseProof(proof, expectedAgentId) {
   if (proof.agentId !== expectedAgentId) {
     throw new Error("close proof agent id does not match the watchdog");
   }
-  const previousStatus = requiredText(proof.previousStatus, "close proof previousStatus");
-  if (!CLOSE_PREVIOUS_STATUSES.has(previousStatus)) {
-    throw new Error("close proof previousStatus is not a known host status");
-  }
+  const previousStatus = normalizeHostStatus(proof.previousStatus);
   if (typeof proof.closed !== "boolean") {
     throw new Error("close proof closed must be boolean");
   }
@@ -173,11 +200,14 @@ export function createWorkerWatchdog(input) {
   let closeEvidence;
   let dispatchAllowed = false;
   let observationExpired = false;
+  let observationCount = 0;
   /** @type {unknown} */
   let report;
 
   function terminal() {
-    if (state !== "waiting") throw new Error("worker round is terminal");
+    if (state !== "waiting" && state !== "observing") {
+      throw new Error("worker round is terminal");
+    }
   }
 
   return {
@@ -208,8 +238,12 @@ export function createWorkerWatchdog(input) {
       state = "complete";
       return { status: state, replacementAllowed: false };
     },
-    timeout() {
+    /** @param {unknown} [hostStatus] */
+    timeout(hostStatus) {
       terminal();
+      if (!isHostTerminalStatus(hostStatus)) {
+        throw new Error("timeout requires a host-confirmed terminal status");
+      }
       state = "timeout";
       return { status: state, outcome: "defer-external", replacementAllowed: false };
     },
@@ -220,10 +254,9 @@ export function createWorkerWatchdog(input) {
     },
     observeTimeout() {
       terminal();
-      if (observationExpired) {
-        throw new Error("observation window is already expired");
-      }
       observationExpired = true;
+      observationCount += 1;
+      state = "observing";
       return {
         status: "observing",
         outcome: "defer-external",
@@ -284,6 +317,7 @@ export function createWorkerWatchdog(input) {
         closeEvidence,
         dispatchAllowed,
         observationExpired,
+        observationCount,
         replacementAllowed: false,
         report
       };
