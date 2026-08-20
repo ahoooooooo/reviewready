@@ -5,37 +5,37 @@
   "document_type": "REVIEWREADY_CANONICAL_AGENT_HANDOFF",
   "schema_version": 1,
   "project": "ReviewReady",
-  "updated_at": "2026-08-20T05:53:01.605Z",
-  "revision": "924c86dc10aa0fbf918cf71f50d50f0b4b3ddbb0",
+  "updated_at": "2026-08-20T05:54:59.990Z",
+  "revision": "0385987021b6df7125d09cbf01839e467e19914f",
   "branch": "codex/reviewready-context-and-skills",
   "worktree_state": "clean",
   "changed_paths": [],
   "change_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "handoff_digest": "sha256:9bb012696a7e2efbc3c5927301c77a764edd62dca20e56c1f9b3bd78a1d3c513",
+  "handoff_digest": "sha256:698aa7fbf2c542904308624df9d90560ca226e332b7a1ad16d72bab9bf1aa1a1",
   "route": "base+deep-research",
   "phase": "handoff",
   "outcome": "defer-external",
   "active_slice": {
-    "id": "repair-batch-promotion",
-    "objective": "Promote the locally proven reviewer, Windows capture, handoff, and process-skill repair batch without mixing in a new product upgrade.",
+    "id": "upgrade-decision",
+    "objective": "Choose one explicit post-v1 upgrade outcome from the fixed roadmap before opening a new implementation slice.",
     "scope": [
-      "canonical root handoff file",
-      "reviewer admission, report, observation, and host-close lifecycle",
-      "Windows spawn, external scheduling, and failure-batch evidence paths",
-      "the confirmed files in this feature-branch repair batch and their commit/push"
+      "docs/exec-plans/active/post-v1.md",
+      "docs/oss-upgrade-process.md",
+      "the clean pushed feature branch and canonical handoff"
     ],
     "non_goals": [
+      "implement AI-1, V2-1, or AD-1 without a new decision",
       "update PR #99",
       "publish npm or create a release",
       "change global Codex settings, hooks, credentials, or provider authority"
     ],
-    "falsifier": "The final gate fails, the staged scope contains an unrelated path or secret, the commit does not contain the confirmed repair batch, or the remote feature-branch ref cannot be verified after push.",
-    "exit_gate": "The final diff review and complete npm gate pass, only confirmed paths are committed, the current feature branch is pushed through the authorized HTTPS/GCM route, and the post-push remote ref plus clean handoff are verified."
+    "falsifier": "The roadmap does not identify one current node/issue with a concrete observable outcome, or the proposed upgrade would mix multiple issues or require an unapproved external authority action.",
+    "exit_gate": "One post-v1 node/issue, one observable outcome, trust boundary, non-goals, falsifier, and evidence gate are recorded before implementation or PR work begins."
   },
   "next_action": {
-    "action": "Finalize the canonical handoff-only commit, push the current feature branch, then verify the remote ref and clean sealed handoff; do not update PR #99.",
+    "action": "Define one explicit post-v1 upgrade outcome from the fixed roadmap, then start a new research/implementation slice only after that decision is recorded; do not update PR #99.",
     "owner": "integrator",
-    "gate": "Repair commit 924c86d contains the reviewed 23-path batch; the complete gate passed 42 files with 952 tests, the failure ledger is closed, and only the explicitly authorized push remains."
+    "gate": "The repair batch is committed and pushed at 0385987; the roadmap says no new feature lane is active until an explicit capability decision, and the current branch is clean."
   },
   "blockers": [
     {
@@ -154,7 +154,12 @@
     {
       "id": "repair-batch-commit",
       "summary": "The reviewed repair batch is recorded in source commit 924c86d.",
-      "evidence": "The first promotion commit contains exactly the 23 reviewed paths; the canonical handoff-only finalization remains the only local commit step before push."
+      "evidence": "The first promotion commit contains exactly the 23 reviewed paths; handoff-only finalization commit 0385987 followed it before the feature-branch push."
+    },
+    {
+      "id": "repair-batch-push",
+      "summary": "The repair batch and canonical handoff were pushed to the current feature branch.",
+      "evidence": "HTTPS push fast-forwarded origin/codex/reviewready-context-and-skills from 0a52f28 to 0385987; post-push local handoff validation and clean worktree verification passed."
     }
   ],
   "validation": [
@@ -316,7 +321,7 @@
   "external_writes": {
     "pr": "forbidden-this-round",
     "commit": "done",
-    "push": "authorized-not-done"
+    "push": "done"
   },
   "read_order": [
     "AGENTS.md",
