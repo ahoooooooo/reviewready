@@ -29,6 +29,9 @@
     allowlisted webhook composition, replay aliases, leases, generation
     fencing, outbox, and provider-reconciliation contracts. Its in-memory
     store is a deterministic reference for tests, not production durability.
+    Stable constants and public data shapes live separately in
+    `ta3-ingress-contracts` so store transitions cannot silently redefine the
+    integration boundary.
 
 Dependencies point inward: entry points -> adapters/report -> engine -> domain.
 The engine must never import GitHub, filesystem, process, or Actions modules.
