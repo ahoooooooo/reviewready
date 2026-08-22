@@ -1,6 +1,26 @@
-import { createHash } from "node:crypto";
 import { isProxy } from "node:util/types";
 
+import { verifyAuditEvidenceSourceArtifact } from "./audit-evidence-artifact.js";
+import {
+  assertClosed,
+  assertSortedUniqueStrings,
+  boundedText,
+  compareUtf16,
+  fail,
+  hasOwn,
+  isRecord,
+  repositoryPath,
+  requiredArray,
+  requiredBoolean,
+  requiredRecord,
+  requiredSafeInteger,
+  requiredSha,
+  requiredText,
+  SHA1,
+  SHA256,
+  workflowPath
+} from "./audit-evidence-bundle-primitives.js";
+import { recomputeAuditReport } from "./audit-evidence-hydration.js";
 import {
   AUDIT_BUNDLE_DIGEST_DOMAIN,
   AUDIT_REPORT_DIGEST_DOMAIN,
@@ -10,30 +30,17 @@ import {
   hashAuditEvidenceDomain,
   type JsonValue
 } from "./audit-evidence.js";
-import { auditRepository, type AuditReport, type AuditSnapshot } from "./audit.js";
+import type { AuditReport, AuditSnapshot } from "./audit.js";
 import { parsePolicy } from "./policy.js";
 
-export const MAX_AUDIT_EVIDENCE_SOURCE_BYTES = 262_144;
-export const MAX_AUDIT_EVIDENCE_BASE64URL_CHARS =
-  Math.floor(MAX_AUDIT_EVIDENCE_SOURCE_BYTES / 3) * 4 +
-  (MAX_AUDIT_EVIDENCE_SOURCE_BYTES % 3 === 0 ? 0 : (MAX_AUDIT_EVIDENCE_SOURCE_BYTES % 3) + 1);
+export * from "./audit-evidence-artifact.js";
+export { AuditEvidenceBundleError } from "./audit-evidence-bundle-primitives.js";
+
 export const MAX_AUDIT_EVIDENCE_WORKFLOWS = 100;
 export const MAX_AUDIT_EVIDENCE_RULESETS = 100;
 export const MAX_AUDIT_EVIDENCE_FINDINGS = 500;
 
-const BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-const BASE64_VALUE = new Map(
-  Array.from(BASE64_ALPHABET).map((character, index) => [character, index])
-);
 const UTF8 = new TextEncoder();
-const SHA1 = /^[0-9a-f]{40}$/u;
-const SHA256 = /^[0-9a-f]{64}$/u;
-// eslint-disable-next-line no-control-regex
-const BOUNDED_TEXT = /[\u0000-\u001f\u007f-\u009f\u2028\u2029\p{Cf}\p{Cs}]/u;
-const PATH =
-  /^(?!\/)(?![A-Za-z]:)(?!.*\\)(?!.*\/\/)(?!.*(?:^|\/)\.{1,2}(?:\/|$))[^/]+(?:\/[^/]+)*$/u;
-const WORKFLOW =
-  /^[.][gG][iI][tT][hH][uU][bB]\/[wW][oO][rR][kK][fF][lL][oO][wW][sS]\/[^/]+\.(?:[yY][mM][lL]|[yY][aA][mM][lL])$/u;
 const OBSERVED_AT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
 const CHECKED_ORDER = [
   "base-revision",
@@ -63,122 +70,6 @@ const BUNDLE_BOUNDS: Readonly<Record<string, number>> = {
   jsonStringBytes: 6_291_456,
   jsonNumberChars: 32
 };
-
-export class AuditEvidenceBundleError extends Error {
-  public constructor(
-    public readonly code: string,
-    message = code
-  ) {
-    super(message);
-    this.name = "AuditEvidenceBundleError";
-  }
-}
-
-function fail(code: string, message = code): never {
-  throw new AuditEvidenceBundleError(code, message);
-}
-
-function isRecord(value: unknown): value is Record<string, JsonValue> {
-  return typeof value === "object" && value !== null && !Array.isArray(value) && !isProxy(value);
-}
-
-function boundedText(value: unknown): value is string {
-  return (
-    typeof value === "string" &&
-    Array.from(value).length >= 1 &&
-    Array.from(value).length <= 512 &&
-    !BOUNDED_TEXT.test(value)
-  );
-}
-
-function repositoryPath(value: unknown): value is string {
-  return boundedText(value) && PATH.test(value);
-}
-
-function workflowPath(value: unknown): value is string {
-  return repositoryPath(value) && WORKFLOW.test(value);
-}
-
-function requiredString(record: Record<string, JsonValue>, key: string): string {
-  const value = record[key];
-  if (typeof value !== "string") {
-    fail("artifact-shape");
-  }
-  return value;
-}
-
-function requiredNumber(record: Record<string, JsonValue>, key: string): number {
-  const value = record[key];
-  if (typeof value !== "number" || !Number.isSafeInteger(value)) {
-    fail("artifact-shape");
-  }
-  return value;
-}
-
-function hasExactKeys(record: Record<string, JsonValue>, keys: readonly string[]): boolean {
-  const allowed = new Set(keys);
-  return (
-    Object.keys(record).length === keys.length &&
-    Object.keys(record).every((key) => allowed.has(key))
-  );
-}
-
-function requiredRecord(value: unknown, code: string): Record<string, JsonValue> {
-  if (!isRecord(value)) {
-    fail(code);
-  }
-  return value;
-}
-
-function requiredText(value: unknown, code: string): string {
-  if (typeof value !== "string") {
-    fail(code);
-  }
-  return value;
-}
-
-function requiredBoolean(value: unknown, code: string): boolean {
-  if (typeof value !== "boolean") {
-    fail(code);
-  }
-  return value;
-}
-
-function requiredSafeInteger(value: unknown, code: string): number {
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || Object.is(value, -0)) {
-    fail(code);
-  }
-  return value;
-}
-
-function requiredArray(value: unknown, code: string): JsonValue[] {
-  if (!Array.isArray(value)) {
-    fail(code);
-  }
-  const result: JsonValue[] = [];
-  for (const item of value as readonly unknown[]) {
-    result.push(item as JsonValue);
-  }
-  return result;
-}
-
-function requiredSha(value: unknown, pattern: RegExp, code: string): string {
-  const text = requiredText(value, code);
-  if (!pattern.test(text)) {
-    fail(code);
-  }
-  return text;
-}
-
-function assertClosed(
-  record: Record<string, JsonValue>,
-  keys: readonly string[],
-  code: string
-): void {
-  if (!hasExactKeys(record, keys)) {
-    fail(code);
-  }
-}
 
 function assertCheck(value: JsonValue): void {
   const check = requiredRecord(value, "bundle-check");
@@ -215,127 +106,6 @@ function assertCheck(value: JsonValue): void {
   ) {
     fail("bundle-check");
   }
-}
-
-export function decodeAuditEvidenceBase64url(value: unknown): Uint8Array {
-  if (
-    typeof value !== "string" ||
-    value.length > MAX_AUDIT_EVIDENCE_BASE64URL_CHARS ||
-    value.length % 4 === 1 ||
-    !/^(?:[A-Za-z0-9_-]{4})*(?:(?:[A-Za-z0-9_-][AQgw])|(?:[A-Za-z0-9_-]{2}[AEIMQUYcgkosw048]))?$/u.test(
-      value
-    )
-  ) {
-    fail("artifact-base64");
-  }
-  const decoded = new Uint8Array(Math.floor((value.length * 6) / 8));
-  let accumulator = 0;
-  let bits = 0;
-  let offset = 0;
-  for (const character of value) {
-    const digit = BASE64_VALUE.get(character);
-    if (digit === undefined) {
-      fail("artifact-base64");
-    }
-    accumulator = ((accumulator << 6) | digit) & 0x3fff;
-    bits += 6;
-    if (bits >= 8) {
-      bits -= 8;
-      decoded[offset] = (accumulator >> bits) & 0xff;
-      offset += 1;
-    }
-  }
-  if (bits > 0 && (accumulator & ((1 << bits) - 1)) !== 0) {
-    fail("artifact-base64");
-  }
-  return decoded;
-}
-
-export function encodeAuditEvidenceBase64url(value: Uint8Array): string {
-  if (!(value instanceof Uint8Array) || value.byteLength > MAX_AUDIT_EVIDENCE_SOURCE_BYTES) {
-    fail("artifact-bytes");
-  }
-  let result = "";
-  for (let index = 0; index < value.byteLength; index += 3) {
-    const first = value[index] ?? 0;
-    const second = value[index + 1];
-    const third = value[index + 2];
-    result += BASE64_ALPHABET.charAt(first >> 2);
-    result += BASE64_ALPHABET.charAt(((first & 0x03) << 4) | ((second ?? 0) >> 4));
-    if (second !== undefined) {
-      result += BASE64_ALPHABET.charAt(((second & 0x0f) << 2) | ((third ?? 0) >> 6));
-    }
-    if (third !== undefined) {
-      result += BASE64_ALPHABET.charAt(third & 0x3f);
-    }
-  }
-  return result;
-}
-
-export function sha256AuditEvidenceBytes(value: Uint8Array): string {
-  if (!(value instanceof Uint8Array) || value.byteLength > MAX_AUDIT_EVIDENCE_SOURCE_BYTES) {
-    fail("artifact-bytes");
-  }
-  return createHash("sha256").update(value).digest("hex");
-}
-
-export interface VerifiedAuditEvidenceSource {
-  readonly bytes: Uint8Array;
-  readonly text: string;
-}
-
-export function verifyAuditEvidenceSourceArtifact(
-  value: unknown,
-  kind: "policy" | "workflow"
-): VerifiedAuditEvidenceSource {
-  if (
-    !isRecord(value) ||
-    !hasExactKeys(value, ["path", "revisionSha", "sha256", "byteLength", "contentBase64url"])
-  ) {
-    fail("artifact-shape");
-  }
-  const path = requiredString(value, "path");
-  if (!(kind === "workflow" ? workflowPath(path) : repositoryPath(path))) {
-    fail("artifact-path");
-  }
-  const revisionSha = requiredString(value, "revisionSha");
-  const sha256 = requiredString(value, "sha256");
-  if (!SHA1.test(revisionSha) || !SHA256.test(sha256)) {
-    fail("artifact-hash");
-  }
-  const byteLength = requiredNumber(value, "byteLength");
-  if (byteLength < 0 || byteLength > MAX_AUDIT_EVIDENCE_SOURCE_BYTES) {
-    fail("artifact-length");
-  }
-  const contentBase64url = requiredString(value, "contentBase64url");
-  const bytes = decodeAuditEvidenceBase64url(contentBase64url);
-  if (encodeAuditEvidenceBase64url(bytes) !== contentBase64url) {
-    fail("artifact-base64");
-  }
-  if (bytes.byteLength !== byteLength) {
-    fail("artifact-length");
-  }
-  if (sha256AuditEvidenceBytes(bytes) !== sha256) {
-    fail("artifact-hash");
-  }
-  let text: string;
-  try {
-    text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
-  } catch {
-    fail("artifact-utf8");
-  }
-  return { bytes, text };
-}
-
-function compareUtf16(left: string, right: string): number {
-  const length = Math.min(left.length, right.length);
-  for (let index = 0; index < length; index += 1) {
-    const difference = left.charCodeAt(index) - right.charCodeAt(index);
-    if (difference !== 0) {
-      return difference;
-    }
-  }
-  return left.length - right.length;
 }
 
 function cloneJson(value: unknown): JsonValue {
@@ -423,10 +193,6 @@ export function computeAuditEvidenceIntegrity(value: unknown): AuditEvidenceInte
 
 function recordAt(value: JsonValue, key: string): Record<string, JsonValue> | undefined {
   return isRecord(value) && isRecord(value[key]) ? value[key] : undefined;
-}
-
-function hasOwn(record: Record<string, JsonValue>, key: string): boolean {
-  return Object.prototype.hasOwnProperty.call(record, key);
 }
 
 function normalizeStrings(value: JsonValue, code: string): JsonValue[] {
@@ -927,33 +693,6 @@ export function normalizeAuditEvidenceBundle<T>(value: T): T {
     report.findings = normalizeFindings(report.findings as JsonValue);
   }
   return cloned as T;
-}
-
-function assertSortedUniqueStrings(
-  value: unknown,
-  item: (value: unknown) => boolean,
-  code: string
-): string[] {
-  const array = requiredArray(value, code);
-  const result: string[] = [];
-  for (const entry of array) {
-    if (typeof entry !== "string" || !item(entry)) {
-      fail(code);
-    }
-    result.push(entry);
-  }
-  for (let index = 1; index < result.length; index += 1) {
-    const previous = result[index - 1];
-    const current = result[index];
-    if (previous === undefined || current === undefined) {
-      fail(code);
-    }
-    const order = compareUtf16(previous, current);
-    if (order >= 0) {
-      fail(order === 0 ? "bundle-array-duplicate" : code);
-    }
-  }
-  return result;
 }
 
 function assertCheckArray(value: unknown, code = "bundle-check"): void {
@@ -1717,323 +1456,6 @@ function validateArtifacts(
       }
     }
   }
-}
-
-type HydratedCheck = AuditSnapshot["policy"]["requiredChecks"][number];
-type HydratedBranchActor = NonNullable<
-  NonNullable<AuditSnapshot["branchProtection"]>["requiredPullRequestReviews"]
->["bypassActors"][number];
-type HydratedRulesetActor = AuditSnapshot["rulesets"][number]["bypassActors"][number];
-
-function hydrateChecks(value: JsonValue, code: string): HydratedCheck[] {
-  const checks = requiredArray(value, code);
-  return checks.map((entry) => {
-    const check = requiredRecord(entry, code);
-    return {
-      name: requiredText(check.name, code),
-      ...(hasOwn(check, "appId") ? { appId: requiredSafeInteger(check.appId, code) } : {}),
-      ...(hasOwn(check, "appSlug") ? { appSlug: requiredText(check.appSlug, code) } : {})
-    };
-  });
-}
-
-function redactedActorType(actorType: string): "user" | "team" | "app" | "integration" {
-  if (actorType === "user" || actorType === "team" || actorType === "integration") {
-    return actorType;
-  }
-  return "app";
-}
-
-function hydrateBranchBypassActors(value: JsonValue): HydratedBranchActor[] {
-  const summaries = requiredArray(value, "bundle-bypass");
-  const actors: HydratedBranchActor[] = [];
-  let index = 0;
-  for (const entry of summaries) {
-    const summary = requiredRecord(entry, "bundle-bypass");
-    const actorType = requiredText(summary.actorType, "bundle-bypass");
-    const count = requiredSafeInteger(summary.count, "bundle-bypass");
-    for (let offset = 0; offset < count; offset += 1) {
-      index += 1;
-      actors.push({
-        id: "redacted:" + actorType + ":branch:" + String(index),
-        type: redactedActorType(actorType)
-      });
-    }
-  }
-  return actors;
-}
-
-function hydrateRulesetBypassActors(value: JsonValue): HydratedRulesetActor[] {
-  const summaries = requiredArray(value, "bundle-bypass");
-  const actors: HydratedRulesetActor[] = [];
-  let index = 0;
-  for (const entry of summaries) {
-    const summary = requiredRecord(entry, "bundle-bypass");
-    const actorType = requiredText(summary.actorType, "bundle-bypass");
-    const bypassMode = requiredText(summary.bypassMode, "bundle-bypass");
-    const count = requiredSafeInteger(summary.count, "bundle-bypass");
-    for (let offset = 0; offset < count; offset += 1) {
-      index += 1;
-      actors.push({
-        id: "redacted:" + actorType + ":" + bypassMode + ":" + String(index),
-        type: redactedActorType(actorType),
-        actorType: actorType as HydratedRulesetActor["actorType"],
-        bypassMode: bypassMode as HydratedRulesetActor["bypassMode"]
-      });
-    }
-  }
-  return actors;
-}
-
-function hydrateBranchProtection(value: JsonValue): AuditSnapshot["branchProtection"] {
-  if (value === null) {
-    return null;
-  }
-  const branchProtection = requiredRecord(value, "bundle-branch-protection");
-  const requiredStatusChecks =
-    branchProtection.requiredStatusChecks === null ||
-    branchProtection.requiredStatusChecks === undefined
-      ? null
-      : (() => {
-          const checks = requiredRecord(
-            branchProtection.requiredStatusChecks,
-            "bundle-branch-protection"
-          );
-          return {
-            strict: requiredBoolean(checks.strict, "bundle-branch-protection"),
-            checks: hydrateChecks(checks.checks as JsonValue, "bundle-branch-protection")
-          };
-        })();
-  const requiredPullRequestReviews =
-    branchProtection.requiredPullRequestReviews === null ||
-    branchProtection.requiredPullRequestReviews === undefined
-      ? null
-      : (() => {
-          const reviews = requiredRecord(
-            branchProtection.requiredPullRequestReviews,
-            "bundle-branch-protection"
-          );
-          const known = requiredBoolean(reviews.bypassActorsKnown, "bundle-branch-protection");
-          return {
-            requiredApprovingReviewCount: requiredSafeInteger(
-              reviews.requiredApprovingReviewCount,
-              "bundle-branch-protection"
-            ),
-            bypassActors: hydrateBranchBypassActors(reviews.bypassActorSummaries as JsonValue),
-            bypassActorsKnown: known
-          };
-        })();
-  return {
-    branch: requiredText(branchProtection.branch, "bundle-branch-protection"),
-    exists: requiredBoolean(branchProtection.exists, "bundle-branch-protection"),
-    enforceAdmins: requiredBoolean(branchProtection.enforceAdmins, "bundle-branch-protection"),
-    allowForcePushes: requiredBoolean(
-      branchProtection.allowForcePushes,
-      "bundle-branch-protection"
-    ),
-    allowDeletions: requiredBoolean(branchProtection.allowDeletions, "bundle-branch-protection"),
-    requiredStatusChecks,
-    requiredPullRequestReviews
-  };
-}
-
-function hydrateRulesetPullRequest(
-  value: JsonValue
-): NonNullable<AuditSnapshot["rulesets"][number]["pullRequest"]> {
-  const pullRequest = requiredRecord(value, "bundle-ruleset-review");
-  const allowedMergeMethods = assertSortedUniqueStrings(
-    pullRequest.allowedMergeMethods,
-    (entry) => entry === "merge" || entry === "squash" || entry === "rebase",
-    "bundle-ruleset-review"
-  ) as ("merge" | "squash" | "rebase")[];
-  return {
-    allowedMergeMethods,
-    dismissStaleReviewsOnPush: requiredBoolean(
-      pullRequest.dismissStaleReviewsOnPush,
-      "bundle-ruleset-review"
-    ),
-    requireCodeOwnerReview: requiredBoolean(
-      pullRequest.requireCodeOwnerReview,
-      "bundle-ruleset-review"
-    ),
-    requireLastPushApproval: requiredBoolean(
-      pullRequest.requireLastPushApproval,
-      "bundle-ruleset-review"
-    ),
-    requiredApprovingReviewCount: requiredSafeInteger(
-      pullRequest.requiredApprovingReviewCount,
-      "bundle-ruleset-review"
-    ),
-    requiredReviewThreadResolution: requiredBoolean(
-      pullRequest.requiredReviewThreadResolution,
-      "bundle-ruleset-review"
-    ),
-    requiredReviewers: []
-  };
-}
-
-function hydrateRequiredStatusChecksPolicy(
-  value: JsonValue
-): NonNullable<AuditSnapshot["rulesets"][number]["requiredStatusChecksPolicy"]> {
-  const policy = requiredRecord(value, "bundle-ruleset-status");
-  return {
-    doNotEnforceOnCreate: requiredBoolean(policy.doNotEnforceOnCreate, "bundle-ruleset-status"),
-    strictRequiredStatusChecksPolicy: requiredBoolean(
-      policy.strictRequiredStatusChecksPolicy,
-      "bundle-ruleset-status"
-    )
-  };
-}
-
-function hydrateRulesets(value: JsonValue, snapshotVersion: 1 | 2): AuditSnapshot["rulesets"] {
-  return requiredArray(value, "bundle-rulesets").map((entry) => {
-    const ruleset = requiredRecord(entry, "bundle-ruleset");
-    return {
-      id: requiredSafeInteger(ruleset.id, "bundle-ruleset"),
-      name: requiredText(ruleset.name, "bundle-ruleset"),
-      target: requiredText(ruleset.target, "bundle-ruleset") as
-        "branch" | "tag" | "push" | "repository",
-      refPatterns: assertSortedUniqueStrings(ruleset.refPatterns, boundedText, "bundle-ruleset"),
-      ...(hasOwn(ruleset, "repositoryPatterns")
-        ? {
-            repositoryPatterns: assertSortedUniqueStrings(
-              ruleset.repositoryPatterns,
-              boundedText,
-              "bundle-ruleset"
-            )
-          }
-        : {}),
-      enforcement: requiredText(ruleset.enforcement, "bundle-ruleset") as
-        "active" | "evaluate" | "disabled",
-      bypassActors: hydrateRulesetBypassActors(ruleset.bypassActorSummaries as JsonValue),
-      bypassActorsKnown: requiredBoolean(ruleset.bypassActorsKnown, "bundle-ruleset"),
-      ...(hasOwn(ruleset, "allowForcePushes")
-        ? { allowForcePushes: requiredBoolean(ruleset.allowForcePushes, "bundle-ruleset") }
-        : {}),
-      ...(hasOwn(ruleset, "allowDeletions")
-        ? { allowDeletions: requiredBoolean(ruleset.allowDeletions, "bundle-ruleset") }
-        : {}),
-      requiredChecks: hydrateChecks(ruleset.requiredChecks as JsonValue, "bundle-ruleset"),
-      ...(snapshotVersion === 2 && hasOwn(ruleset, "pullRequest")
-        ? { pullRequest: hydrateRulesetPullRequest(ruleset.pullRequest as JsonValue) }
-        : {}),
-      ...(snapshotVersion === 2 && hasOwn(ruleset, "requiredStatusChecksPolicy")
-        ? {
-            requiredStatusChecksPolicy: hydrateRequiredStatusChecksPolicy(
-              ruleset.requiredStatusChecksPolicy as JsonValue
-            )
-          }
-        : {})
-    };
-  });
-}
-
-function hydrateWorkflows(
-  snapshot: Record<string, JsonValue>,
-  artifacts: Record<string, JsonValue>,
-  requestedBaseSha: string
-): AuditSnapshot["workflows"] {
-  const artifactEntries = requiredArray(artifacts.workflows, "bundle-artifacts");
-  const artifactsByPath = new Map<string, JsonValue>();
-  for (const artifact of artifactEntries) {
-    const item = requiredRecord(artifact, "bundle-artifacts");
-    artifactsByPath.set(requiredText(item.path, "bundle-artifacts"), artifact);
-  }
-  return requiredArray(snapshot.workflows, "bundle-workflows").map((entry) => {
-    const workflow = requiredRecord(entry, "bundle-workflow");
-    const path = requiredText(workflow.path, "bundle-workflow");
-    const artifactValue = artifactsByPath.get(path);
-    if (artifactValue === undefined || artifactValue === null) {
-      fail("bundle-artifact-binding");
-    }
-    const artifact = requiredRecord(artifactValue, "bundle-artifacts");
-    const verified = verifyAuditEvidenceSourceArtifact(artifact, "workflow");
-    if (
-      verified.bytes.byteLength > MAX_AUDIT_EVIDENCE_SOURCE_BYTES ||
-      requiredText(workflow.revisionSha, "bundle-workflow") !== requestedBaseSha ||
-      requiredText(workflow.artifactSha256, "bundle-workflow") !==
-        requiredText(artifact.sha256, "bundle-artifacts")
-    ) {
-      fail("bundle-artifact-binding");
-    }
-    return {
-      path,
-      revisionSha: requestedBaseSha,
-      protectedFromPullRequest: false,
-      trustedRoot: false,
-      source: verified.text
-    };
-  });
-}
-
-function hydrateAuditSnapshot(
-  bundle: Record<string, JsonValue>,
-  snapshot: Record<string, JsonValue>,
-  requestedBaseSha: string,
-  policyPath: string
-): AuditSnapshot {
-  const repository = requiredRecord(snapshot.repository, "bundle-snapshot");
-  const baseRevision = requiredRecord(snapshot.baseRevision, "bundle-revision");
-  const policy = requiredRecord(snapshot.policy, "bundle-policy");
-  const completeness = requiredRecord(snapshot.completeness, "bundle-completeness");
-  const tagProtection = requiredRecord(snapshot.tagProtection, "bundle-tag-protection");
-  const artifacts = requiredRecord(bundle.artifacts, "bundle-artifacts");
-  return {
-    version: 1,
-    repository: {
-      owner: requiredText(repository.owner, "bundle-snapshot"),
-      name: requiredText(repository.name, "bundle-snapshot"),
-      defaultBranch: requiredText(repository.defaultBranch, "bundle-snapshot")
-    },
-    baseRevision: {
-      sha: requestedBaseSha,
-      policyPath,
-      policyRevisionSha: requiredSha(baseRevision.policyRevisionSha, SHA1, "bundle-revision"),
-      policySha256: requiredSha(baseRevision.policySha256, SHA256, "bundle-revision"),
-      policyLoadedFromBase: requiredBoolean(baseRevision.policyLoadedFromBase, "bundle-revision")
-    },
-    policy: {
-      requiredChecks: hydrateChecks(policy.requiredChecks as JsonValue, "bundle-policy"),
-      workflowPaths: assertSortedUniqueStrings(policy.workflowPaths, workflowPath, "bundle-policy")
-    },
-    completeness: {
-      complete: requiredBoolean(completeness.complete, "bundle-completeness"),
-      missing: assertSortedUniqueStrings(
-        completeness.missing,
-        (entry) =>
-          entry === "settings-authority-incomplete" || entry === "settings-observation-mismatch",
-        "bundle-completeness"
-      )
-    },
-    branchProtection: hydrateBranchProtection(snapshot.branchProtection as JsonValue),
-    rulesets: hydrateRulesets(
-      snapshot.rulesets as JsonValue,
-      requiredSafeInteger(snapshot.snapshotVersion, "bundle-snapshot") as 1 | 2
-    ),
-    tagProtection: {
-      known: requiredBoolean(tagProtection.known, "bundle-tag-protection"),
-      allowsDeletion: requiredBoolean(tagProtection.allowsDeletion, "bundle-tag-protection"),
-      allowsUpdate: requiredBoolean(tagProtection.allowsUpdate, "bundle-tag-protection")
-    },
-    workflows: hydrateWorkflows(snapshot, artifacts, requestedBaseSha)
-  };
-}
-
-function recomputeAuditReport(
-  bundle: Record<string, JsonValue>,
-  snapshot: Record<string, JsonValue>,
-  requestedBaseSha: string,
-  policyPath: string
-): { readonly snapshot: AuditSnapshot; readonly report: AuditReport } {
-  const hydratedSnapshot = hydrateAuditSnapshot(bundle, snapshot, requestedBaseSha, policyPath);
-  const report = auditRepository(hydratedSnapshot);
-  const savedReport = requiredRecord(bundle.report, "bundle-report");
-  if (
-    canonicalizeAuditEvidenceJsonValue(report) !== canonicalizeAuditEvidenceJsonValue(savedReport)
-  ) {
-    fail("bundle-report-recomputed");
-  }
-  return { snapshot: hydratedSnapshot, report };
 }
 
 function validateReport(

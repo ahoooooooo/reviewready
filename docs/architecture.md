@@ -13,7 +13,10 @@
    `github-api-pagination` owns fail-closed Link traversal.
 7. `cli` and `action`: thin entry points that translate errors to public outputs.
 8. `audit`: pure, normalized repository-posture audit; it is separate from
-   readiness and never contacts GitHub or executes workflow source.
+   readiness and never contacts GitHub or executes workflow source. The audit
+   evidence bundle keeps byte artifact codecs, closed-shape primitives, and
+   offline snapshot hydration in dedicated modules while preserving the
+   original `audit-evidence-bundle` import surface.
 9. `github-audit` and `github-audit-api`: a bounded live GitHub snapshot
    collector and its read-only Octokit transport. They bind policy/workflow
    bytes to one immutable base SHA but never infer a trusted workflow root.
