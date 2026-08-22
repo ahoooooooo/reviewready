@@ -35,6 +35,37 @@ describe("audit evidence bundle artifacts and semantic normalization", () => {
   it("rejects oversized base64 before decoding an unbounded payload", () => {
     expectCode(() => decodeAuditEvidenceBase64url("A".repeat(349_527)), "artifact-base64");
     expectCode(() => encodeAuditEvidenceBase64url(new Uint8Array(262_145)), "artifact-bytes");
+    expectCode(
+      () => sha256AuditEvidenceBytes("not bytes" as unknown as Uint8Array),
+      "artifact-bytes"
+    );
+  });
+
+  it("rejects malformed source artifact shapes before byte verification", () => {
+    const valid = artifact(
+      ".github/workflows/ci.yml",
+      "",
+      0,
+      sha256AuditEvidenceBytes(new Uint8Array())
+    );
+
+    expectCode(() => verifyAuditEvidenceSourceArtifact(null, "workflow"), "artifact-shape");
+    expectCode(
+      () => verifyAuditEvidenceSourceArtifact({ ...valid, path: 7 }, "workflow"),
+      "artifact-shape"
+    );
+    expectCode(
+      () => verifyAuditEvidenceSourceArtifact({ ...valid, byteLength: "0" }, "workflow"),
+      "artifact-shape"
+    );
+    expectCode(
+      () => verifyAuditEvidenceSourceArtifact({ ...valid, revisionSha: "bad" }, "workflow"),
+      "artifact-hash"
+    );
+    expectCode(
+      () => verifyAuditEvidenceSourceArtifact({ ...valid, byteLength: -1 }, "workflow"),
+      "artifact-length"
+    );
   });
 
   it("verifies exact source bytes, hash, size, UTF-8, and workflow path", () => {
