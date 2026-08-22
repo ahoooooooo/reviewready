@@ -1,6 +1,17 @@
 import { getOctokit } from "@actions/github";
 
 import { policyLimits } from "./domain.js";
+import {
+  githubRequestSignal,
+  incompleteEvidence,
+  withGitHubRetry
+} from "./github-api-boundaries.js";
+import {
+  CHECK_RUN_PAGE_SIZE,
+  collectApiPages,
+  MAX_CHECK_RUNS,
+  nextPageLink
+} from "./github-api-pagination.js";
 import type {
   GitHubChangedFile,
   GitHubCheckRun,
@@ -13,6 +24,8 @@ import { PlatformError } from "./errors.js";
 
 type Octokit = ReturnType<typeof getOctokit>;
 
+export { collectCheckRunPages } from "./github-api-pagination.js";
+
 const permissions = new Set<GitHubPermission>([
   "admin",
   "maintain",
@@ -22,150 +35,13 @@ const permissions = new Set<GitHubPermission>([
   "none"
 ]);
 
-const CHECK_RUN_PAGE_SIZE = 100;
-const MAX_CHECK_RUNS = 1000;
 const MAX_COMMIT_STATUSES = 1000;
 const MAX_PULL_REQUEST_FILES = 3000;
 const MAX_REVIEWS = 1000;
 const MAX_CLOSING_ISSUES = 100;
-const GITHUB_REQUEST_TIMEOUT_MS = 60_000;
-const MAX_GITHUB_RETRIES = 1;
-const MAX_RETRY_DELAY_MS = 2_000;
 const isoTimestampPattern =
   /^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\.[0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})$/u;
-const decimalHeaderPattern = /^[0-9]+$/u;
 const immutableGitShaPattern = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/u;
-const INVALID_HEADER_VALUE = Symbol("invalid-header-value");
-
-function incompleteEvidence(kind: string, limit: number): PlatformError {
-  return new PlatformError(
-    "GITHUB_EVIDENCE_INCOMPLETE",
-    `GitHub returned an incomplete or oversized ${kind} set; ReviewReady cannot evaluate it safely (limit: ${String(limit)}).`
-  );
-}
-
-function errorStatus(error: unknown): number | undefined {
-  if (typeof error !== "object" || error === null) {
-    return undefined;
-  }
-  const status = (error as { readonly status?: unknown }).status;
-  return Number.isSafeInteger(status) ? (status as number) : undefined;
-}
-
-function errorHeaders(error: unknown): unknown {
-  if (typeof error !== "object" || error === null) {
-    return undefined;
-  }
-  const response = (error as { readonly response?: unknown }).response;
-  if (typeof response !== "object" || response === null) {
-    return undefined;
-  }
-  return (response as { readonly headers?: unknown }).headers;
-}
-
-function headerValue(
-  headers: unknown,
-  name: string
-): string | undefined | typeof INVALID_HEADER_VALUE {
-  if (typeof headers !== "object" || headers === null) {
-    return undefined;
-  }
-  let found: string | undefined;
-  for (const [key, value] of Object.entries(headers as Record<string, unknown>)) {
-    if (key.toLowerCase() === name.toLowerCase()) {
-      if (typeof value !== "string" || found !== undefined) {
-        return INVALID_HEADER_VALUE;
-      }
-      found = value;
-    }
-  }
-  return found;
-}
-
-function retryDelay(error: unknown): number | undefined {
-  const status = errorStatus(error);
-  if (
-    status !== 408 &&
-    status !== 425 &&
-    status !== 429 &&
-    status !== 500 &&
-    status !== 502 &&
-    status !== 503 &&
-    status !== 504 &&
-    status !== 403
-  ) {
-    return undefined;
-  }
-
-  const headers = errorHeaders(error);
-  const retryAfter = headerValue(headers, "retry-after");
-  if (retryAfter === INVALID_HEADER_VALUE) {
-    return undefined;
-  }
-  if (retryAfter !== undefined) {
-    const retryAfterText = retryAfter.trim();
-    if (!decimalHeaderPattern.test(retryAfterText)) {
-      return undefined;
-    }
-    const seconds = Number(retryAfterText);
-    if (!Number.isFinite(seconds) || seconds < 0 || seconds * 1_000 > MAX_RETRY_DELAY_MS) {
-      return undefined;
-    }
-    return Math.ceil(seconds * 1_000);
-  }
-
-  const remaining = headerValue(headers, "x-ratelimit-remaining");
-  if (remaining === INVALID_HEADER_VALUE) {
-    return undefined;
-  }
-  let remainingValue: number | undefined;
-  if (remaining !== undefined) {
-    const remainingText = remaining.trim();
-    if (!decimalHeaderPattern.test(remainingText)) {
-      return undefined;
-    }
-    remainingValue = Number(remainingText);
-    if (!Number.isSafeInteger(remainingValue)) {
-      return undefined;
-    }
-  }
-  const reset = headerValue(headers, "x-ratelimit-reset");
-  if (reset === INVALID_HEADER_VALUE) {
-    return undefined;
-  }
-  if (remainingValue === 0 && reset !== undefined) {
-    const resetText = reset.trim();
-    if (!decimalHeaderPattern.test(resetText)) {
-      return undefined;
-    }
-    const resetSeconds = Number(resetText);
-    if (!Number.isSafeInteger(resetSeconds)) {
-      return undefined;
-    }
-    const delay = resetSeconds * 1_000 - Date.now();
-    return delay >= 0 && delay <= MAX_RETRY_DELAY_MS ? delay : undefined;
-  }
-
-  return status === 403 ? undefined : 100;
-}
-
-async function withGitHubRetry<T>(operation: () => Promise<T>): Promise<T> {
-  for (let attempt = 0; attempt <= MAX_GITHUB_RETRIES; attempt += 1) {
-    try {
-      return await operation();
-    } catch (error) {
-      if (attempt >= MAX_GITHUB_RETRIES) {
-        throw error;
-      }
-      const delay = retryDelay(error);
-      if (delay === undefined) {
-        throw error;
-      }
-      await new Promise<void>((resolve) => setTimeout(resolve, delay));
-    }
-  }
-  throw new Error("GitHub retry loop exhausted unexpectedly.");
-}
 
 function permission(value: string): GitHubPermission {
   return permissions.has(value as GitHubPermission) ? (value as GitHubPermission) : "none";
@@ -535,259 +411,6 @@ function mergeCheckAndStatusEvidence(
   return merged;
 }
 
-async function collectPages<T>(
-  fetchPage: (page: number) => Promise<readonly T[]>,
-  pageSize: number,
-  maxItems: number,
-  kind: string
-): Promise<T[]> {
-  const result: T[] = [];
-  const maxPages = maxItems / pageSize;
-  for (let page = 1; page <= maxPages; page += 1) {
-    const items = await fetchPage(page);
-    if (items.length > pageSize || result.length + items.length > maxItems) {
-      throw incompleteEvidence(kind, maxItems);
-    }
-    result.push(...items);
-    if (result.length >= maxItems) {
-      throw incompleteEvidence(kind, maxItems);
-    }
-    if (items.length < pageSize) {
-      return result;
-    }
-    if (page === maxPages) {
-      const extraItems = await fetchPage(page + 1);
-      if (extraItems.length > 0) {
-        throw incompleteEvidence(kind, maxItems);
-      }
-      return result;
-    }
-  }
-  return result;
-}
-
-interface ApiPage<T> {
-  readonly items: readonly T[];
-  readonly hasNext: boolean;
-  readonly nextPage?: number | undefined;
-  readonly hasLast?: boolean | undefined;
-  readonly lastPage?: number | undefined;
-}
-
-interface NextPageLink {
-  readonly hasNext: boolean;
-  readonly nextPage?: number | undefined;
-  readonly hasLast?: boolean | undefined;
-  readonly lastPage?: number | undefined;
-}
-
-function linkedPageNumber(url: string): { readonly valid: boolean; readonly page?: number } {
-  try {
-    const searchParams = new URL(url).searchParams;
-    const pageValues = searchParams.getAll("page");
-    if (pageValues.length === 0) {
-      return { valid: true };
-    }
-    if (pageValues.length !== 1) {
-      return { valid: false };
-    }
-    const rawPage = pageValues[0];
-    if (rawPage === undefined) {
-      return { valid: false };
-    }
-    if (!/^[1-9][0-9]*$/u.test(rawPage)) {
-      return { valid: false };
-    }
-    const page = Number(rawPage);
-    return Number.isSafeInteger(page) ? { valid: true, page } : { valid: false };
-  } catch {
-    return { valid: false };
-  }
-}
-
-function nextPageLink(headers: unknown): NextPageLink {
-  if (headers === undefined) {
-    return { hasNext: false };
-  }
-  if (typeof headers !== "object" || headers === null) {
-    return { hasNext: true };
-  }
-  const link = headerValue(headers, "link");
-  if (link === INVALID_HEADER_VALUE) {
-    return { hasNext: true };
-  }
-  if (link === undefined) {
-    return { hasNext: false };
-  }
-  if (typeof link !== "string") {
-    return { hasNext: true };
-  }
-  if (link.trim() === "") {
-    return { hasNext: true };
-  }
-  const entries = [
-    ...link.matchAll(/<([^<>]+)>\s*;\s*rel=(?:"([^"]*)"|'([^']*)')(?=\s*(?:,|$))/giu)
-  ];
-  let offset = 0;
-  for (const entry of entries) {
-    const start = entry.index;
-    if (link.slice(offset, start).trim() !== (offset === 0 ? "" : ",")) {
-      return { hasNext: true };
-    }
-    offset = start + entry[0].length;
-  }
-  if (entries.length === 0 || link.slice(offset).trim() !== "") {
-    return { hasNext: true };
-  }
-  const relations = entries.map((entry) => entry[2] ?? entry[3]);
-  if (
-    relations.some(
-      (relation) => relation === undefined || relation.trim() === "" || /\s/u.test(relation)
-    )
-  ) {
-    return { hasNext: true };
-  }
-  const nextEntries = entries.filter((entry) => (entry[2] ?? entry[3])?.toLowerCase() === "next");
-  const lastEntries = entries.filter((entry) => (entry[2] ?? entry[3])?.toLowerCase() === "last");
-  if (nextEntries.length === 0) {
-    if (lastEntries.length > 1) {
-      return { hasNext: true };
-    }
-    if (lastEntries.length === 0) {
-      return { hasNext: false };
-    }
-    const lastEntry = lastEntries[0];
-    const lastUrl = lastEntry?.[1];
-    if (lastUrl === undefined) {
-      return { hasNext: true };
-    }
-    const last = linkedPageNumber(lastUrl);
-    if (!last.valid) {
-      return { hasNext: true };
-    }
-    return {
-      hasNext: false,
-      hasLast: true,
-      ...(last.page === undefined ? {} : { lastPage: last.page })
-    };
-  }
-  if (nextEntries.length !== 1) {
-    return { hasNext: true };
-  }
-  const nextEntry = nextEntries[0];
-  const nextUrl = nextEntry?.[1];
-  if (nextUrl === undefined) {
-    return { hasNext: true };
-  }
-
-  const next = linkedPageNumber(nextUrl);
-  if (!next.valid) {
-    // A malformed untrusted Link header remains a present but unusable next page.
-    return { hasNext: true };
-  }
-  if (lastEntries.length > 1) {
-    return { hasNext: true };
-  }
-  if (lastEntries.length === 0) {
-    return { hasNext: true, ...(next.page === undefined ? {} : { nextPage: next.page }) };
-  }
-  const lastEntry = lastEntries[0];
-  const lastUrl = lastEntry?.[1];
-  if (lastUrl === undefined) {
-    return { hasNext: true };
-  }
-  const last = linkedPageNumber(lastUrl);
-  if (!last.valid) {
-    return { hasNext: true };
-  }
-  return {
-    hasNext: true,
-    ...(next.page === undefined ? {} : { nextPage: next.page }),
-    hasLast: true,
-    ...(last.page === undefined ? {} : { lastPage: last.page })
-  };
-}
-
-async function collectApiPages<T>(
-  fetchPage: (page: number) => Promise<ApiPage<T>>,
-  pageSize: number,
-  maxItems: number,
-  kind: string
-): Promise<T[]> {
-  const result: T[] = [];
-  const maxPages = maxItems / pageSize;
-  let declaredLastPage: number | undefined;
-  for (let page = 1; page <= maxPages; page += 1) {
-    const pageResult = await fetchPage(page);
-    const items = pageResult.items;
-    if (items.length > pageSize || result.length + items.length > maxItems) {
-      throw incompleteEvidence(kind, maxItems);
-    }
-    result.push(...items);
-    if (result.length >= maxItems) {
-      throw incompleteEvidence(kind, maxItems);
-    }
-
-    if (pageResult.hasLast) {
-      if (pageResult.lastPage === undefined) {
-        throw incompleteEvidence(kind, maxItems);
-      }
-      if (declaredLastPage !== undefined && pageResult.lastPage !== declaredLastPage) {
-        throw incompleteEvidence(kind, maxItems);
-      }
-      declaredLastPage = pageResult.lastPage;
-    } else if (declaredLastPage !== undefined && page < declaredLastPage) {
-      throw incompleteEvidence(kind, maxItems);
-    }
-
-    if (pageResult.hasNext) {
-      if (
-        pageResult.nextPage !== page + 1 ||
-        (declaredLastPage !== undefined && declaredLastPage < page + 1)
-      ) {
-        throw incompleteEvidence(kind, maxItems);
-      }
-      if (page === maxPages) {
-        throw incompleteEvidence(kind, maxItems);
-      }
-      continue;
-    }
-    if (declaredLastPage !== undefined && declaredLastPage !== page) {
-      throw incompleteEvidence(kind, maxItems);
-    }
-    if (items.length < pageSize) {
-      const extraPage = await fetchPage(page + 1);
-      const validEmptyExtraPage =
-        extraPage.items.length === 0 &&
-        !extraPage.hasNext &&
-        extraPage.nextPage === undefined &&
-        (!extraPage.hasLast || extraPage.lastPage === page);
-      if (!validEmptyExtraPage) {
-        throw incompleteEvidence(kind, maxItems);
-      }
-      return result;
-    }
-
-    const extraPage = await fetchPage(page + 1);
-    const validEmptyExtraPage =
-      extraPage.items.length === 0 &&
-      !extraPage.hasNext &&
-      extraPage.nextPage === undefined &&
-      (!extraPage.hasLast || extraPage.lastPage === page);
-    if (!validEmptyExtraPage) {
-      throw incompleteEvidence(kind, maxItems);
-    }
-    return result;
-  }
-  return result;
-}
-
-export async function collectCheckRunPages(
-  fetchPage: (page: number) => Promise<readonly GitHubCheckRun[]>
-): Promise<GitHubCheckRun[]> {
-  return collectPages(fetchPage, CHECK_RUN_PAGE_SIZE, MAX_CHECK_RUNS, "check runs");
-}
-
 async function allCheckRuns(
   octokit: Octokit,
   owner: string,
@@ -923,7 +546,7 @@ async function allCheckEvidence(
 
 export function createGitHubGateway(token: string): GitHubGateway {
   const octokit = getOctokit(token, {
-    request: { signal: AbortSignal.timeout(GITHUB_REQUEST_TIMEOUT_MS) }
+    request: { signal: githubRequestSignal() }
   });
 
   return {
