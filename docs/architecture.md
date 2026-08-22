@@ -18,8 +18,10 @@
    offline snapshot hydration in dedicated modules while preserving the
    original `audit-evidence-bundle` import surface.
 9. `github-audit` and `github-audit-api`: a bounded live GitHub snapshot
-   collector and its read-only Octokit transport. They bind policy/workflow
-   bytes to one immutable base SHA but never infer a trusted workflow root.
+   collector and its read-only Octokit transport. Provider response primitives
+   and branch/ruleset mappers live in dedicated modules behind the compatible
+   `github-audit-api` facade. They bind policy/workflow bytes to one immutable
+   base SHA but never infer a trusted workflow root.
 10. `workflow-security`: bounded static source/prompt/sink analysis for audit
     findings only; it does not evaluate YAML expressions or invoke an LLM.
 11. `trust`, `webhook`, and `github-app`: pure HMAC/replay/binding and App

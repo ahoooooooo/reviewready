@@ -276,6 +276,29 @@ describe("GitHub repository audit API adapter", () => {
     );
   });
 
+  it("rejects unsupported repository owner types and visibility values", async () => {
+    const repository = {
+      owner: { login: "octocat", type: "Bot" },
+      name: "demo",
+      default_branch: "main",
+      id: 123,
+      visibility: "public"
+    };
+    const request = vi.fn(() => Promise.resolve(response(repository)));
+    vi.mocked(getOctokit).mockReturnValue(octokitWithTransport(request));
+    const client = createGitHubAuditClient("secret", { sleep: () => Promise.resolve() });
+
+    await expect(client.getRepository({ owner: "octocat", repo: "demo" })).rejects.toThrow(
+      "repository-owner-type-invalid"
+    );
+
+    repository.owner.type = "Organization";
+    repository.visibility = "restricted";
+    await expect(client.getRepository({ owner: "octocat", repo: "demo" })).rejects.toThrow(
+      "repository-visibility-invalid"
+    );
+  });
+
   it("rejects an API endpoint with an unsafe scheme before creating a client", () => {
     const request = vi.fn();
     vi.mocked(getOctokit).mockReturnValue(
