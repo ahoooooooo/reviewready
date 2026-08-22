@@ -38,9 +38,14 @@ rules:
           - "README.md"
           - "CHANGELOG.md"
           - "AGENTS.md"
+          - "CODE_OF_CONDUCT.md"
           - ".codex/**"
           - "CONTRIBUTING.md"
+          - "GOVERNANCE.md"
+          - "MAINTAINERS.md"
+          - "ROADMAP.md"
           - "SECURITY.md"
+          - "SUPPORT.md"
           - "docs/**"
     require:
       - type: pr_body_section

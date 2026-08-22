@@ -1,0 +1,13 @@
+# Default ownership keeps every change visible to the current maintainer.
+* @ahoooooooo
+
+# Trust roots and release surfaces require explicit maintainer review.
+/.github/workflows/ @ahoooooooo
+/.reviewready.yml @ahoooooooo
+/action.yml @ahoooooooo
+/package.json @ahoooooooo
+/package-lock.json @ahoooooooo
+/scripts/ @ahoooooooo
+/src/ @ahoooooooo
+/reviewready*.schema.json @ahoooooooo
+/SECURITY.md @ahoooooooo
