@@ -22,6 +22,7 @@ export default defineConfig({
         "src/audit-evidence-collection.ts",
         "src/cli.ts",
         "src/file-reader.ts",
+        "src/ta3-ingress-contracts.ts",
         "src/ta3-ingress.ts"
       ],
       thresholds: {

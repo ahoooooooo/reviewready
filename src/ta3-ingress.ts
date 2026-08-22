@@ -1,14 +1,49 @@
 import { createHash } from "node:crypto";
 
-import { MAX_FUTURE_SKEW_MS, MAX_REPLAY_AGE_MS, MAX_WEBHOOK_BODY_BYTES } from "./trust.js";
+import {
+  TA3_DEFAULT_LEASE_MS,
+  TA3_MAX_ATTEMPTS,
+  TA3_MAX_BODY_BYTES,
+  TA3_MAX_LEASE_MS,
+  TA3_MAX_PROVIDER_MATCHES,
+  TA3_MAX_REPLAY_AGE_MS,
+  TA3_TOMBSTONE_RETENTION_MS,
+  type AcceptFault,
+  type InMemoryTrustedIngressStoreOptions,
+  type InstallationTokenValidation,
+  type ProviderCheckRun,
+  type ProviderCompletionOutcome,
+  type ProviderReconciliationOutcome,
+  type TrustedAcceptanceOutcome,
+  type TrustedAcceptanceReconciliation,
+  type TrustedAcceptanceResult,
+  type TrustedCommitOutcome,
+  type TrustedDelivery,
+  type TrustedGitHubWebhookConfig,
+  type TrustedIngressBinding,
+  type TrustedIngressInspection,
+  type TrustedIngressMode,
+  type TrustedIngressStore,
+  type TrustedLeaseResult,
+  type TrustedOutboxAcknowledgement,
+  type TrustedOutboxEvent,
+  type TrustedPrepareResult,
+  type TrustedPublicationGate,
+  type TrustedSnapshotInput,
+  type TrustedSnapshotResult,
+  type TrustedStoreClaim,
+  type TrustedStoreReceipt
+} from "./ta3-ingress-contracts.js";
+import { MAX_FUTURE_SKEW_MS } from "./trust.js";
 import {
   MAX_WEBHOOK_ALLOWLIST_IDS,
   receiveGitHubWebhook,
   type DurableWebhookStore,
-  type GitHubWebhookConfig,
   type GitHubWebhookRequest,
   type WebhookIngressResult
 } from "./webhook.js";
+
+export * from "./ta3-ingress-contracts.js";
 
 /**
  * Provider-neutral TA-3 ingress contracts and deterministic reference state.
@@ -16,44 +51,10 @@ import {
  * not a production durability claim or a live GitHub enforcement mechanism.
  */
 
-export const TA3_MAX_REPLAY_AGE_MS = MAX_REPLAY_AGE_MS;
-export const TA3_MAX_BODY_BYTES = MAX_WEBHOOK_BODY_BYTES;
-export const TA3_MAX_ATTEMPTS = 3;
-export const TA3_MAX_PROVIDER_MATCHES = 1;
-export const TA3_DEFAULT_LEASE_MS = 60_000;
-export const TA3_MAX_LEASE_MS = 15 * 60 * 1_000;
-export const TA3_TOMBSTONE_RETENTION_MS = 30 * 24 * 60 * 60 * 1_000;
-
 const SHA256 = /^[0-9a-f]{64}$/u;
 const DELIVERY_ID = /^[\x21-\x7e]+$/u;
 const PRINTABLE = /^[\x20-\x7e]+$/u;
 const MAX_TEXT_LENGTH = 512;
-
-export type TrustedIngressMode = "disabled" | "shadow" | "advisory" | "required";
-
-export interface TrustedIngressBinding {
-  readonly appId: number;
-  readonly hookId: string;
-  readonly installationId: number;
-  readonly repositoryId: number;
-  readonly baseRepositoryId: number;
-  readonly headRepositoryId: number;
-  readonly repositoryOwnerId: number;
-  readonly repositoryOwnerType: "User" | "Organization";
-  readonly repositoryOwnerLogin: string;
-  readonly pullNumber: number;
-  readonly baseSha: string;
-  readonly headSha: string;
-  readonly policyPath: string;
-  readonly policySha256: string;
-  readonly rootDigest: string;
-  readonly checkName: string;
-}
-
-export interface TrustedGitHubWebhookConfig extends GitHubWebhookConfig {
-  readonly allowedInstallationIds: readonly number[];
-  readonly allowedRepositoryIds: readonly number[];
-}
 
 function isTrustedIdAllowlist(value: unknown): value is readonly number[] {
   if (!Array.isArray(value) || value.length === 0 || value.length > MAX_WEBHOOK_ALLOWLIST_IDS) {
@@ -92,113 +93,6 @@ export async function receiveTrustedGitHubWebhook(
     return { accepted: false, reason: "invalid" };
   }
   return receiveGitHubWebhook(request, config, store);
-}
-
-export interface TrustedDelivery {
-  readonly deliveryId: string;
-  readonly bodySha256: string;
-  readonly binding: TrustedIngressBinding;
-  readonly receivedAtMs: number;
-  readonly nowMs: number;
-}
-
-export interface TrustedStoreReceipt extends TrustedDelivery {
-  readonly bindingDigest: string;
-  readonly expiresAtMs: number;
-}
-
-export type TrustedStoreClaimOutcome = "new" | "duplicate" | "conflict" | "unknown";
-
-export interface TrustedStoreClaim {
-  readonly outcome: TrustedStoreClaimOutcome;
-  readonly generation?: number;
-  readonly canonicalReceipt?: string;
-}
-
-export type TrustedAcceptanceOutcome =
-  "accepted" | "duplicate" | "conflict" | "invalid" | "store_error";
-
-export interface TrustedAcceptanceResult {
-  readonly accepted: boolean;
-  readonly outcome: TrustedAcceptanceOutcome;
-  readonly callerKnowledge: "known" | "unresolved";
-  readonly requiresReconciliation: boolean;
-  readonly retryBeforeReconciliation: boolean;
-  readonly generation?: number;
-  readonly canonicalReceipt?: string;
-}
-
-export type TrustedAcceptanceReconciliation =
-  "accepted" | "duplicate" | "conflict" | "missing" | "unknown";
-
-export interface TrustedIngressStore {
-  claim: (receipt: TrustedStoreReceipt) => Promise<TrustedStoreClaim>;
-  reconcileAcceptance: (input: TrustedDelivery) => Promise<TrustedAcceptanceReconciliation>;
-}
-
-export type TrustedLeaseOutcome =
-  "leased" | "reclaimed" | "busy" | "stale" | "missing" | "exhausted" | "invalid";
-
-export interface TrustedLeaseResult {
-  readonly outcome: TrustedLeaseOutcome;
-  readonly attempt?: number;
-}
-
-export type TrustedPrepareOutcome = "prepared" | "busy" | "stale" | "missing" | "invalid";
-
-export interface TrustedPrepareResult {
-  readonly outcome: TrustedPrepareOutcome;
-  readonly generation?: number;
-  readonly externalId?: string;
-}
-
-export type TrustedCommitOutcome =
-  "committed" | "stale" | "duplicate" | "conflict" | "not_ready" | "missing" | "invalid";
-
-export interface ProviderCheckRun {
-  readonly appId: number;
-  readonly repositoryId: number;
-  readonly headSha: string;
-  readonly name: string;
-  readonly externalId: string;
-}
-
-export type ProviderReconciliationOutcome =
-  "adopted" | "provider_ambiguous" | "stale" | "missing" | "invalid";
-
-export type ProviderCompletionOutcome = "published" | "blocked" | "stale" | "missing" | "invalid";
-
-export interface TrustedIngressInspection {
-  readonly storeCalls: number;
-  readonly deliveryClaims: number;
-  readonly bodyClaims: number;
-  readonly deliveryAliases: number;
-  readonly evaluationCount: number;
-  readonly currentGeneration: number;
-  readonly successfulCommits: number;
-  readonly successfulPublishes: number;
-  readonly outboxEvents: number;
-  readonly outboxPending: number;
-}
-
-export interface TrustedOutboxEvent {
-  readonly eventId: string;
-  readonly receipt: string;
-  readonly generation: number;
-  readonly externalId: string;
-}
-
-export type TrustedOutboxAcknowledgement = "acknowledged" | "duplicate" | "missing" | "invalid";
-
-export type AcceptFault = "none" | "unknown-before-commit" | "unknown-after-commit";
-
-export interface InMemoryTrustedIngressStoreOptions {
-  readonly acceptFault?: AcceptFault;
-  readonly publicationGate?: TrustedPublicationGate;
-}
-
-export interface TrustedPublicationGate {
-  readonly canPublishSuccess: () => boolean;
 }
 
 interface ReceiptEntry {
@@ -945,20 +839,6 @@ function isProviderCheckRunList(value: unknown): value is readonly unknown[] {
   return Array.isArray(value);
 }
 
-export interface InstallationTokenProfile {
-  readonly installationId: number;
-  readonly allowedRepositoryIds: readonly number[];
-  readonly allowedPermissions: Readonly<Record<string, "read" | "write">>;
-}
-
-export interface InstallationTokenSnapshot {
-  readonly installationId: number;
-  readonly repositoryIds: readonly number[];
-  readonly permissions: Readonly<Record<string, string>>;
-}
-
-export type InstallationTokenValidation = "valid" | "profile_mismatch";
-
 function isPositiveIdList(value: unknown): value is readonly number[] {
   return (
     Array.isArray(value) &&
@@ -1055,18 +935,6 @@ export class TrustedIngressModeController {
 
 function isTrustedIngressMode(value: unknown): value is TrustedIngressMode {
   return value === "disabled" || value === "shadow" || value === "advisory" || value === "required";
-}
-
-export interface TrustedSnapshotInput {
-  readonly basePolicyBytes: Uint8Array;
-  readonly boundedApiData: Uint8Array;
-}
-
-export interface TrustedSnapshotResult {
-  readonly outcome: "evaluated";
-  readonly basePolicySha256: string;
-  readonly apiDataSha256: string;
-  readonly executedOperations: readonly [];
 }
 
 function isTrustedSnapshotInput(value: unknown): value is TrustedSnapshotInput {
