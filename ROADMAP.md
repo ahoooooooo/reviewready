@@ -66,6 +66,10 @@ The pilot should record sanitized, reproducible evidence:
 - false positives, false negatives, and operational friction; and
 - maintainer feedback that is explicitly approved for publication.
 
+The repository provides a [pilot kit](docs/pilot/README.md) for collecting and
+validating those facts. The kit is readiness for a pilot, not proof that a pilot
+or external adoption has happened.
+
 One consenting pilot is evidence of one pilot, not broad adoption. Missing
 consent or usage data remains an external dependency and must never be replaced
 with generated testimonials or inflated metrics.

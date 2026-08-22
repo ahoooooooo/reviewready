@@ -88,6 +88,12 @@ refuses to overwrite an existing path and does not create workflows or change
 repository settings. The checked-in [quickstart example](examples/quickstart/README.md)
 provides replayable JSON fixtures.
 
+Maintainers evaluating ReviewReady in a real repository can use the
+[consented pilot kit](docs/pilot/README.md). It defines a reversible advisory
+trial, exact measurement terms, a no-secrets evidence schema, and publication
+consent levels. The kit adds no telemetry or upload path; a completed external
+pilot still requires a real maintainer's explicit consent.
+
 ## How it works
 
 The target repository owns a `.reviewready.yml` policy on its base branch:

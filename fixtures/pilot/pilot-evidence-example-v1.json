@@ -1,0 +1,49 @@
+{
+  "evidenceVersion": 1,
+  "recordStatus": "example",
+  "classification": "self-dogfood",
+  "subject": {
+    "repository": "OWNER/REPOSITORY",
+    "visibility": "public",
+    "baseSha": "0000000000000000000000000000000000000000",
+    "policyPath": ".reviewready.yml"
+  },
+  "run": {
+    "toolReference": "REPLACE_WITH_RELEASE_OR_COMMIT",
+    "immutableReference": false,
+    "startedAt": "2026-01-01T00:00:00.000Z",
+    "endedAt": "2026-01-01T00:00:00.000Z",
+    "sampleSelection": "all-consecutive",
+    "setupMethod": "source-preview",
+    "setupMinutes": 0
+  },
+  "outcomes": {
+    "evaluatedPullRequests": 0,
+    "readyReports": 0,
+    "notReadyReports": 0,
+    "confirmedFalsePositives": 0,
+    "confirmedFalseNegatives": 0,
+    "maintainerVerdict": "undecided",
+    "friction": [],
+    "notes": ["Example only; replace every placeholder with observed facts."]
+  },
+  "dataHandling": {
+    "automaticUpload": false,
+    "secretsIncluded": false,
+    "sourceCodeIncluded": false,
+    "pullRequestBodiesIncluded": false,
+    "redactions": []
+  },
+  "consent": {
+    "status": "not-applicable",
+    "publicationScope": "not-applicable",
+    "recordedAt": null,
+    "revocationRoute": null
+  },
+  "evidenceLinks": [],
+  "claims": {
+    "externalPilotObserved": false,
+    "broadAdoption": false,
+    "productionAuthority": false
+  }
+}

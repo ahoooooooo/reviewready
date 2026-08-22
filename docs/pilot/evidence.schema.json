@@ -1,0 +1,276 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ahoooooooo/reviewready/blob/main/docs/pilot/evidence.schema.json",
+  "title": "ReviewReady pilot evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "evidenceVersion",
+    "recordStatus",
+    "classification",
+    "subject",
+    "run",
+    "outcomes",
+    "dataHandling",
+    "consent",
+    "evidenceLinks",
+    "claims"
+  ],
+  "properties": {
+    "evidenceVersion": { "const": 1 },
+    "recordStatus": { "enum": ["example", "observed"] },
+    "classification": { "enum": ["self-dogfood", "external-pilot"] },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "visibility", "baseSha", "policyPath"],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 201,
+          "pattern": "^[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}$"
+        },
+        "visibility": { "enum": ["public", "private", "internal", "anonymous"] },
+        "baseSha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "policyPath": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$))[^/]+(?:/[^/]+)*$"
+        }
+      }
+    },
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "toolReference",
+        "immutableReference",
+        "startedAt",
+        "endedAt",
+        "sampleSelection",
+        "setupMethod",
+        "setupMinutes"
+      ],
+      "properties": {
+        "toolReference": { "$ref": "#/$defs/boundedText" },
+        "immutableReference": { "type": "boolean" },
+        "startedAt": { "$ref": "#/$defs/timestamp" },
+        "endedAt": { "$ref": "#/$defs/timestamp" },
+        "sampleSelection": { "enum": ["all-consecutive", "preselected"] },
+        "setupMethod": { "enum": ["stable-release", "source-preview"] },
+        "setupMinutes": { "type": "integer", "minimum": 0, "maximum": 1440 }
+      }
+    },
+    "outcomes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evaluatedPullRequests",
+        "readyReports",
+        "notReadyReports",
+        "confirmedFalsePositives",
+        "confirmedFalseNegatives",
+        "maintainerVerdict",
+        "friction",
+        "notes"
+      ],
+      "properties": {
+        "evaluatedPullRequests": { "type": "integer", "minimum": 0, "maximum": 10000 },
+        "readyReports": { "type": "integer", "minimum": 0, "maximum": 10000 },
+        "notReadyReports": { "type": "integer", "minimum": 0, "maximum": 10000 },
+        "confirmedFalsePositives": { "type": "integer", "minimum": 0, "maximum": 10000 },
+        "confirmedFalseNegatives": { "type": "integer", "minimum": 0, "maximum": 10000 },
+        "maintainerVerdict": { "enum": ["keep", "iterate", "remove", "undecided"] },
+        "friction": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/boundedText" }
+        },
+        "notes": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/boundedText" }
+        }
+      }
+    },
+    "dataHandling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "automaticUpload",
+        "secretsIncluded",
+        "sourceCodeIncluded",
+        "pullRequestBodiesIncluded",
+        "redactions"
+      ],
+      "properties": {
+        "automaticUpload": { "const": false },
+        "secretsIncluded": { "const": false },
+        "sourceCodeIncluded": { "const": false },
+        "pullRequestBodiesIncluded": { "const": false },
+        "redactions": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/boundedText" }
+        }
+      }
+    },
+    "consent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "publicationScope", "recordedAt", "revocationRoute"],
+      "properties": {
+        "status": { "enum": ["not-applicable", "confirmed"] },
+        "publicationScope": {
+          "enum": ["not-applicable", "private", "anonymous-public", "named-public"]
+        },
+        "recordedAt": {
+          "oneOf": [{ "$ref": "#/$defs/timestamp" }, { "type": "null" }]
+        },
+        "revocationRoute": {
+          "oneOf": [{ "$ref": "#/$defs/boundedText" }, { "type": "null" }]
+        }
+      }
+    },
+    "evidenceLinks": {
+      "type": "array",
+      "maxItems": 20,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 9,
+        "maxLength": 2048,
+        "pattern": "^https://[^\\s]+$"
+      }
+    },
+    "claims": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["externalPilotObserved", "broadAdoption", "productionAuthority"],
+      "properties": {
+        "externalPilotObserved": { "type": "boolean" },
+        "broadAdoption": { "const": false },
+        "productionAuthority": { "const": false }
+      }
+    }
+  },
+  "$defs": {
+    "boundedText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F\\u2028\\u2029]+$"
+    },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "type": "object",
+        "properties": { "recordStatus": { "const": "observed" } }
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "run": {
+            "type": "object",
+            "properties": {
+              "immutableReference": { "const": true },
+              "toolReference": {
+                "not": { "const": "REPLACE_WITH_RELEASE_OR_COMMIT" }
+              }
+            }
+          },
+          "subject": {
+            "type": "object",
+            "properties": {
+              "baseSha": {
+                "not": {
+                  "const": "0000000000000000000000000000000000000000"
+                }
+              }
+            }
+          },
+          "outcomes": {
+            "type": "object",
+            "properties": {
+              "evaluatedPullRequests": { "type": "integer", "minimum": 1 }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": { "classification": { "const": "self-dogfood" } }
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "consent": {
+            "type": "object",
+            "properties": {
+              "status": { "const": "not-applicable" },
+              "publicationScope": { "const": "not-applicable" },
+              "recordedAt": { "type": "null" },
+              "revocationRoute": { "type": "null" }
+            }
+          },
+          "claims": {
+            "type": "object",
+            "properties": { "externalPilotObserved": { "const": false } }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "recordStatus": { "const": "observed" },
+          "classification": { "const": "external-pilot" }
+        },
+        "required": ["recordStatus", "classification"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "consent": {
+            "type": "object",
+            "properties": {
+              "status": { "const": "confirmed" },
+              "publicationScope": {
+                "enum": ["private", "anonymous-public", "named-public"]
+              },
+              "recordedAt": { "$ref": "#/$defs/timestamp" },
+              "revocationRoute": { "$ref": "#/$defs/boundedText" }
+            }
+          },
+          "evidenceLinks": { "type": "array", "minItems": 1 },
+          "claims": {
+            "type": "object",
+            "properties": { "externalPilotObserved": { "const": true } }
+          }
+        }
+      },
+      "else": {
+        "type": "object",
+        "properties": {
+          "claims": {
+            "type": "object",
+            "properties": { "externalPilotObserved": { "const": false } }
+          }
+        }
+      }
+    }
+  ]
+}
