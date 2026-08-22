@@ -19,6 +19,7 @@ export default defineConfig({
         "src/audit-evidence-bundle.ts",
         "src/audit-evidence-collection.ts",
         "src/cli.ts",
+        "src/onboarding.ts",
         "src/file-reader.ts",
         "src/ta3-ingress.ts"
       ],

@@ -11,6 +11,7 @@ rules:
           - "src/**"
           - "test/**"
           - "fixtures/**"
+          - "examples/**"
           - ".reviewready.yml"
           - "reviewready*.schema.json"
           - "tsconfig*.json"

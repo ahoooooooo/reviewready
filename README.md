@@ -68,6 +68,26 @@ Version 1 keeps the policy, result, and exit-code contracts stable. See
 [CHANGELOG.md](CHANGELOG.md) for release history; published release output and
 immutable semantic-version tags are never rewritten.
 
+### Next-minor onboarding preview
+
+The source tree implements two commands planned for the next minor release;
+they are **not** part of the currently published v1.0.11 package:
+
+```console
+npm ci
+npm run build
+node dist/cli.js demo
+node dist/cli.js init
+node dist/cli.js validate --policy .reviewready.yml
+```
+
+`demo` evaluates built-in ready and missing-evidence examples without files,
+network access, credentials, or model calls. `init` creates only a starter
+`.reviewready.yml` in the current directory using exclusive file creation; it
+refuses to overwrite an existing path and does not create workflows or change
+repository settings. The checked-in [quickstart example](examples/quickstart/README.md)
+provides replayable JSON fixtures.
+
 ## How it works
 
 The target repository owns a `.reviewready.yml` policy on its base branch:
@@ -239,6 +259,10 @@ reviewready validate --policy fixtures/basic/.reviewready.yml
 reviewready explain --policy fixtures/basic/.reviewready.yml
 reviewready check --policy fixtures/basic/.reviewready.yml --input fixtures/basic/ready.json
 ```
+
+On `main`, the next-minor onboarding preview can also be exercised from a source
+build with `node dist/cli.js demo` and `node dist/cli.js init`. See the explicit
+published-version boundary in [Quick start](#next-minor-onboarding-preview).
 
 Readiness CLI exit codes:
 

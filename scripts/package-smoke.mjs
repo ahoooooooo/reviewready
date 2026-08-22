@@ -331,6 +331,27 @@ function runSmoke(projectRoot) {
       const fixtureRoot = join(projectRoot, "fixtures", "basic");
       const smokeRoot = mkdtempSync(join(tmpdir(), "reviewready-package-fixtures-"));
       try {
+        const demoRun = runCli(cli, ["demo"], smokeRoot, 0);
+        if (
+          !demoRun.stdout.includes("READY EXAMPLE") ||
+          !demoRun.stdout.includes("MISSING-EVIDENCE EXAMPLE")
+        ) {
+          throw new Error("packaged CLI demo output was incomplete");
+        }
+        const initRun = runCli(cli, ["init"], smokeRoot, 0);
+        const initializedPolicy = join(smokeRoot, ".reviewready.yml");
+        if (
+          !initRun.stdout.includes("Created .reviewready.yml") ||
+          !existsSync(initializedPolicy)
+        ) {
+          throw new Error("packaged CLI init did not create the starter policy");
+        }
+        runCli(cli, ["validate", "--policy", initializedPolicy], smokeRoot, 0);
+        const secondInit = runCli(cli, ["init"], smokeRoot, 2);
+        if (!secondInit.stderr.includes("[INIT_ALREADY_EXISTS]")) {
+          throw new Error("packaged CLI init did not preserve the no-overwrite boundary");
+        }
+
         const policy = readFileSync(join(fixtureRoot, ".reviewready.yml"), "utf8");
         const ready = readFileSync(join(fixtureRoot, "ready.json"), "utf8");
         const notReady = readFileSync(join(fixtureRoot, "not-ready.json"), "utf8");

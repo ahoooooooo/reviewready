@@ -191,6 +191,8 @@ describe("auditPackageEntries", () => {
     const releasePreflight = await readFile("scripts/release-preflight.mjs", "utf8");
 
     expect(packageSmoke).toContain("audit");
+    expect(packageSmoke).toContain('["demo"]');
+    expect(packageSmoke).toContain('["init"]');
     expect(packageSmoke).toContain("verifyInstalledSourceMaps");
     expect(packageSmoke).toContain("reviewready.audit-evidence.schema.json");
     expect(releasePreflight).toContain("audit");

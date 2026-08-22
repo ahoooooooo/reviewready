@@ -1,0 +1,12 @@
+# ReviewReady checks evidence presence, not correctness or approval.
+version: 1
+rules:
+  - id: source-change
+    description: Source changes need test notes and a linked issue.
+    when:
+      paths:
+        any: ["src/**"]
+    require:
+      - type: pr_body_section
+        heading: Testing
+      - type: linked_issue
