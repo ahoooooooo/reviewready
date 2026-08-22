@@ -12,6 +12,8 @@ export default defineConfig({
         "src/policy.ts",
         "src/github.ts",
         "src/github-api.ts",
+        "src/github-api-boundaries.ts",
+        "src/github-api-pagination.ts",
         "src/audit.ts",
         "src/github-audit.ts",
         "src/github-audit-api.ts",

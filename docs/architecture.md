@@ -8,7 +8,9 @@
 4. `engine`: evaluates requirements without I/O or platform knowledge.
 5. `report`: renders versioned JSON, terminal text, and Markdown.
 6. `github`: fetches base policy and normalizes GitHub event/API data.
-   `github-api` is the isolated Octokit transport implementation.
+   `github-api` is the isolated Octokit transport implementation;
+   `github-api-boundaries` owns retry/header/error limits and
+   `github-api-pagination` owns fail-closed Link traversal.
 7. `cli` and `action`: thin entry points that translate errors to public outputs.
 8. `audit`: pure, normalized repository-posture audit; it is separate from
    readiness and never contacts GitHub or executes workflow source.
