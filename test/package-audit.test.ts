@@ -233,10 +233,11 @@ describe("auditPackageEntries", () => {
   });
 
   it("describes TA-2 settings sampling as stable observation rather than atomic", async () => {
-    const plan = await readFile("docs/exec-plans/active/post-v1.md", "utf8");
+    const architecture = await readFile("docs/architecture.md", "utf8");
 
-    expect(plan).toContain("stable double observation");
-    expect(plan).not.toContain("atomic settings sampling");
+    expect(architecture).toMatch(/two complete\s+normalized observations/);
+    expect(architecture).toMatch(/bounded stability, not a\s+GitHub transaction/);
+    expect(architecture).not.toContain("atomic settings sampling");
   });
 
   it("uses the checked-in trusted workflow in live audit examples", async () => {

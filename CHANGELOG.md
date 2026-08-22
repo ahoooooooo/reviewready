@@ -5,6 +5,12 @@ the project uses semantic versioning.
 
 ## [Unreleased]
 
+### Documentation
+
+- Replace the completed post-v1 execution narrative with a concise canonical
+  roadmap, align public release coordinates with verified v1.0.11 evidence, and
+  keep program-specific application strategy outside the product repository.
+
 ## [1.0.11] - 2026-08-17
 
 ### Fixed

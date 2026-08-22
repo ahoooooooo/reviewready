@@ -9,7 +9,7 @@ policy. It never claims code is correct and never approves or merges a PR.
 - `docs/product-spec.md`: v1 behavior and non-goals.
 - `docs/architecture.md`: trust boundaries and module rules.
 - `docs/ai-development.md`: how humans and coding agents evolve this repository.
-- `docs/exec-plans/active/post-v1.md`: fixed post-v1 node order and promotion gates.
+- `ROADMAP.md`: current product priorities and promotion boundaries.
 - `docs/exec-plans/completed/v1.md`: historical v1 delivery plan and decision log.
 - `docs/releasing.md`: current release and artifact-verification process.
 - `docs/operational-lessons.md`: recurring integration failures and their
@@ -37,31 +37,6 @@ policy. It never claims code is correct and never approves or merges a PR.
   completed plans as if historical work were still active.
 - Do not publish packages, create releases, or move tags unless the issue explicitly
   authorizes a release and every prerequisite is verified.
-
-## External authentication preflight
-
-Browser login does not prove CLI login. GitHub browser sessions, GitHub CLI
-keyring credentials, and Git HTTPS credentials are separate channels. Before a
-GitHub operation, run `gh auth status --hostname github.com` and then run
-`gh api user --jq .login` in the same network context that will perform the
-operation. Only a successful, non-empty API result may be used to derive the
-repository owner; never type an owner into a command or continue with an empty
-repository target.
-
-The sandbox network and the external operation network may differ. A proxy or
-sandbox failure is not evidence that a valid keyring token is revoked; classify
-the failure first and retry once in the approved connected context. Public
-`git ls-remote` success is not proof of authenticated write access. Never print
-tokens, copy them into project files, or rotate credentials to diagnose a
-context-only failure. Authentication status is time-bound and must be checked
-again when an external operation begins.
-
-npm local login is a separate channel again. The normal release authority is
-npm Trusted Publishing through GitHub Actions OIDC, not local `npm whoami` and
-not a long-lived npm token. A local `ENEEDAUTH` is therefore expected after
-deliberate logout and does not by itself block ordinary repository work; a
-release must instead verify the protected workflow, environment, registry
-provenance, and exact artifact at its release gate.
 
 ## Validation
 

@@ -19,43 +19,30 @@ pull-request code.
 
 ## Current status
 
-The current package line is v1.0.11. Its exact audited tarball, npm provenance,
-semantic-version tag target, GitHub Release target, and stable Action ref will
-be recorded in the release evidence after public verification. The v1.0.6 trust-core and
-live-ingress contracts are released, but a normal `pull_request` workflow is
-still not a trusted enforcement root: it is loaded from the pull-request merge
-ref and can be modified by the contribution it evaluates. Loading policy
-contents from the base SHA does not by itself protect the caller workflow,
-Action pin, or `policy-path`.
+The current package line is v1.0.11. Its audited npm tarball and provenance,
+immutable semantic-version tag, GitHub Release, stable `v1` Action ref, and
+Marketplace listing are verified at commit
+`e9cd421ac106adb5731dd22b714701a136e937f8`. The exact public coordinates are
+recorded in [the v1.0.11 release evidence](docs/release-evidence-v1.0.11.md).
 
-The `audit collect` and `audit replay` evidence-bundle commands described below
-are included in the v1.0.11 package. The TA-2 bundle surface is
-versioned, bounded, and replayed offline; it must not be treated as a readiness
-or workflow-authority decision.
+The CLI and Action are ready for deterministic policy evaluation. The
+`audit collect` and `audit replay` commands are included in the v1.0.11 package,
+but their evidence bundle is a separate repository-audit surface and must not be
+treated as a readiness decision or merge authority.
 
-The checked-in TA-2 promotion workflow runs only on the exact main revision,
-fixes the repository, policy, and workflow roots in a trusted script, and
-replays the bundle without a token. It stages only the bounded bundle, replay,
-and manifest in runner temporary storage, then uploads those exact files to a
-30-day, run-scoped Actions artifact. A separate least-privilege job downloads
-that artifact and replays it offline again. The main-bound promotion run at
-a4689c7f05c6bdc0870db91dbfe6d19c5ccb2e96 passed with a repository-scoped
-read-only GitHub App token; the follow-up durable acceptance run for #55 must
-still be completed and reviewed before TA-2 is described as exited.
+A normal `pull_request` workflow is advisory because the contribution can
+change the merge-ref workflow it evaluates. Authoritative use requires a
+protected caller workflow, immutable Action pin, protected policy selection,
+and independently configured repository or organization rules. The checked-in
+metadata-only `pull_request_target` workflow is a reference implementation; it
+never checks out or executes pull-request code. See [SECURITY.md](SECURITY.md)
+for the complete boundary.
 
-Issue [#54](https://github.com/ahoooooooo/reviewready/issues/54) tracks live
-repository governance. The current required check selects the GitHub Actions
-App, which does not uniquely bind one workflow definition or event; the
-dedicated-provider contract is tracked in
-[#56](https://github.com/ahoooooooo/reviewready/issues/56).
-[docs/governance-evidence-ta1.md](docs/governance-evidence-ta1.md) records the
-current exact revisions, observed controls, unavailable settings, and remaining
-advisory boundary.
-[SECURITY.md](SECURITY.md) lists the other current evidence boundaries.
-Semantic-version release tags will not be rewritten under project policy. The
-historical v1.0.7 release predates GitHub release immutability; future releases
-are now protected by that setting. [#60](https://github.com/ahoooooooo/reviewready/issues/60)
-tracks the remaining public-coordinate evidence.
+ReviewReady does not currently provide a hosted service or production GitHub
+App. Those optional capabilities are tracked in
+[#78](https://github.com/ahoooooooo/reviewready/issues/78) and
+[#79](https://github.com/ahoooooooo/reviewready/issues/79). Current priorities
+and evidence levels are kept in [ROADMAP.md](ROADMAP.md).
 
 ## Quick start
 
@@ -69,28 +56,17 @@ reviewready validate --policy .reviewready.yml
 The Action can also be used in an advisory workflow:
 
 ```yaml
-- uses: ahoooooooo/reviewready@f21ed2e94efedb01f73e518c39765cef72c58e1c # v1.0.7
+- uses: ahoooooooo/reviewready@e9cd421ac106adb5731dd22b714701a136e937f8 # v1.0.11
 ```
-
-The advisory example retains the audited v1.0.7 commit in the package README
-source. Once published, npm package bytes cannot be rewritten. The repository's
-checked-in trusted reference is updated separately
-after each release to the exact verified release commit; #60 tracks the
-remaining public-coordinate reconciliation.
 
 The mutable `v1` tag is convenient, but an immutable verified commit is safer.
 The advisory workflow below must not be configured as the repository's only
 trusted merge authority unless its workflow and policy selection are protected by
 an independent repository or organization rule.
 
-Version 1 keeps the policy, result, and exit-code contracts stable. v1.0.4
-restores the original v1 public requirement-key encoding after the historical
-v1.0.3 regression, v1.0.5 adds bounded webhook, App, audit, and release
-contracts, v1.0.6 hardens the deterministic trust core, v1.0.7 synchronizes
-the published documentation, v1.0.8 publishes the replayable audit
-evidence surface, v1.0.9 fixes a GitHub pagination compatibility boundary, and
-v1.0.10 fixes a workflow action-reference parsing false positive.
-Older release output is not rewritten.
+Version 1 keeps the policy, result, and exit-code contracts stable. See
+[CHANGELOG.md](CHANGELOG.md) for release history; published release output and
+immutable semantic-version tags are never rewritten.
 
 ## How it works
 
@@ -148,7 +124,7 @@ Action-only repositories can copy the schema into the repository or reference an
 immutable release URL:
 
 ```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/ahoooooooo/reviewready/v1.0.7/reviewready.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ahoooooooo/reviewready/v1.0.11/reviewready.schema.json
 ```
 
 Keep the schema version aligned with the Action or CLI version being used. A local
@@ -194,7 +170,7 @@ jobs:
       statuses: read
       issues: read
     steps:
-      - uses: ahoooooooo/reviewready@9cb239e3b81e00b0f82239eaf43843863ab51e2d # v1.0.6
+      - uses: ahoooooooo/reviewready@e9cd421ac106adb5731dd22b714701a136e937f8 # v1.0.11
 ```
 
 Replace the example test commands with the target repository's own verification.

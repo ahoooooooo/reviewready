@@ -6,13 +6,17 @@ readiness authority, a release permission, or a substitute for GitHub's
 external controls. It must never contain credentials, tokens, or private
 account data.
 
+Never print tokens, copy them into project files, or rotate credentials merely
+to diagnose a context-only failure.
+
 ## GitHub command targeting
 
-Every GitHub command that needs a repository must derive the owner from a
-successful authenticated lookup. The lookup's exit code and its non-empty
-result are prerequisites; a failed lookup must stop before constructing a
-repository argument. Never type the owner into a command or silently fall back
-to a remembered account name.
+Every GitHub command that needs a repository must first run
+`gh auth status --hostname github.com`, then derive the owner from a successful
+`gh api user --jq .login` lookup in the same network context. The lookup's exit
+code and its non-empty result are prerequisites; a failed lookup must stop before
+constructing a repository argument. Never type the owner into a command or
+silently fall back to a remembered account name.
 
 The safe PowerShell sequence is:
 
@@ -33,11 +37,11 @@ to PR, issue, release, ruleset, Actions, and repository API commands.
 ## Authentication status is channel- and context-bound
 
 The browser session, GitHub CLI keyring, Git HTTPS helper, and npm registry
-session are separate. A successful browser login does not prove that `gh` can
-call the API, and a public Git read does not prove authenticated write access.
-The status is valid only for the channel and network context that was tested;
-future operations must repeat the bounded preflight instead of trusting this
-file as a permanent login flag.
+session are separate. Browser login does not prove CLI login, a successful
+browser session does not prove that `gh` can call the API, and a public Git read
+does not prove authenticated write access. The status is valid only for the
+channel and network context that was tested; future operations must repeat the
+bounded preflight instead of trusting this file as a permanent login flag.
 
 On 2026-08-17, the sandbox first reported a misleading CLI failure because its
 proxy could not reach GitHub. A bounded check in the approved connected context
@@ -46,8 +50,8 @@ lesson is to separate network context from credential validity before asking
 the owner to log in again.
 
 npm is intentionally different: local `npm whoami` may return `ENEEDAUTH` after
-logout while the protected GitHub Actions OIDC Trusted Publishing path remains
-the release authority. Do not store a token or turn a local npm session into a
+logout while npm Trusted Publishing through GitHub Actions OIDC remains the
+release authority. Do not store a token or turn a local npm session into a
 release prerequisite.
 
 ## 2026-08-17: malformed repository target during PR monitoring
