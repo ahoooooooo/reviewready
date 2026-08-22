@@ -141,6 +141,10 @@ regular files. The limit is applied before decoding or JSON/YAML parsing.
 - Integration tests cover CLI exit codes and GitHub event normalization.
 - Security regression tests cover path traversal, malicious headings, untrusted
   strings, self-modified head policy, pagination, and API failures.
+- A replayable seeded differential corpus compares matching against an
+  independent restricted-glob oracle, and a deterministic work-factor gate caps
+  maximum-policy matcher compilation and comparison work without wall-clock
+  assumptions.
 - The core trust modules (`engine.ts`, `input.ts`, `matcher.ts`, `policy.ts`,
   `github.ts`, and `github-api.ts`) each maintain at least 90% line/function/
   statement and 85% branch coverage; the coverage gate enforces this per file.

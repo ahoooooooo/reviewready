@@ -40,8 +40,23 @@ npm run check
 ```
 
 The gate runs formatting, strict linting, type checking, tests with coverage
-thresholds, the CLI build, the production Action bundle, and package privacy
-verification.
+thresholds, seeded differential properties, deterministic work-factor budgets,
+the CLI build, the production Action bundle, and package privacy verification.
+
+The default property corpus is deterministic. To replay a different bounded
+corpus locally, supply its unsigned 32-bit seed; include the seed in a defect
+report so the exact cases can be reproduced:
+
+```console
+npm run test:properties
+REVIEWREADY_FUZZ_SEED=3735928559 npm run test:properties
+npm run test:performance
+```
+
+The performance contract measures matcher compilations and comparisons instead
+of wall-clock time, so runner load cannot turn a correct change into a flaky
+failure. A separate benchmark may measure latency, but it cannot replace the
+deterministic operation budget that fails closed in production.
 
 Do not weaken a threshold merely to make a change pass. Add meaningful coverage
 or explain why the project contract should change.
