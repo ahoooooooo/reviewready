@@ -5,6 +5,12 @@ the project uses semantic versioning.
 
 ## [Unreleased]
 
+### Added
+
+- Add next-minor `init` and offline `demo` commands with a replayable quickstart
+  example. Initialization creates one starter policy using exclusive file
+  creation and never overwrites an existing path.
+
 ### Documentation
 
 - Replace the completed post-v1 execution narrative with a concise canonical

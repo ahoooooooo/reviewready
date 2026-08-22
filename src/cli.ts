@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { createHash } from "node:crypto";
+import { writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
 import { auditRepository, renderAuditJson, renderAuditSarif, type AuditReport } from "./audit.js";
@@ -30,6 +31,7 @@ import {
 } from "./github-audit.js";
 import { parsePolicy } from "./policy.js";
 import { explainPolicy, renderJson, renderText } from "./report.js";
+import { initializeStarterPolicy, renderDemo, type CreateNewFile } from "./onboarding.js";
 
 export interface CliIo {
   readFile: (path: string, encoding: "utf8") => Promise<string>;
@@ -37,6 +39,7 @@ export interface CliIo {
   stdout: (value: string) => void;
   stdoutBytes?: (value: Uint8Array) => void;
   stderr: (value: string) => void;
+  createFile?: CreateNewFile;
 }
 
 interface ParsedArguments {
@@ -58,14 +61,16 @@ interface ParsedArguments {
 }
 
 const usage =
-  "Usage: reviewready <validate|check|explain> --policy <path> [--input <path>] [--json]; reviewready audit --input <snapshot> [--json|--sarif]; reviewready audit collect --github <owner/repo> --revision <full-sha> [options]; reviewready audit replay --bundle <path> [--bundle-sha256 <sha256>] [--json|--sarif]";
+  "Usage: reviewready <init|demo>; reviewready <validate|check|explain> --policy <path> [--input <path>] [--json]; reviewready audit --input <snapshot> [--json|--sarif]; reviewready audit collect --github <owner/repo> --revision <full-sha> [options]; reviewready audit replay --bundle <path> [--bundle-sha256 <sha256>] [--json|--sarif]";
 
 const defaultIo: CliIo = {
   readFile: (path) => readBoundedFile(path),
   readBytes: (path) => readBoundedBytes(path),
   stdout: (value) => process.stdout.write(`${value}\n`),
   stdoutBytes: (value) => process.stdout.write(value),
-  stderr: (value) => process.stderr.write(`${value}\n`)
+  stderr: (value) => process.stderr.write(`${value}\n`),
+  createFile: (path, content) =>
+    writeFile(path, content, { encoding: "utf8", flag: "wx", mode: 0o644 })
 };
 
 function parseArguments(argv: readonly string[]): ParsedArguments {
@@ -206,6 +211,26 @@ function requiredPath(value: string | undefined, option: "--policy" | "--input")
 }
 
 function validateCommandOptions(parsed: ParsedArguments): void {
+  if (parsed.command === "init" || parsed.command === "demo") {
+    if (
+      parsed.policy !== undefined ||
+      parsed.input !== undefined ||
+      parsed.bundle !== undefined ||
+      parsed.bundleSha256 !== undefined ||
+      parsed.revision !== undefined ||
+      parsed.github !== undefined ||
+      parsed.ref !== undefined ||
+      parsed.policyPath !== undefined ||
+      parsed.tokenEnv !== undefined ||
+      parsed.protectedWorkflowPaths.length > 0 ||
+      parsed.trustedWorkflowPaths.length > 0 ||
+      parsed.json ||
+      parsed.sarif
+    ) {
+      throw new InputError("CLI_USAGE", `The ${parsed.command} command does not accept options.`);
+    }
+    return;
+  }
   if (
     parsed.command !== "audit" &&
     (parsed.bundle !== undefined ||
@@ -483,6 +508,22 @@ export async function runCli(argv: readonly string[], io: CliIo = defaultIo): Pr
     validateCommandOptions(parsed);
 
     switch (parsed.command) {
+      case "init": {
+        if (io.createFile === undefined) {
+          throw new InputError(
+            "INIT_WRITE_UNAVAILABLE",
+            "The current CLI environment cannot create a starter policy."
+          );
+        }
+        await initializeStarterPolicy(io.createFile);
+        io.stdout(
+          "Created .reviewready.yml without overwriting existing files. Next: reviewready validate --policy .reviewready.yml"
+        );
+        return 0;
+      }
+      case "demo":
+        io.stdout(renderDemo());
+        return 0;
       case "audit": {
         if (parsed.auditMode === "replay") {
           const bundlePath = parsed.bundle as string;

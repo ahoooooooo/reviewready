@@ -38,8 +38,8 @@ The next internal work should reduce the distance between discovering the
 project and obtaining a truthful first result:
 
 - keep README, security guidance, examples, and release coordinates synchronized;
-- provide an initialization command that creates a minimal policy and advisory
-  workflow without overwriting existing files;
+- release and document the source-implemented initialization and offline demo
+  commands in the next minor version without weakening their no-overwrite boundary;
 - publish a small sample repository or fixture-backed walkthrough with expected
   ready and not-ready output;
 - add concise maintainer, support, ownership, and contribution paths;

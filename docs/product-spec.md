@@ -103,6 +103,19 @@ stderr.
 Policy and normalized-input files are bounded to 4 MiB of raw bytes and must be
 regular files. The limit is applied before decoding or JSON/YAML parsing.
 
+## Next-minor onboarding commands
+
+- `reviewready demo` evaluates one built-in ready case and one built-in
+  missing-evidence case. It performs no file, network, credential, model, or
+  repository-setting operation and returns `0` when the demonstration completes.
+- `reviewready init` creates a single starter `.reviewready.yml` in the current
+  directory with exclusive-create semantics. It never overwrites an existing
+  path, creates no workflow, and changes no repository setting.
+
+These commands do not change the v1 policy or readiness-result contracts. They
+are source-implemented for the next minor release and are not claimed as part of
+the currently published v1.0.11 package.
+
 ## Security and authority
 
 - The GitHub adapter loads policy content from the base commit SHA via API.

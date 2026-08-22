@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "changedFiles": ["src/index.ts"],
+  "body": "## Testing\n\nnpm test passed.",
+  "labels": [],
+  "linkedIssues": [42],
+  "checks": [],
+  "reviews": []
+}

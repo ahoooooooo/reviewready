@@ -26,6 +26,7 @@ describe("ReviewReady self-policy coverage", () => {
     "src/index.ts",
     "test/engine.test.ts",
     "fixtures/basic/ready.json",
+    "examples/quickstart/ready.json",
     ".reviewready.yml",
     "reviewready.schema.json",
     ".github/workflows/reviewready-trusted.yml",

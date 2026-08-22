@@ -10,20 +10,23 @@
 6. `github`: fetches base policy and normalizes GitHub event/API data.
    `github-api` is the isolated Octokit transport implementation.
 7. `cli` and `action`: thin entry points that translate errors to public outputs.
-8. `audit`: pure, normalized repository-posture audit; it is separate from
+8. `onboarding`: built-in starter policy and offline demonstration data. It can
+   exclusively create one policy file but does not create workflows, contact a
+   platform, or change repository settings.
+9. `audit`: pure, normalized repository-posture audit; it is separate from
    readiness and never contacts GitHub or executes workflow source.
-9. `github-audit` and `github-audit-api`: a bounded live GitHub snapshot
-   collector and its read-only Octokit transport. They bind policy/workflow
-   bytes to one immutable base SHA but never infer a trusted workflow root.
-10. `workflow-security`: bounded static source/prompt/sink analysis for audit
+10. `github-audit` and `github-audit-api`: a bounded live GitHub snapshot
+    collector and its read-only Octokit transport. They bind policy/workflow
+    bytes to one immutable base SHA but never infer a trusted workflow root.
+11. `workflow-security`: bounded static source/prompt/sink analysis for audit
     findings only; it does not evaluate YAML expressions or invoke an LLM.
-11. `trust`, `webhook`, and `github-app`: pure HMAC/replay/binding and App
+12. `trust`, `webhook`, and `github-app`: pure HMAC/replay/binding and App
     authentication primitives; they contain no HTTP server or persistence
     implementation.
-12. `http-contract` and `observability`: framework-neutral raw-byte transport
+13. `http-contract` and `observability`: framework-neutral raw-byte transport
     and bounded redacted event contracts; they contain no sockets, secrets,
     durable store, or deployment provider.
-13. `ta3-ingress`: provider-neutral trusted-ingress state transitions,
+14. `ta3-ingress`: provider-neutral trusted-ingress state transitions,
     allowlisted webhook composition, replay aliases, leases, generation
     fencing, outbox, and provider-reconciliation contracts. Its in-memory
     store is a deterministic reference for tests, not production durability.
