@@ -3,26 +3,24 @@ import { describe, expect, it } from "vitest";
 
 describe("open-source upgrade process contract", () => {
   it("keeps the orchestration layer connected to its authoritative sources", async () => {
-    const [process, index, research, plan, base] = await Promise.all([
+    const [process, index, research, roadmap, base] = await Promise.all([
       readFile("docs/oss-upgrade-process.md", "utf8"),
       readFile("docs/research/README.md", "utf8"),
       readFile("docs/research/deep-research-process.md", "utf8"),
-      readFile("docs/exec-plans/active/post-v1.md", "utf8"),
+      readFile("ROADMAP.md", "utf8"),
       readFile("docs/ai-development.md", "utf8")
     ]);
 
     expect(index).toContain("[Open-source upgrade lifecycle](../oss-upgrade-process.md)");
     expect(research).toContain("[open-source upgrade lifecycle](../oss-upgrade-process.md)");
-    expect(plan).toContain("[open-source upgrade lifecycle](../../oss-upgrade-process.md)");
+    expect(roadmap).toContain("docs/exec-plans/completed/");
 
     const requiredSources = [
       "docs/ai-development.md",
       "docs/research/deep-research-process.md",
-      "docs/exec-plans/active/post-v1.md",
+      "ROADMAP.md",
       "docs/architecture.md",
-      "docs/releasing.md",
-      "docs/research/open-source-landscape-and-reward-upgrade.md",
-      "docs/research/openai-oss-reward-strategy.md"
+      "docs/releasing.md"
     ];
     for (const source of requiredSources) {
       expect(process).toContain(source);
@@ -86,17 +84,19 @@ describe("open-source upgrade process contract", () => {
     expect(stagePositions.every((position) => position >= 0)).toBe(true);
     expect(stagePositions).toEqual([...stagePositions].sort((a, b) => a - b));
   });
-  it("does not retain stale pre-merge claims for completed roadmap nodes", async () => {
-    const plan = await readFile("docs/exec-plans/active/post-v1.md", "utf8");
+  it("keeps the roadmap concise, current, and honest about external evidence", async () => {
+    const roadmap = await readFile("ROADMAP.md", "utf8");
 
-    expect(plan).toContain("PR #80");
-    expect(plan).not.toContain("that PR remains documentation-only");
-    expect(plan).not.toContain("must pass the repository gate before");
+    expect(roadmap).toContain("v1.0.11");
+    expect(roadmap).toContain("#61");
+    expect(roadmap).toContain("#78");
+    expect(roadmap).toContain("#79");
+    expect(roadmap).toMatch(/not evidence of external adoption/i);
+    expect(roadmap.split("\n").length).toBeLessThan(140);
   });
-  it("keeps external authentication checks visible to every agent run", async () => {
-    const guide = await readFile("AGENTS.md", "utf8");
+  it("keeps external authentication checks in the operational runbook", async () => {
+    const guide = await readFile("docs/operational-lessons.md", "utf8");
 
-    expect(guide).toContain("## External authentication preflight");
     expect(guide).toContain("gh auth status --hostname github.com");
     expect(guide).toContain("gh api user --jq .login");
     expect(guide).toMatch(/[Bb]rowser login does not prove CLI login/);

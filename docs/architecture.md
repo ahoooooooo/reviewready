@@ -70,13 +70,14 @@ the Action pin, input path, permissions, job dependencies, or even the job that
 reports a required check. Required status checks match job/check names and may pin
 the GitHub App, but that does not identify an immutable workflow definition.
 
-ADR 0001 defines the supported trust boundary. Issue #54 tracks live repository
-governance and issue #56 tracks the dedicated provider/App contract. Candidate
-roots include an organization ruleset-required workflow selected by
-repository/ref/SHA, independently protected workflow and policy files, or a
-metadata-only `pull_request_target` workflow from the base branch. A trusted
-`pull_request_target` design must not check out, download, import, cache, build, or
-execute pull-request code. Untrusted build and test CI remains on `pull_request`
+ADR 0001 defines the supported trust boundary. A hosted dedicated provider and
+its external enforcement evidence are optional future work in issues #78 and
+#79; the released package includes local ingress primitives, not a production
+service. Candidate roots include an organization ruleset-required workflow
+selected by repository/ref/SHA, independently protected workflow and policy
+files, or a metadata-only `pull_request_target` workflow from the base branch. A
+trusted `pull_request_target` design must not check out, download, import, cache,
+build, or execute pull-request code. Untrusted build and test CI remains on `pull_request`
 with fork-safe permissions.
 
 Review-submitted events require a separate design decision because

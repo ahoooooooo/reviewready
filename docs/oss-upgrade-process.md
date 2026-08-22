@@ -2,8 +2,8 @@
 
 This is ReviewReady's project-level orchestration process. It connects the
 [adversarial delivery loop](ai-development.md), the
-[deep research method](research/deep-research-process.md), the fixed
-[post-v1 node plan](exec-plans/active/post-v1.md), and the
+[deep research method](research/deep-research-process.md), the current
+[project roadmap](../ROADMAP.md), and the
 [release process](releasing.md) into one repeatable upgrade cycle.
 
 The adversarial delivery loop is the prerequisite engine. This lifecycle is a
@@ -14,7 +14,7 @@ It is an operating model, not a form, issue template, scorecard, or substitute
 for a product contract. It does not change readiness semantics or grant an LLM
 authority. It does not execute pull-request code or replace GitHub's authority,
 and it does not turn a research conclusion into a release permission. The
-current node order and individual release rules remain authoritative in their
+roadmap priorities and individual release rules remain authoritative in their
 existing documents.
 
 ## What the lifecycle optimizes
@@ -24,7 +24,7 @@ boundary and leaves a reproducible proof path. The lifecycle therefore
 optimizes for, in order:
 
 1. deterministic safety and compatibility;
-2. useful progress on the current node rather than attractive scope growth;
+2. useful progress on the current priority rather than attractive scope growth;
 3. evidence that an independent reader can reproduce;
 4. low coordination waste and bounded external operations; and
 5. a public release and adoption story that says no more than the evidence
@@ -75,7 +75,7 @@ its observation time and limitations. Authentication may be checked without
 exposing credentials; a failed login is an external dependency, not a product
 fact.
 
-The baseline includes the current node, worktree, source and generated
+The baseline includes the current priority, worktree, source and generated
 artifacts, public package and Action coordinates, open-work classification, and
 any settings or provider state that the proposed work relies on. Do not mix a
 new observation into an old conclusion. If the repository or public state
@@ -87,7 +87,7 @@ next upgrade.
 
 ## 2. Frame one observable outcome
 
-Choose the existing post-v1 node or successor issue that owns the outcome. State
+Choose the existing roadmap priority or successor issue that owns the outcome. State
 what must become observably different, which trust boundary it crosses, what
 is deliberately out of scope, and what evidence would allow promotion. Keep
 one issue and pull request focused on one outcome; use dependencies to express
@@ -137,7 +137,7 @@ it true, and what proof could falsify that repair. If those answers cannot be
 given, the work is still in research or design and should not be disguised as
 an implementation task.
 
-The slice order follows the current node plan. Design precedes implementation
+The slice order follows the current roadmap. Design precedes implementation
 when authority, public schema, identity, migration, or threat-model decisions
 are unresolved. Independent slices may proceed in parallel; dependent slices
 wait for the contract or evidence they consume. Do not create a later-node
@@ -262,11 +262,11 @@ latest story cleaner.
 
 ## 11. Close the cycle by re-baselining
 
-After promotion or an honest stop, reconcile the issue, PR, active plan,
+After promotion or an honest stop, reconcile the issue, PR, roadmap,
 architecture or ADR, research index, README, changelog, release evidence, and
 public coordinates that were actually affected. Preserve the decision, failed
 attempts, remaining external dependencies, and the exact revision used for
-proof. Then choose the next node from the post-v1 plan and freeze a new
+proof. Then choose the next priority from the roadmap and freeze a new
 baseline.
 
 The cycle is complete when another credible finding would not change the
@@ -296,17 +296,13 @@ the simpler process; cosmetic changes are not an upgrade.
   discipline, and Git promotion protocol.
 - [`docs/research/deep-research-process.md`](research/deep-research-process.md)
   — source-backed research and counter-evidence loop.
-- [`docs/exec-plans/active/post-v1.md`](exec-plans/active/post-v1.md) — current
-  node order, issue ownership, invariants, and promotion gates.
+- [`ROADMAP.md`](../ROADMAP.md) — current product priorities, issue ownership,
+  evidence boundaries, and promotion gates.
 - [`docs/architecture.md`](architecture.md) — trust boundaries and module
   responsibilities.
 - [`docs/releasing.md`](releasing.md) — exact release and artifact parity
   procedure.
-- [`docs/research/open-source-landscape-and-reward-upgrade.md`](research/open-source-landscape-and-reward-upgrade.md)
-  — current landscape, differentiation, and public-proof priorities.
-- [`docs/research/openai-oss-reward-strategy.md`](research/openai-oss-reward-strategy.md)
-  — reward-application evidence limits and honest adoption language.
 
 If these documents disagree, the product and architecture contracts govern
-behavior, the active execution plan governs node order, and the release process
-governs publication. This document only defines how work moves between them.
+behavior, the roadmap governs priority, and the release process governs
+publication. This document only defines how work moves between them.

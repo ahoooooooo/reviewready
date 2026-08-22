@@ -141,10 +141,10 @@ The attack also tests the evidence itself: authority, freshness, scope,
 independence, query completeness, and whether the source actually supports the
 wording. A source that is real but out of scope cannot rescue a claim.
 
-For the ReviewReady reward question, this means actively testing claims about
-eligibility, differentiation, importance, adoption, maintainer credibility,
-production authority, and cost. The process must be willing to narrow or
-remove a claim, not merely add supporting prose.
+For an external-program or adoption question, this means actively testing claims
+about eligibility, differentiation, importance, adoption, maintainer credibility,
+production authority, and cost. The process must be willing to narrow or remove
+a claim, not merely add supporting prose.
 
 ### Resolve through changing abstraction levels
 
@@ -217,8 +217,8 @@ sources remain authoritative.
 
 When the research method itself is the target, freeze its current version at an
 immutable revision or isolated branch and replay it against completed research
-questions, including this reward-strategy study and the remaining work-order
-planning. Downstream reports remain candidates until the method is promoted.
+questions, including adoption strategy and remaining work-order planning.
+Downstream reports remain candidates until the method is promoted.
 Attack the method for missed sources, repeated effort, premature closure,
 unsupported certainty, stale evidence, poor handoff, and recommendations that
 cannot become action.
