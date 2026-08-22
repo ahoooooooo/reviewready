@@ -61,6 +61,8 @@
     "bundle": "npm run build && npm run bundle:action",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:properties": "vitest run test/matcher-property.test.ts",
+    "test:performance": "vitest run test/performance-contract.test.ts",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
