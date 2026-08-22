@@ -7,6 +7,8 @@ follow the same evidence requirements. Participation is governed by
 ## Start here
 
 1. Read `docs/product-spec.md`, `docs/architecture.md`, and `AGENTS.md`.
+   Project roles and decisions are described in [GOVERNANCE.md](GOVERNANCE.md)
+   and [MAINTAINERS.md](MAINTAINERS.md).
 2. Open or select an issue with one observable outcome.
 3. For a bug, first add a test that fails for the reported behavior.
 4. Make the smallest complete change.
@@ -16,6 +18,7 @@ follow the same evidence requirements. Participation is governed by
 Use the repository's structured issue forms for bugs and feature requests. Do not
 post suspected vulnerabilities, tokens, private repository content, or third-party
 personal data in a public issue; follow `SECURITY.md` instead.
+Usage and integration questions follow [SUPPORT.md](SUPPORT.md).
 
 Node.js 22 or newer is required for the CLI and development toolchain. The
 packaged Action runs on Node.js 24. Install the locked toolchain with:
