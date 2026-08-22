@@ -17,6 +17,8 @@ export default defineConfig({
         "src/audit.ts",
         "src/github-audit.ts",
         "src/github-audit-api.ts",
+        "src/github-audit-api-mappers.ts",
+        "src/github-audit-api-primitives.ts",
         "src/audit-evidence.ts",
         "src/audit-evidence-artifact.ts",
         "src/audit-evidence-bundle.ts",
