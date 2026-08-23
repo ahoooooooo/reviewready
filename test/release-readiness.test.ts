@@ -321,13 +321,13 @@ describe("release readiness metadata", () => {
     expect(changelog).toContain(`## [${String(version)}]`);
   });
 
-  it("requires release protection configuration evidence before publication is complete", async () => {
-    const evidence = await readFile("docs/release-evidence-v1.0.6.md", "utf8");
+  it("retains the latest immutable release and publication-control evidence", async () => {
+    const evidence = await readFile("docs/release-evidence-v1.0.11.md", "utf8");
     const process = await readFile("docs/releasing.md", "utf8");
 
-    expect(evidence).toContain("release environment");
-    expect(evidence).toContain("required reviewers");
-    expect(evidence).toContain("npm Trusted Publisher");
+    expect(evidence).toContain("npm Trusted Publishing");
+    expect(evidence).toContain("GitHub Release is immutable");
+    expect(evidence).toContain("required reviewer");
     expect(process).toContain("release environment");
     expect(process).toContain("npm Trusted Publisher");
   });

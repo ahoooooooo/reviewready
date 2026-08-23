@@ -35,7 +35,6 @@ describe("ReviewReady self-policy coverage", () => {
     "scripts/release-preflight.mjs",
     "docs/architecture.md",
     "SECURITY.md",
-    "AGENTS.md",
     "CONTRIBUTING.md"
   ])("does not leave %s unmatched", (path) => {
     const result = evaluate(policy, {

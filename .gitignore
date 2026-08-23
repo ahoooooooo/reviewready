@@ -11,3 +11,6 @@ coverage/
 .env
 .env.*
 !.env.example
+.codex/
+.reviewready-review/
+AGENTS.md

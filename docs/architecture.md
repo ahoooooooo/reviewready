@@ -245,17 +245,10 @@ output is executed by these primitives. The separate observability contract
 accepts only UUID-form delivery/correlation identities and a bounded known
 webhook action; it never carries body, prompt, workflow, secret, or token data.
 
-TA-3 adds a separate provider-authority design in
-[ADR 0011](adr/0011-github-app-trusted-ingress.md). A dedicated GitHub App,
-installation/repository allowlist, required-check App ID, durable two-key
-inbox, generation-fenced result store, and provider reconciliation are
-required before any live result can be called authoritative. The design is
-accepted, but no production ingress or durable deployment exists yet. Until
-the live race, configuration, and external-governance evidence passes, the
-provider remains advisory and cannot change the v1 readiness JSON contract.
-The local TA-3-I core implementation exercises those state transitions and
-allowlist boundaries without claiming that an HTTPS endpoint, transactional
-store, secret manager, or live Check Run enforcement has been deployed.
+The optional provider-authority deployment is not included in this product
+release. These ingress primitives remain advisory until an independently
+protected provider, durable replay store, and external governance controls are
+deployed and verified; they cannot change the v1 readiness JSON contract.
 
 ## Error model
 
