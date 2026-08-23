@@ -168,18 +168,6 @@ describe("auditPackageEntries", () => {
     ).toBe(true);
   });
 
-  it("keeps the TA-2 evidence commands aligned with the package release", async () => {
-    const packageJson = JSON.parse(await readFile("package.json", "utf8")) as {
-      version?: unknown;
-    };
-    const readme = await readFile("README.md", "utf8");
-
-    expect(typeof packageJson.version).toBe("string");
-    const version = String(packageJson.version);
-    expect(readme).toContain("The current package line is v" + version);
-    expect(readme).toContain("included in the v" + version + " package");
-  });
-
   it("keeps a canonical TA-2 evidence fixture replayable", async () => {
     const bytes = await readFile("fixtures/audit/evidence-bundle-v1.json");
     const bundle = parseCanonicalJsonBytes(bytes);

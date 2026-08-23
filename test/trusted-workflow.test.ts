@@ -8,7 +8,6 @@ const readme = await readFile("README.md", "utf8");
 const changelog = await readFile("CHANGELOG.md", "utf8");
 const canonicalRepository = `ah${"o".repeat(8)}/reviewready`;
 const publishedReleaseCommit = "e9cd421ac106adb5731dd22b714701a136e937f8";
-const documentedAdvisoryCommit = "f21ed2e94efedb01f73e518c39765cef72c58e1c";
 
 describe("trusted ReviewReady workflow", () => {
   it("uses the canonical GitHub repository as its immutable trust root", () => {
@@ -36,9 +35,9 @@ describe("trusted ReviewReady workflow", () => {
     );
   });
 
-  it("pins the trusted root to the published v1.0.11 release and keeps the published advisory example immutable", () => {
+  it("pins the trusted and documented Action examples to the published v1.0.11 release", () => {
     expect(workflow).toContain(`uses: ${canonicalRepository}@${publishedReleaseCommit} # v1.0.11`);
-    expect(readme).toContain(`uses: ${canonicalRepository}@${documentedAdvisoryCommit} # v1.0.7`);
+    expect(readme).toContain(`uses: ${canonicalRepository}@${publishedReleaseCommit} # v1.0.11`);
     expect(workflow).not.toContain("main v1.0.6 candidate");
     expect(readme).not.toContain("v1.0.5 bootstrap pin");
   });
@@ -46,7 +45,11 @@ describe("trusted ReviewReady workflow", () => {
   it("keeps the package version, README status, and changelog release aligned", () => {
     expect(typeof packageManifest.version).toBe("string");
     const version = String(packageManifest.version);
-    expect(readme).toContain(`The current package line is v${version}`);
+    expect(readme).toContain(`The latest release is v${version}`);
+    expect(readme).toContain(`/v${version}/reviewready.schema.json`);
+    expect(readme).toContain(
+      `The v${version} package includes bounded \`audit collect\` and offline \`audit replay\``
+    );
     expect(changelog).toContain(`## [${version}]`);
   });
 

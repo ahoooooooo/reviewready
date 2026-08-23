@@ -63,12 +63,14 @@ change can therefore attempt to replace the Action, change `policy-path`, or emi
 same-name successful job unless an independent rule protects the enforcement
 workflow.
 
-Do not use the v1.0.5 advisory `pull_request` example as the sole authoritative
-merge gate. ADR 0001 defines the supported trust boundary; issue #54 tracks live
-repository governance and issue #56 tracks a dedicated provider/App contract.
-Candidate topologies include organization ruleset workflows, independently
-protected enforcement files, and carefully limited metadata-only
-`pull_request_target` evaluation. A
+Do not use an advisory `pull_request` integration as the sole authoritative merge
+gate. ADR 0001 defines the supported trust boundary.
+[ADR 0011](docs/adr/0011-github-app-trusted-ingress.md) and the
+[TA-3 threat model](docs/threat-model-ta3-trusted-ingress.md) define the
+checked-in provider/App contract; production implementation and external
+enforcement proof remain tracked in issues #78 and #79. Candidate topologies
+include organization ruleset workflows, independently protected enforcement
+files, and carefully limited metadata-only `pull_request_target` evaluation. A
 `pull_request_target` workflow must never check out, download, import, cache, build,
 or execute pull-request code.
 
@@ -80,8 +82,8 @@ or execute pull-request code.
   reference pinned to the exact v1.0.11 release commit. The active ruleset selects
   the GitHub Actions App as the required-check source, but GitHub required checks
   do not bind one workflow definition or event trigger. Do not call this a unique
-  authoritative provider until issue #54's governance evidence and issue #56's
-  dedicated-provider boundary are satisfied.
+  authoritative provider until the implementation and external evidence tracked
+  in issues #78 and #79 establish that authority.
 - A successful named check proves only that GitHub recorded that conclusion; it
   does not prove the check itself is trustworthy. Restrict app identity where it
   matters and protect workflow changes separately. The ordinary `pull_request`
