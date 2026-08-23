@@ -47,10 +47,9 @@ Issue [#54](https://github.com/ahoooooooo/reviewready/issues/54) tracks live
 repository governance. The current required check selects the GitHub Actions
 App, which does not uniquely bind one workflow definition or event; the
 dedicated-provider contract is tracked in
-[#56](https://github.com/ahoooooooo/reviewready/issues/56).
-[docs/governance-evidence-ta1.md](docs/governance-evidence-ta1.md) records the
-current exact revisions, observed controls, unavailable settings, and remaining
-advisory boundary.
+[#56](https://github.com/ahoooooooo/reviewready/issues/56). [SECURITY.md](SECURITY.md)
+summarizes the durable security boundary and its remaining live-control
+limitations; local audit snapshots are not treated as current authority.
 [SECURITY.md](SECURITY.md) lists the other current evidence boundaries.
 Semantic-version release tags will not be rewritten under project policy. The
 historical v1.0.7 release predates GitHub release immutability; future releases

@@ -321,17 +321,6 @@ describe("release readiness metadata", () => {
     expect(changelog).toContain(`## [${String(version)}]`);
   });
 
-  it("requires release protection configuration evidence before publication is complete", async () => {
-    const evidence = await readFile("docs/release-evidence-v1.0.6.md", "utf8");
-    const process = await readFile("docs/releasing.md", "utf8");
-
-    expect(evidence).toContain("release environment");
-    expect(evidence).toContain("required reviewers");
-    expect(evidence).toContain("npm Trusted Publisher");
-    expect(process).toContain("release environment");
-    expect(process).toContain("npm Trusted Publisher");
-  });
-
   it("keeps release artifact hashing deterministic and rejects unsafe tar paths", () => {
     expect(sha1Hex("ReviewReady")).toHaveLength(40);
     expect(sha512Hex("ReviewReady")).toHaveLength(128);

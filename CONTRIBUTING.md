@@ -6,7 +6,7 @@ follow the same evidence requirements. Participation is governed by
 
 ## Start here
 
-1. Read `docs/product-spec.md`, `docs/architecture.md`, and `AGENTS.md`.
+1. Read `docs/product-spec.md`, `docs/architecture.md`, and `SECURITY.md`.
 2. Open or select an issue with one observable outcome.
 3. For a bug, first add a test that fails for the reported behavior.
 4. Make the smallest complete change.
@@ -77,6 +77,7 @@ alternatives. v1 formats remain backward compatible within the major release.
 
 ## Releases
 
-Maintainers must follow [docs/releasing.md](docs/releasing.md). npm packages,
-immutable version tags, GitHub Release objects, the mutable `v1` tag, and
-Marketplace metadata are separate resources and must be verified independently.
+Maintainers must use the protected `.github/workflows/release-publish.yml`
+workflow and the package/release verification scripts. npm packages, immutable
+version tags, GitHub Release objects, the mutable `v1` tag, and Marketplace
+metadata are separate resources and must be verified independently.
