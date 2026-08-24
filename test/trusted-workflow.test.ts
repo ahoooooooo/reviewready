@@ -56,7 +56,8 @@ describe("trusted ReviewReady workflow", () => {
   it("keeps the package version, README status, and changelog release aligned", () => {
     expect(typeof packageManifest.version).toBe("string");
     const version = String(packageManifest.version);
-    expect(readme).toContain(`The latest release is v${version}`);
+    expect(readme).toContain(`This commit prepares the v${version} release candidate.`);
+    expect(readme).not.toContain(`The latest release is v${version}`);
     expect(readme).toContain(`/v${version}/reviewready.schema.json`);
     expect(readme).toContain(
       `The v${version} package includes bounded \`audit collect\` and offline \`audit replay\``
