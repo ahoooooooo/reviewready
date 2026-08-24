@@ -728,12 +728,15 @@ describe("GitHub repository audit API adapter", () => {
     });
     vi.mocked(getOctokit).mockReturnValue(octokitWithTransport(request));
 
-    await expect(
-      createGitHubAuditClient("secret", { sleep: () => Promise.resolve() }).listRulesets({
-        owner: "octocat",
-        repo: "demo"
-      })
-    ).resolves.toMatchObject([
+    const rulesets = await createGitHubAuditClient(
+      "secret",
+      { sleep: () => Promise.resolve() }
+    ).listRulesets({
+      owner: "octocat",
+      repo: "demo"
+    });
+
+    expect(rulesets).toMatchObject([
       {
         id: 141,
         pullRequest: {
@@ -742,6 +745,9 @@ describe("GitHub repository audit API adapter", () => {
         }
       }
     ]);
+    expect(rulesets[0]?.pullRequest).not.toHaveProperty(
+      "requireExtraApprovalForUnattributedChanges"
+    );
   });
 
   it("rejects duplicate status rules even when the legacy policy fields are absent", async () => {
