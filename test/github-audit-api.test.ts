@@ -728,10 +728,9 @@ describe("GitHub repository audit API adapter", () => {
     });
     vi.mocked(getOctokit).mockReturnValue(octokitWithTransport(request));
 
-    const rulesets = await createGitHubAuditClient(
-      "secret",
-      { sleep: () => Promise.resolve() }
-    ).listRulesets({
+    const rulesets = await createGitHubAuditClient("secret", {
+      sleep: () => Promise.resolve()
+    }).listRulesets({
       owner: "octocat",
       repo: "demo"
     });
