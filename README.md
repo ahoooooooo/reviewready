@@ -19,9 +19,10 @@ pull-request code.
 
 ## Current status
 
-The latest release is v1.0.12 for this release candidate. It is not published
-yet; the previously published v1.0.11 coordinates remain unchanged. The
-candidate checklist is recorded in
+This commit prepares the v1.0.12 release candidate. Publication, provenance,
+tags, and stable refs are created only by the protected workflow after its
+checks; consult the npm registry and GitHub Releases for current public
+coordinates. The candidate checklist is recorded in
 [release evidence](docs/release-evidence-v1.0.12.md). The protected workflow
 must complete the exact artifact, provenance, and clean-consumer checks before
 v1.0.12 becomes a public release.
