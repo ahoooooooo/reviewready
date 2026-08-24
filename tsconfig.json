@@ -24,6 +24,7 @@
     "test/**/*.ts",
     "scripts/**/*.mjs",
     "vitest.config.ts",
+    "vitest.promotion.config.ts",
     "eslint.config.js"
   ]
 }

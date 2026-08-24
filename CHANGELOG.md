@@ -5,10 +5,13 @@ the project uses semantic versioning.
 
 ## [Unreleased]
 
+## [1.0.12] - 2026-08-25
+
 ### Documentation
 
-- Clarify that the checked-in workflow is advisory and does not claim hosted
-  external enforcement.
+- Clarify that the checked-in workflow is advisory, that hosted external
+  enforcement is not shipped, and that authoritative enforcement remains an
+  adopter-owned boundary.
 
 ## [1.0.11] - 2026-08-17
 
