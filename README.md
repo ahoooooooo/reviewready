@@ -19,11 +19,12 @@ pull-request code.
 
 ## Current status
 
-The latest release is v1.0.11. Its audited npm tarball, provenance, immutable
-semantic-version tag, GitHub Release, stable `v1` Action ref, and clean-consumer
-verification are recorded in the
-[release evidence](docs/release-evidence-v1.0.11.md) and its
-[machine-readable record](docs/release-evidence-v1.0.11.json).
+The latest release is v1.0.12 for this release candidate. It is not published
+yet; the previously published v1.0.11 coordinates remain unchanged. The
+candidate checklist is recorded in
+[release evidence](docs/release-evidence-v1.0.12.md). The protected workflow
+must complete the exact artifact, provenance, and clean-consumer checks before
+v1.0.12 becomes a public release.
 
 A normal `pull_request` workflow remains advisory because the contribution can
 modify the merge-ref workflow that evaluates it. Loading policy contents from
@@ -38,7 +39,7 @@ must be provided and independently protected by the adopting repository's
 GitHub configuration. A successful named check is not a claim that ReviewReady
 is a unique enforcement provider.
 
-The v1.0.11 package includes bounded `audit collect` and offline `audit replay`
+The v1.0.12 package includes bounded `audit collect` and offline `audit replay`
 evidence-bundle commands. Live audit collection fails closed when repository
 governance is unavailable, contradictory, or uses semantics the normalized
 contract cannot represent; an incomplete audit is not a readiness result or a
@@ -128,7 +129,7 @@ Action-only repositories can copy the schema into the repository or reference an
 immutable release URL:
 
 ```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/ahoooooooo/reviewready/v1.0.11/reviewready.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ahoooooooo/reviewready/v1.0.12/reviewready.schema.json
 ```
 
 Keep the schema version aligned with the Action or CLI version being used. A local

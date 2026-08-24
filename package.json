@@ -1,6 +1,6 @@
 {
   "name": "@ahoooooo/reviewready",
-  "version": "1.0.11",
+  "version": "1.0.12",
   "description": "Deterministic evidence checks before a pull request consumes human review time.",
   "homepage": "https://github.com/ahoooooooo/reviewready#readme",
   "bugs": {
@@ -61,6 +61,7 @@
     "bundle": "npm run build && npm run bundle:action",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:promotion": "vitest run --config vitest.promotion.config.ts --configLoader runner",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",

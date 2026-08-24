@@ -14,3 +14,9 @@ coverage/
 .codex/
 .reviewready-review/
 AGENTS.md
+.npmrc
+*.pem
+*.key
+*.p12
+*.pfx
+credentials*.json
