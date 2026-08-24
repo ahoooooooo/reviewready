@@ -70,6 +70,7 @@ const rulesetPullRequestSchema = z
     requireLastPushApproval: z.boolean(),
     requiredApprovingReviewCount: z.number().int().nonnegative().max(100),
     requiredReviewThreadResolution: z.boolean(),
+    requireExtraApprovalForUnattributedChanges: z.boolean().optional(),
     requiredReviewers: z.array(z.never()).max(100)
   })
   .strict()

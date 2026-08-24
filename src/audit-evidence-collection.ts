@@ -349,6 +349,12 @@ function projectRulesetPullRequest(
     requireLastPushApproval: value.requireLastPushApproval,
     requiredApprovingReviewCount: value.requiredApprovingReviewCount,
     requiredReviewThreadResolution: value.requiredReviewThreadResolution,
+    ...(value.requireExtraApprovalForUnattributedChanges === undefined
+      ? {}
+      : {
+          requireExtraApprovalForUnattributedChanges:
+            value.requireExtraApprovalForUnattributedChanges
+        }),
     requiredReviewers: []
   };
 }

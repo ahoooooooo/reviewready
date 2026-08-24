@@ -732,6 +732,7 @@
           "maximum": 100
         },
         "requiredReviewThreadResolution": { "type": "boolean" },
+        "requireExtraApprovalForUnattributedChanges": { "type": "boolean" },
         "requiredReviewers": {
           "type": "array",
           "maxItems": 0,

@@ -1267,17 +1267,20 @@ function assertRulesetBypasses(value: unknown, target: string): void {
 
 function validateRulesetPullRequest(value: JsonValue): void {
   const pullRequest = requiredRecord(value, "bundle-ruleset-review");
+  const requiredKeys = [
+    "allowedMergeMethods",
+    "dismissStaleReviewsOnPush",
+    "requireCodeOwnerReview",
+    "requireLastPushApproval",
+    "requiredApprovingReviewCount",
+    "requiredReviewThreadResolution",
+    "requiredReviewers"
+  ] as const;
   assertClosed(
     pullRequest,
-    [
-      "allowedMergeMethods",
-      "dismissStaleReviewsOnPush",
-      "requireCodeOwnerReview",
-      "requireLastPushApproval",
-      "requiredApprovingReviewCount",
-      "requiredReviewThreadResolution",
-      "requiredReviewers"
-    ],
+    hasOwn(pullRequest, "requireExtraApprovalForUnattributedChanges")
+      ? [...requiredKeys, "requireExtraApprovalForUnattributedChanges"]
+      : requiredKeys,
     "bundle-ruleset-review"
   );
   const methods = assertSortedUniqueStrings(
@@ -1299,6 +1302,12 @@ function validateRulesetPullRequest(value: JsonValue): void {
     fail("bundle-ruleset-review");
   }
   requiredBoolean(pullRequest.requiredReviewThreadResolution, "bundle-ruleset-review");
+  if (hasOwn(pullRequest, "requireExtraApprovalForUnattributedChanges")) {
+    requiredBoolean(
+      pullRequest.requireExtraApprovalForUnattributedChanges,
+      "bundle-ruleset-review"
+    );
+  }
   const requiredReviewers = requiredArray(pullRequest.requiredReviewers, "bundle-ruleset-review");
   if (requiredReviewers.length !== 0) {
     fail("bundle-ruleset-reviewers-unsupported");
@@ -1868,6 +1877,14 @@ function hydrateRulesetPullRequest(
       pullRequest.requiredReviewThreadResolution,
       "bundle-ruleset-review"
     ),
+    ...(hasOwn(pullRequest, "requireExtraApprovalForUnattributedChanges")
+      ? {
+          requireExtraApprovalForUnattributedChanges: requiredBoolean(
+            pullRequest.requireExtraApprovalForUnattributedChanges,
+            "bundle-ruleset-review"
+          )
+        }
+      : {}),
     requiredReviewers: []
   };
 }
