@@ -5,6 +5,8 @@ import { describe, expect, it } from "vitest";
 const packageManifest = JSON.parse(await readFile("package.json", "utf8")) as { version?: unknown };
 const workflow = await readFile(".github/workflows/reviewready-trusted.yml", "utf8");
 const readme = await readFile("README.md", "utf8");
+const security = await readFile("SECURITY.md", "utf8");
+const architecture = await readFile("docs/architecture.md", "utf8");
 const changelog = await readFile("CHANGELOG.md", "utf8");
 const canonicalRepository = `ah${"o".repeat(8)}/reviewready`;
 const publishedReleaseCommit = "e9cd421ac106adb5731dd22b714701a136e937f8";
@@ -40,6 +42,15 @@ describe("trusted ReviewReady workflow", () => {
     expect(readme).toContain(`uses: ${canonicalRepository}@${publishedReleaseCommit} # v1.0.11`);
     expect(workflow).not.toContain("main v1.0.6 candidate");
     expect(readme).not.toContain("v1.0.5 bootstrap pin");
+  });
+
+  it("keeps public trust-boundary docs independent of closed tracker issues", () => {
+    for (const document of [readme, security, architecture]) {
+      expect(document).not.toMatch(/(?:#78|#79|\/issues\/(?:78|79)\b)/u);
+    }
+    expect(readme).toContain("does not provide a production GitHub App");
+    expect(security).toContain("does not ship a hosted");
+    expect(architecture).toContain("does not provide a hosted");
   });
 
   it("keeps the package version, README status, and changelog release aligned", () => {
