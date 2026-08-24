@@ -31,9 +31,12 @@ the base SHA does not by itself protect the caller workflow, Action pin, or
 `policy-path`. The checked-in trusted reference uses a metadata-only
 `pull_request_target` workflow pinned to the exact v1.0.11 release commit, but a
 GitHub required check still does not uniquely identify one workflow definition
-or event. The production GitHub App implementation and external enforcement
-proof remain tracked in [#78](https://github.com/ahoooooooo/reviewready/issues/78)
-and [#79](https://github.com/ahoooooooo/reviewready/issues/79).
+or event. This repository does not provide a production GitHub App or an
+external enforcement service. The checked-in trusted workflow is a
+metadata-only reference and remains advisory; authoritative merge enforcement
+must be provided and independently protected by the adopting repository's
+GitHub configuration. A successful named check is not a claim that ReviewReady
+is a unique enforcement provider.
 
 The v1.0.11 package includes bounded `audit collect` and offline `audit replay`
 evidence-bundle commands. Live audit collection fails closed when repository

@@ -5,6 +5,11 @@ the project uses semantic versioning.
 
 ## [Unreleased]
 
+### Documentation
+
+- Clarify that the checked-in workflow is advisory and does not claim hosted
+  external enforcement.
+
 ## [1.0.11] - 2026-08-17
 
 ### Fixed

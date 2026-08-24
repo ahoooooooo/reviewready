@@ -67,12 +67,13 @@ Do not use an advisory `pull_request` integration as the sole authoritative merg
 gate. ADR 0001 defines the supported trust boundary.
 [ADR 0011](docs/adr/0011-github-app-trusted-ingress.md) and the
 [TA-3 threat model](docs/threat-model-ta3-trusted-ingress.md) define the
-checked-in provider/App contract; production implementation and external
-enforcement proof remain tracked in issues #78 and #79. Candidate topologies
-include organization ruleset workflows, independently protected enforcement
-files, and carefully limited metadata-only `pull_request_target` evaluation. A
-`pull_request_target` workflow must never check out, download, import, cache, build,
-or execute pull-request code.
+checked-in provider/App contract; this repository does not ship a hosted
+GitHub App, durable external store, or production external enforcement service.
+Candidate deployment topologies include organization ruleset workflows,
+independently protected enforcement files, and carefully limited metadata-only
+`pull_request_target` evaluation. These are adopter-owned boundaries and must
+be independently protected. A `pull_request_target` workflow must never check
+out, download, import, cache, build, or execute pull-request code.
 
 ## Known limitations
 
@@ -81,9 +82,11 @@ or execute pull-request code.
 - The checked-in trusted workflow is a metadata-only `pull_request_target`
   reference pinned to the exact v1.0.11 release commit. The active ruleset selects
   the GitHub Actions App as the required-check source, but GitHub required checks
-  do not bind one workflow definition or event trigger. Do not call this a unique
-  authoritative provider until the implementation and external evidence tracked
-  in issues #78 and #79 establish that authority.
+  do not bind one workflow definition or event trigger. This package does not
+  provide hosted ingress or external reconciliation, so it must not be called a
+  unique authoritative provider. An adopter claiming authoritative enforcement
+  must deploy and independently verify a trusted provider, durable evidence and
+  reconciliation, and the required repository protections.
 - A successful named check proves only that GitHub recorded that conclusion; it
   does not prove the check itself is trustworthy. Restrict app identity where it
   matters and protect workflow changes separately. The ordinary `pull_request`
