@@ -646,7 +646,8 @@ describe("GitHub repository audit API adapter", () => {
                   require_last_push_approval: false,
                   required_approving_review_count: 0,
                   required_review_thread_resolution: true,
-                  required_reviewers: []
+                  required_reviewers: [],
+                  require_extra_approval_for_unattributed_changes: false
                 }
               },
               {
@@ -680,6 +681,7 @@ describe("GitHub repository audit API adapter", () => {
           requireLastPushApproval: false,
           requiredApprovingReviewCount: 0,
           requiredReviewThreadResolution: true,
+          requireExtraApprovalForUnattributedChanges: false,
           requiredReviewers: []
         },
         requiredStatusChecksPolicy: {
@@ -687,6 +689,57 @@ describe("GitHub repository audit API adapter", () => {
           strictRequiredStatusChecksPolicy: true
         },
         requiredChecks: [{ name: "check", appId: 15368 }]
+      }
+    ]);
+  });
+
+  it("accepts modeled review semantics when the optional preview field is absent", async () => {
+    const request = vi.fn((route: string, params: Record<string, unknown>) => {
+      if (route === "GET /repos/{owner}/{repo}/rulesets") {
+        return Promise.resolve(params.page === 1 ? response([{ id: 141 }]) : response([]));
+      }
+      if (route === "GET /repos/{owner}/{repo}/rulesets/{ruleset_id}") {
+        return Promise.resolve(
+          response({
+            id: 141,
+            name: "legacy-review-semantics",
+            target: "branch",
+            enforcement: "active",
+            conditions: { ref_name: { include: ["~DEFAULT_BRANCH"] } },
+            bypass_actors: [],
+            rules: [
+              {
+                type: "pull_request",
+                parameters: {
+                  allowed_merge_methods: ["merge"],
+                  dismiss_stale_reviews_on_push: false,
+                  require_code_owner_review: false,
+                  require_last_push_approval: false,
+                  required_approving_review_count: 0,
+                  required_review_thread_resolution: true,
+                  required_reviewers: []
+                }
+              }
+            ]
+          })
+        );
+      }
+      return Promise.reject(Object.assign(new Error("unexpected"), { status: 500 }));
+    });
+    vi.mocked(getOctokit).mockReturnValue(octokitWithTransport(request));
+
+    await expect(
+      createGitHubAuditClient("secret", { sleep: () => Promise.resolve() }).listRulesets({
+        owner: "octocat",
+        repo: "demo"
+      })
+    ).resolves.toMatchObject([
+      {
+        id: 141,
+        pullRequest: {
+          allowedMergeMethods: ["merge"],
+          requiredReviewers: []
+        }
       }
     ]);
   });
@@ -731,6 +784,22 @@ describe("GitHub repository audit API adapter", () => {
   });
 
   it.each([
+    [
+      {
+        type: "pull_request",
+        parameters: {
+          allowed_merge_methods: ["merge"],
+          dismiss_stale_reviews_on_push: false,
+          require_code_owner_review: false,
+          require_last_push_approval: false,
+          required_approving_review_count: 0,
+          required_review_thread_resolution: true,
+          require_extra_approval_for_unattributed_changes: "false",
+          required_reviewers: []
+        }
+      },
+      "response-boolean-invalid"
+    ],
     [
       {
         type: "pull_request",

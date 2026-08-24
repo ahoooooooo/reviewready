@@ -509,6 +509,7 @@ describe("audit evidence collection projection", () => {
             requireLastPushApproval: false,
             requiredApprovingReviewCount: 0,
             requiredReviewThreadResolution: true,
+            requireExtraApprovalForUnattributedChanges: false,
             requiredReviewers: []
           },
           requiredStatusChecksPolicy: {

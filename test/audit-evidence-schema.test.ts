@@ -308,6 +308,7 @@ function versionedRuleset(): Record<string, unknown> {
       requireLastPushApproval: false,
       requiredApprovingReviewCount: 0,
       requiredReviewThreadResolution: true,
+      requireExtraApprovalForUnattributedChanges: false,
       requiredReviewers: []
     },
     requiredStatusChecksPolicy: {
@@ -355,6 +356,27 @@ describe("audit evidence bundle schema", () => {
     expectCode(() => {
       validateAuditEvidenceBundle(version1);
     }, "bundle-version");
+  });
+
+  it("accepts v2 ruleset semantics when the optional preview field is absent", async () => {
+    const validator = new Ajv2020({ allErrors: true, strict: true }).compile(await loadSchema());
+    const legacyV2 = validBundle();
+    legacyV2.bundleVersion = 2;
+    legacyV2.snapshot.snapshotVersion = 2;
+    const ruleset = versionedRuleset();
+    delete (ruleset.pullRequest as Record<string, unknown>)
+      .requireExtraApprovalForUnattributedChanges;
+    legacyV2.snapshot.rulesets = [ruleset];
+    legacyV2.integrity = computeAuditEvidenceIntegrity(legacyV2);
+
+    expect(validator(legacyV2)).toBe(true);
+    expect(() => {
+      validateAuditEvidenceBundle(legacyV2);
+    }).not.toThrow();
+    const hydrated = hydrateAuditEvidenceBundle(legacyV2);
+    expect(hydrated.snapshot.rulesets[0]?.pullRequest).not.toHaveProperty(
+      "requireExtraApprovalForUnattributedChanges"
+    );
   });
 
   it("normalizes and rejects v2 semantic edge cases without lossy coercion", () => {

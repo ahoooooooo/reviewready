@@ -1153,7 +1153,8 @@ function rulesetPullRequest(value: unknown): NonNullable<AuditRuleset["pullReque
       "require_last_push_approval",
       "required_approving_review_count",
       "required_review_thread_resolution",
-      "required_reviewers"
+      "required_reviewers",
+      "require_extra_approval_for_unattributed_changes"
     ],
     "ruleset-review-semantics-unsupported"
   );
@@ -1183,6 +1184,10 @@ function rulesetPullRequest(value: unknown): NonNullable<AuditRuleset["pullReque
   if (rawReviewers.length > 0) {
     throw new AuditApiFailure("ruleset-reviewers-unsupported");
   }
+  const requireExtraApprovalForUnattributedChanges =
+    parameters.require_extra_approval_for_unattributed_changes === undefined
+      ? undefined
+      : booleanField(parameters.require_extra_approval_for_unattributed_changes);
   return {
     allowedMergeMethods,
     dismissStaleReviewsOnPush: booleanField(parameters.dismiss_stale_reviews_on_push),
@@ -1190,6 +1195,9 @@ function rulesetPullRequest(value: unknown): NonNullable<AuditRuleset["pullReque
     requireLastPushApproval: booleanField(parameters.require_last_push_approval),
     requiredApprovingReviewCount: integerField(parameters.required_approving_review_count),
     requiredReviewThreadResolution: booleanField(parameters.required_review_thread_resolution),
+    ...(requireExtraApprovalForUnattributedChanges === undefined
+      ? {}
+      : { requireExtraApprovalForUnattributedChanges }),
     requiredReviewers: []
   };
 }

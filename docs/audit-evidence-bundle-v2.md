@@ -32,6 +32,7 @@ pullRequest?: {
   requireLastPushApproval: boolean
   requiredApprovingReviewCount: integer 0..100
   requiredReviewThreadResolution: boolean
+  requireExtraApprovalForUnattributedChanges?: boolean
   requiredReviewers: []
 }
 

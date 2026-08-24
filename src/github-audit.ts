@@ -366,6 +366,12 @@ function canonicalMutableSettings(value: MutableAuditSettings): string {
               requireLastPushApproval: ruleset.pullRequest.requireLastPushApproval,
               requiredApprovingReviewCount: ruleset.pullRequest.requiredApprovingReviewCount,
               requiredReviewThreadResolution: ruleset.pullRequest.requiredReviewThreadResolution,
+              ...(ruleset.pullRequest.requireExtraApprovalForUnattributedChanges === undefined
+                ? {}
+                : {
+                    requireExtraApprovalForUnattributedChanges:
+                      ruleset.pullRequest.requireExtraApprovalForUnattributedChanges
+                  }),
               requiredReviewers: sortJson(ruleset.pullRequest.requiredReviewers)
             }
           }),
