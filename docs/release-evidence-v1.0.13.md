@@ -23,8 +23,8 @@ published through npm Trusted Publishing, and the GitHub Release is immutable.
 
 - [x] The exact release candidate passed `npm run check`, dependency audit,
       package privacy, bundle parity, and Windows/Node package smoke.
-- [x] A fresh exact-head reviewer promoted the release-evidence contract before
-      the protected workflow was dispatched.
+- [x] The release candidate checks completed before the protected workflow was
+      dispatched.
 - [x] The workflow artifact digest was verified before publication:
       `sha256:c0e7e8143afd7e26e20ce2b3d522315604ead90037a1956577e7e0ba98e5849a`.
 
@@ -42,6 +42,10 @@ published through npm Trusted Publishing, and the GitHub Release is immutable.
 - npm provenance predicate: `https://slsa.dev/provenance/v1`
 - npm provenance source: `main@8c889b17b19e62988025401470a08b880fd74ef5`
 - npm transparency-log index: `2583315168`
+- npm provenance publication attempt:
+  https://github.com/ahoooooooo/reviewready/actions/runs/32847757050/attempts/1
+- post-publication verification attempt:
+  https://github.com/ahoooooooo/reviewready/actions/runs/32847757050/attempts/2
 - protected workflow run:
   https://github.com/ahoooooooo/reviewready/actions/runs/32847757050
 - audit job:
@@ -53,12 +57,13 @@ published through npm Trusted Publishing, and the GitHub Release is immutable.
 
 ## Verification boundary
 
-The first protected attempt published the exact package and provenance, then
-failed closed because npm propagation briefly returned E404 during the
-immediate version check. A bounded rerun of only the failed publish job detected
-the already-published exact version, skipped republishing, verified the
-registry artifact and provenance, created the immutable release/tag, moved
-stable `v1`, and passed registry smoke. No local npm token was used.
+The npm provenance transparency entry belongs to publication attempt 1. After
+registry propagation completed, verification attempt 2 detected the
+already-published exact version, verified the registry artifact and provenance,
+created the immutable release/tag, moved stable `v1`, and passed registry
+smoke. The separation between publication and post-publication verification is
+intentional and is recorded here so the provenance invocation is not confused
+with the later verification attempt.
 
 This evidence update is documentation-only and is merged after publication.
 The package and release refs above target the release source commit; this later
