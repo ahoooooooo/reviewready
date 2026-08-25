@@ -5,6 +5,13 @@ the project uses semantic versioning.
 
 ## [Unreleased]
 
+## [1.0.13] - 2026-08-25
+
+### Documentation
+
+- Replace version-specific release-candidate wording with provider-authoritative
+  release coordinates and retain verified v1.0.12 evidence.
+
 ## [1.0.12] - 2026-08-25
 
 ### Documentation

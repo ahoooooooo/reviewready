@@ -53,16 +53,26 @@ describe("trusted ReviewReady workflow", () => {
     expect(architecture).toContain("does not provide a hosted");
   });
 
-  it("keeps the package version, README status, and changelog release aligned", () => {
+  it("keeps package release text authoritative and changelog-aligned", () => {
     expect(typeof packageManifest.version).toBe("string");
     const version = String(packageManifest.version);
-    expect(readme).toContain(`This commit prepares the v${version} release candidate.`);
-    expect(readme).not.toContain(`The latest release is v${version}`);
-    expect(readme).toContain(`/v${version}/reviewready.schema.json`);
+    expect(readme).toContain("The npm registry and GitHub Releases are authoritative");
+    expect(readme).not.toContain("This commit prepares the");
+    expect(readme).not.toContain("candidate checklist");
+    expect(readme).toContain("/v1.0.12/reviewready.schema.json");
     expect(readme).toContain(
-      `The v${version} package includes bounded \`audit collect\` and offline \`audit replay\``
+      "The v" +
+        version +
+        " package includes bounded " +
+        String.fromCharCode(96) +
+        "audit collect" +
+        String.fromCharCode(96) +
+        " and offline " +
+        String.fromCharCode(96) +
+        "audit replay" +
+        String.fromCharCode(96)
     );
-    expect(changelog).toContain(`## [${version}]`);
+    expect(changelog).toContain("## [" + version + "]");
   });
 
   it("has read-only permissions and never checks out or runs pull-request code", () => {
