@@ -65,4 +65,3 @@ The package and release refs above target the release source commit; this later
 evidence-document commit does not move the immutable tag or stable `v1`. The
 published npm 1.0.12 package, its provenance, earlier immutable releases, and
 historical commits remain unchanged.
-
