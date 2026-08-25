@@ -19,13 +19,12 @@ pull-request code.
 
 ## Current status
 
-This commit prepares the v1.0.12 release candidate. Publication, provenance,
-tags, and stable refs are created only by the protected workflow after its
-checks; consult the npm registry and GitHub Releases for current public
-coordinates. The candidate checklist is recorded in
-[release evidence](docs/release-evidence-v1.0.12.md). The protected workflow
-must complete the exact artifact, provenance, and clean-consumer checks before
-v1.0.12 becomes a public release.
+The npm registry and GitHub Releases are authoritative for current public
+release coordinates. Versioned release evidence is recorded in
+docs/release-evidence-vX.Y.Z.md and the corresponding machine-readable record
+when available. Publication, provenance, immutable tags, and stable refs are
+created only by the protected workflow; a source tree does not substitute for
+registry and release evidence.
 
 A normal `pull_request` workflow remains advisory because the contribution can
 modify the merge-ref workflow that evaluates it. Loading policy contents from
@@ -40,7 +39,7 @@ must be provided and independently protected by the adopting repository's
 GitHub configuration. A successful named check is not a claim that ReviewReady
 is a unique enforcement provider.
 
-The v1.0.12 package includes bounded `audit collect` and offline `audit replay`
+The v1.0.13 package includes bounded `audit collect` and offline `audit replay`
 evidence-bundle commands. Live audit collection fails closed when repository
 governance is unavailable, contradictory, or uses semantics the normalized
 contract cannot represent; an incomplete audit is not a readiness result or a
