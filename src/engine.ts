@@ -80,9 +80,13 @@ function closesFence(line: string, fence: MarkdownFence): boolean {
 }
 
 const htmlTagPattern =
-  /<\/?([A-Za-z][A-Za-z0-9-]*)(?:\s+[^\s"'=<>]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'=<>]+))?)*\s*\/?\s*>/gu;
+  /<(?:\/([A-Za-z][A-Za-z0-9-]*)[\t\n\f\r ]*|([A-Za-z][A-Za-z0-9-]*)(?=[\s/>])(?:[\t\n\f\r ]+(?:[^"'<>]|"[^"]*"|'[^']*')*)?[\t\n\f\r ]*\/?)>/gu;
+const rawHtmlTagPresencePattern =
+  /<(?:\/[A-Za-z][A-Za-z0-9-]*[\t\n\f\r ]*|[A-Za-z][A-Za-z0-9-]*(?=[\s/>])(?:[\t\n\f\r ]+(?:[^"'<>]|"[^"]*"|'[^']*')*)?[\t\n\f\r ]*\/?)>/u;
 const rawHtmlBlockStartPattern =
-  /^\s{0,3}<\/?[A-Za-z][A-Za-z0-9-]*(?:\s+[^\s"'=<>]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'=<>]+))?)*\s*\/?\s*>/u;
+  /^\s{0,3}<(?:\/[A-Za-z][A-Za-z0-9-]*[\t\n\f\r ]*|[A-Za-z][A-Za-z0-9-]*(?=[\s/>])(?:[\t\n\f\r ]+(?:[^"'<>]|"[^"]*"|'[^']*')*)?[\t\n\f\r ]*\/?)>/u;
+const rawHtmlTagFragmentStartPattern = /^\s{0,3}<\/?[A-Za-z][A-Za-z0-9-]*(?=$|[\t\n\f\r /])/u;
+const maximumRawHtmlTagLength = 4_096;
 const voidHtmlTags = new Set([
   "area",
   "base",
@@ -100,22 +104,24 @@ const voidHtmlTags = new Set([
   "wbr"
 ]);
 
-function updateRawHtmlTags(line: string, stack: string[]): void {
+function updateRawHtmlTags(line: string, tags: Map<string, number>): void {
   for (const match of line.matchAll(htmlTagPattern)) {
-    const tag = match[1]?.toLocaleLowerCase("en-US");
+    const tag = (match[1] ?? match[2])?.toLocaleLowerCase("en-US");
     const rawTag = match[0];
     if (tag === undefined) {
       continue;
     }
     if (rawTag.startsWith("</")) {
-      const index = stack.lastIndexOf(tag);
-      if (index >= 0) {
-        stack.splice(index, 1);
+      const count = tags.get(tag);
+      if (count === undefined) {
+        continue;
       }
+      if (count === 1) tags.delete(tag);
+      else tags.set(tag, count - 1);
       continue;
     }
     if (!rawTag.endsWith("/>") && !voidHtmlTags.has(tag)) {
-      stack.push(tag);
+      tags.set(tag, (tags.get(tag) ?? 0) + 1);
     }
   }
 }
@@ -124,10 +130,13 @@ function isInvisibleCodePoint(codePoint: number): boolean {
   if (!Number.isInteger(codePoint) || codePoint < 0 || codePoint > 0x10ffff) {
     return false;
   }
-  return /[\p{White_Space}\p{Control}\p{Format}\p{Mark}]/u.test(String.fromCodePoint(codePoint));
+  return /[\p{White_Space}\p{Control}\p{Format}\p{Mark}\p{Default_Ignorable_Code_Point}]/u.test(
+    String.fromCodePoint(codePoint)
+  );
 }
 
 const invisibleHtmlEntityNames = new Set([
+  "af",
   "applyfunction",
   "bom",
   "emsp",
@@ -136,9 +145,11 @@ const invisibleHtmlEntityNames = new Set([
   "feff",
   "functionapplication",
   "hairsp",
+  "ic",
   "invisiblecomma",
   "invisibleseparator",
   "invisibletimes",
+  "it",
   "mediumspace",
   "nobreak",
   "nbsp",
@@ -146,8 +157,13 @@ const invisibleHtmlEntityNames = new Set([
   "negativethickspace",
   "negativethinspace",
   "negativeverythinspace",
+  "nmedium",
   "newline",
+  "nonbreakingspace",
   "numsp",
+  "nthick",
+  "nthin",
+  "nverythin",
   "puncsp",
   "shy",
   "tab",
@@ -184,7 +200,8 @@ function visibleMarkdownLines(body: string): string[] | undefined {
   const visible: string[] = [];
   let fence: MarkdownFence | undefined;
   let htmlComment = false;
-  const rawHtmlTags: string[] = [];
+  const rawHtmlTags = new Map<string, number>();
+  let rawHtmlTagFragment: string | undefined;
   let linkReferenceContinuation = false;
 
   for (const rawLine of body.split(/\r?\n/u)) {
@@ -192,11 +209,6 @@ function visibleMarkdownLines(body: string): string[] | undefined {
       if (closesFence(rawLine, fence)) {
         fence = undefined;
       }
-      continue;
-    }
-
-    if (rawHtmlTags.length > 0 || rawHtmlBlockStartPattern.test(rawLine)) {
-      updateRawHtmlTags(rawLine, rawHtmlTags);
       continue;
     }
 
@@ -225,6 +237,30 @@ function visibleMarkdownLines(body: string): string[] | undefined {
       line = line.slice(start + 4);
     }
 
+    if (rawHtmlTagFragment !== undefined) {
+      rawHtmlTagFragment += "\n" + visibleLine;
+      if (rawHtmlTagFragment.length > maximumRawHtmlTagLength) {
+        return undefined;
+      }
+      if (!rawHtmlTagFragment.includes(">")) {
+        continue;
+      }
+      if (!rawHtmlBlockStartPattern.test(rawHtmlTagFragment)) {
+        return undefined;
+      }
+      updateRawHtmlTags(rawHtmlTagFragment, rawHtmlTags);
+      rawHtmlTagFragment = undefined;
+      continue;
+    }
+    if (!visibleLine.includes(">") && rawHtmlTagFragmentStartPattern.test(visibleLine)) {
+      rawHtmlTagFragment = visibleLine;
+      continue;
+    }
+    if (rawHtmlTags.size > 0 || rawHtmlBlockStartPattern.test(visibleLine)) {
+      updateRawHtmlTags(visibleLine, rawHtmlTags);
+      continue;
+    }
+
     const marker = fenceMarker(visibleLine);
     if (marker !== undefined) {
       fence = marker;
@@ -247,7 +283,9 @@ function visibleMarkdownLines(body: string): string[] | undefined {
     }
   }
 
-  return htmlComment || rawHtmlTags.length > 0 ? undefined : visible;
+  return htmlComment || rawHtmlTagFragment !== undefined || rawHtmlTags.size > 0
+    ? undefined
+    : visible;
 }
 
 interface MarkdownHeading {
@@ -256,10 +294,280 @@ interface MarkdownHeading {
 }
 
 const headingPattern = /^\s{0,3}(#{1,6})[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$/u;
-const visibleMarkdownTextPattern = /[^\p{White_Space}\p{Control}\p{Format}\p{Mark}]/u;
+const visibleMarkdownTextPattern =
+  /[^\p{White_Space}\p{Control}\p{Format}\p{Mark}\p{Default_Ignorable_Code_Point}]/u;
 const indentedCodePattern = /^(?: {4}|\t)/u;
-const emptyInlineMarkdownLinkPattern = /!?\[\s*\]\((?:\\.|[^()\\r\\n]|\([^()\\r\\n]*\))*\)/gu;
-const emptyReferenceMarkdownLinkPattern = /!?\[\s*\]\[[^\]\r\n]*\]/gu;
+const emptyReferenceMarkdownLinkPattern =
+  /!?\[[\p{White_Space}\p{Control}\p{Format}\p{Mark}\p{Default_Ignorable_Code_Point}]*\]\[[^\]]{0,999}\]/gu;
+const markdownWhitespacePattern = /\s/u;
+
+function invisibleMarkdownCharacterLength(value: string, index: number): number {
+  const codePoint = value.codePointAt(index);
+  if (codePoint === undefined) {
+    return 0;
+  }
+  const character = String.fromCodePoint(codePoint);
+  return markdownWhitespacePattern.test(character) || isInvisibleCodePoint(codePoint)
+    ? character.length
+    : 0;
+}
+
+function skipMarkdownWhitespace(value: string, start: number): number {
+  let index = start;
+  while (index < value.length && markdownWhitespacePattern.test(value[index] ?? "")) {
+    index += 1;
+  }
+  return index;
+}
+
+function quotedLinkTitleEnd(value: string, start: number, quote: string): number | undefined {
+  for (let index = start + 1; index < value.length; index += 1) {
+    const character = value[index];
+    if (character === "\r" || character === "\n") {
+      return undefined;
+    }
+    if (character === "\\") {
+      if (index + 1 >= value.length) {
+        return undefined;
+      }
+      index += 1;
+      continue;
+    }
+    if (character === quote) {
+      return index + 1;
+    }
+  }
+  return undefined;
+}
+
+function parenthesizedLinkTitleEnd(value: string, start: number): number | undefined {
+  let depth = 0;
+  for (let index = start; index < value.length; index += 1) {
+    const character = value[index];
+    if (character === "\r" || character === "\n") {
+      return undefined;
+    }
+    if (character === "\\") {
+      if (index + 1 >= value.length) {
+        return undefined;
+      }
+      index += 1;
+      continue;
+    }
+    if (character === "(") {
+      depth += 1;
+    } else if (character === ")") {
+      depth -= 1;
+      if (depth === 0) {
+        return index + 1;
+      }
+    }
+  }
+  return undefined;
+}
+
+function linkEndAfterWhitespace(value: string, start: number): number | undefined {
+  const index = skipMarkdownWhitespace(value, start);
+  if (value[index] === ")") {
+    return index + 1;
+  }
+  const titleQuote = value[index];
+  let titleEnd: number | undefined;
+  if (titleQuote === '"') {
+    titleEnd = quotedLinkTitleEnd(value, index, '"');
+  } else if (titleQuote === "'") {
+    titleEnd = quotedLinkTitleEnd(value, index, "'");
+  } else if (titleQuote === "(") {
+    titleEnd = parenthesizedLinkTitleEnd(value, index);
+  }
+  if (titleEnd === undefined) {
+    return undefined;
+  }
+  const closing = skipMarkdownWhitespace(value, titleEnd);
+  return value[closing] === ")" ? closing + 1 : undefined;
+}
+
+function emptyInlineLinkEnd(value: string, openIndex: number): number | undefined {
+  let index = openIndex + 1;
+  if (value[index] === "<") {
+    const angleStart = index + 1;
+    for (index = angleStart; index < value.length; index += 1) {
+      const character = value[index];
+      if (character === "\r" || character === "\n") {
+        return undefined;
+      }
+      if (character === "\\") {
+        if (index + 1 >= value.length) {
+          return undefined;
+        }
+        index += 1;
+        continue;
+      }
+      if (character === "<") {
+        return undefined;
+      }
+      if (character === ">") {
+        return index === angleStart ? undefined : linkEndAfterWhitespace(value, index + 1);
+      }
+    }
+    return undefined;
+  }
+
+  let depth = 0;
+  for (; index < value.length; index += 1) {
+    const character = value[index];
+    if (character === undefined) {
+      return undefined;
+    }
+    if (character === "\r" || character === "\n") {
+      return undefined;
+    }
+    if (character === "\\") {
+      if (index + 1 >= value.length) {
+        return undefined;
+      }
+      index += 1;
+      continue;
+    }
+    if (character === "(") {
+      depth += 1;
+    } else if (character === ")") {
+      if (depth === 0) {
+        return index + 1;
+      }
+      depth -= 1;
+    } else if (depth === 0 && markdownWhitespacePattern.test(character)) {
+      return linkEndAfterWhitespace(value, index);
+    }
+  }
+  return undefined;
+}
+
+function stripEmptyInlineMarkdownLinks(value: string): string {
+  const pieces: string[] = [];
+  let cursor = 0;
+  let index = 0;
+  while (index < value.length) {
+    const image = value[index] === "!" && value[index + 1] === "[";
+    const opening = image ? index + 1 : value[index] === "[" ? index : -1;
+    if (opening < 0) {
+      index += 1;
+      continue;
+    }
+
+    let labelEnd = opening + 1;
+    while (labelEnd < value.length) {
+      const invisibleLength = invisibleMarkdownCharacterLength(value, labelEnd);
+      if (invisibleLength === 0) {
+        break;
+      }
+      labelEnd += invisibleLength;
+    }
+    if (value[labelEnd] !== "]" || value[labelEnd + 1] !== "(") {
+      index = opening + 1;
+      continue;
+    }
+
+    const end = emptyInlineLinkEnd(value, labelEnd + 1);
+    if (end === undefined) {
+      break;
+    }
+    pieces.push(value.slice(cursor, image ? opening - 1 : opening));
+    cursor = end;
+    index = end;
+  }
+  pieces.push(value.slice(cursor));
+  return pieces.join("");
+}
+
+function isEscapedMarkdownCharacter(value: string, index: number): boolean {
+  let backslashes = 0;
+  for (let cursor = index - 1; cursor >= 0 && value[cursor] === "\\"; cursor -= 1) {
+    backslashes += 1;
+  }
+  return backslashes % 2 === 1;
+}
+
+function inlineCodeSpanEnd(value: string, start: number, markerLength: number): number | undefined {
+  for (let index = start + markerLength; index < value.length; index += 1) {
+    if (value[index] !== "`") {
+      continue;
+    }
+    let runLength = 0;
+    while (value[index + runLength] === "`") {
+      runLength += 1;
+    }
+    if (runLength === markerLength) {
+      return index + runLength;
+    }
+    index += runLength - 1;
+  }
+  return undefined;
+}
+
+function angleLinkDestinationEnd(value: string, start: number): number | undefined {
+  for (let index = start + 1; index < value.length; index += 1) {
+    const character = value[index];
+    if (character === "\r" || character === "\n" || character === "<") {
+      return undefined;
+    }
+    if (character === "\\") {
+      if (index + 1 >= value.length) {
+        return undefined;
+      }
+      index += 1;
+      continue;
+    }
+    if (character === ">") {
+      return index + 1;
+    }
+  }
+  return undefined;
+}
+
+function maskMarkdownLiteralContextsFromRawHtmlScan(value: string): string {
+  const masked = value.split("");
+  let index = 0;
+  while (index < value.length) {
+    const character = value[index];
+    if (character === "`" && !isEscapedMarkdownCharacter(value, index)) {
+      let markerLength = 1;
+      while (value[index + markerLength] === "`") {
+        markerLength += 1;
+      }
+      const end = inlineCodeSpanEnd(value, index, markerLength);
+      if (end !== undefined) {
+        for (let cursor = index; cursor < end; cursor += 1) {
+          masked[cursor] = " ";
+        }
+        index = end;
+        continue;
+      }
+      index += markerLength;
+      continue;
+    }
+
+    if (character === "]" && !isEscapedMarkdownCharacter(value, index)) {
+      const openParenthesis = skipMarkdownWhitespace(value, index + 1);
+      if (value[openParenthesis] === "(") {
+        const destinationStart = skipMarkdownWhitespace(value, openParenthesis + 1);
+        if (value[destinationStart] === "<") {
+          const end = angleLinkDestinationEnd(value, destinationStart);
+          if (end !== undefined) {
+            for (let cursor = destinationStart; cursor < end; cursor += 1) {
+              masked[cursor] = " ";
+            }
+            index = end;
+            continue;
+          }
+        }
+      }
+    }
+
+    index += 1;
+  }
+  return masked.join("");
+}
 
 function markdownHeading(line: string): MarkdownHeading | undefined {
   const match = headingPattern.exec(line);
@@ -278,9 +586,17 @@ function hasVisibleMarkdownText(line: string): boolean {
   if (indentedCodePattern.test(line)) {
     return false;
   }
-  const withoutEmptyMarkdownMarkers = stripInvisibleHtmlEntities(line)
-    .replace(emptyInlineMarkdownLinkPattern, "")
-    .replace(emptyReferenceMarkdownLinkPattern, "");
+  const withoutInvisibleEntities = stripInvisibleHtmlEntities(line);
+  if (
+    rawHtmlTagPresencePattern.test(
+      maskMarkdownLiteralContextsFromRawHtmlScan(withoutInvisibleEntities)
+    )
+  ) {
+    return false;
+  }
+  const withoutEmptyMarkdownMarkers = stripEmptyInlineMarkdownLinks(
+    withoutInvisibleEntities
+  ).replace(emptyReferenceMarkdownLinkPattern, "");
   return visibleMarkdownTextPattern.test(withoutEmptyMarkdownMarkers);
 }
 
@@ -297,6 +613,7 @@ function hasNonEmptySection(body: string, wantedHeading: string): boolean {
       continue;
     }
 
+    const contentLines: string[] = [];
     for (let contentIndex = index + 1; contentIndex < lines.length; contentIndex += 1) {
       const line = lines[contentIndex] ?? "";
       const nestedHeading = markdownHeading(line);
@@ -306,9 +623,13 @@ function hasNonEmptySection(body: string, wantedHeading: string): boolean {
         }
         continue;
       }
-      if (hasVisibleMarkdownText(line)) {
-        return true;
-      }
+      contentLines.push(line);
+    }
+    const withoutMultilineEmptyMarkers = stripEmptyInlineMarkdownLinks(
+      contentLines.join("\n")
+    ).replace(emptyReferenceMarkdownLinkPattern, "");
+    if (withoutMultilineEmptyMarkers.split("\n").some((line) => hasVisibleMarkdownText(line))) {
+      return true;
     }
   }
   return false;

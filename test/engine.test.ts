@@ -307,6 +307,205 @@ rules:
     }
   );
 
+  it.each([
+    "## Testing\n[&#8203;](https://example.org)",
+    "## Testing\n[\u034f](https://example.org)",
+    "## Testing\n![](foo)",
+    "## Testing\n[](foo\\)bar)",
+    "## Testing\n[](<foo\\>bar>)",
+    "## Testing\n[](foo(and(bar)))",
+    "## Testing\n[](<foo)>)",
+    '## Testing\n[](foo "title )")',
+    "## Testing\n[](foo (title ))",
+    '## Testing\n[](<foo)> "title )")'
+  ])("does not count additional empty Markdown markers: $0", (body) => {
+    const result = evaluate(policy, input({ body }));
+
+    expect(
+      result.requirements.find((requirement) => requirement.type === "pr_body_section")?.status
+    ).toBe("missing");
+  });
+
+  it.each([
+    {
+      name: "a visible label with an angle-bracket link destination",
+      body: "## Testing\n[x](<foo>)"
+    },
+    {
+      name: "literal angle brackets inside an inline code span",
+      body: "## Testing\n`<div>`"
+    }
+  ])("counts rendered Markdown text for $name", ({ body }) => {
+    const result = evaluate(policy, input({ body }));
+
+    expect(
+      result.requirements.find((requirement) => requirement.type === "pr_body_section")?.status
+    ).toBe("satisfied");
+  });
+
+  it.each([
+    "## Testing\n[\u200B][ref]\n[ref]: /hidden",
+    "## Testing\n[\u{1d165}](https://example.test)",
+    "## Testing\n\u3164",
+    "## Testing\n[\u3164][ref]\n[ref]: /hidden",
+    "## Testing\n[\n](https://example.test)"
+  ])("rejects invisible or multiline empty evidence: $0", (body) => {
+    const result = evaluate(policy, input({ body }));
+
+    expect(
+      result.requirements.find((requirement) => requirement.type === "pr_body_section")?.status
+    ).toBe("missing");
+  });
+
+  it.each([
+    {
+      name: "named non-breaking-space",
+      body: "## Testing\n&NonBreakingSpace;"
+    },
+    {
+      name: "named function-application entity",
+      body: "## Testing\n&af;"
+    },
+    {
+      name: "named invisible MathML aliases",
+      body: "## Testing\n&it; &ic; &nmedium; &nthick; &nthin; &nverythin;"
+    }
+  ])("rejects $name", ({ body }) => {
+    const result = evaluate(policy, input({ body }));
+
+    expect(
+      result.requirements.find((requirement) => requirement.type === "pr_body_section")?.status
+    ).toBe("missing");
+  });
+
+  it.each([
+    {
+      name: "inline raw HTML",
+      body: "## Testing\n[](#)<script>Tests passed.</script>",
+      expected: "missing"
+    },
+    {
+      name: "angle-bracket autolink",
+      body: "## Testing\n<https://example.test/report>",
+      expected: "satisfied"
+    },
+    {
+      name: "malformed closing tag",
+      body: "## Testing\n</span invalid>",
+      expected: "satisfied"
+    },
+    {
+      name: "malformed self-closing tag",
+      body: "## Testing\n<div/ foo>",
+      expected: "satisfied"
+    },
+    {
+      name: "multiline raw HTML attributes",
+      body: ["## Testing", "<div", ' class="hidden">', "Tests passed.", "</div>"].join("\n"),
+      expected: "missing"
+    }
+  ])("classifies $name conservatively", ({ body, expected }) => {
+    const result = evaluate(policy, input({ body }));
+
+    expect(
+      result.requirements.find((requirement) => requirement.type === "pr_body_section")?.status
+    ).toBe(expected);
+  });
+
+  it.each([
+    {
+      name: "orphan raw HTML close",
+      body: ["## Testing", "Tests passed.", "</span>"].join("\n"),
+      expected: "satisfied"
+    },
+    {
+      name: "nested same-tag raw HTML",
+      body: ["## Testing", "Tests passed.", "<div>", "<div>", "</div>"].join("\n"),
+      expected: "missing"
+    },
+    {
+      name: "void raw HTML tag",
+      body: ["## Testing", "Tests passed.", "<br>"].join("\n"),
+      expected: "satisfied"
+    },
+    {
+      name: "out-of-range numeric entity",
+      body: "## Testing\n&#x110000;",
+      expected: "satisfied"
+    },
+    {
+      name: "raw HTML fragment without a closing angle",
+      body: ["## Testing", "<div", "Tests passed."].join("\n"),
+      expected: "missing"
+    },
+    {
+      name: "malformed multiline raw HTML fragment",
+      body: ["## Testing", "<div", "not a tag>", "Tests passed."].join("\n"),
+      expected: "missing"
+    },
+    {
+      name: "oversized raw HTML fragment",
+      body: ["## Testing", "<div", "x".repeat(4_097)].join("\n"),
+      expected: "missing"
+    },
+    {
+      name: "valid empty angle destination",
+      body: "## Testing\n[](<>)",
+      expected: "satisfied"
+    },
+    {
+      name: "valid angle destination",
+      body: "## Testing\n[](<foo>)",
+      expected: "missing"
+    },
+    {
+      name: "valid quoted link title",
+      body: '## Testing\n[](foo "title")',
+      expected: "missing"
+    },
+    {
+      name: "valid parenthesized link title",
+      body: "## Testing\n[](foo (title))",
+      expected: "missing"
+    },
+    {
+      name: "unclosed angle destination",
+      body: "## Testing\n[](<foo)",
+      expected: "satisfied"
+    },
+    {
+      name: "invalid unquoted title",
+      body: "## Testing\n[](foo invalid)",
+      expected: "satisfied"
+    },
+    {
+      name: "unclosed quoted title",
+      body: '## Testing\n[](foo "title)',
+      expected: "satisfied"
+    },
+    {
+      name: "unmatched destination",
+      body: "## Testing\n[](",
+      expected: "satisfied"
+    },
+    {
+      name: "multi-backtick inline code",
+      body: "## Testing\n``<div>``",
+      expected: "satisfied"
+    },
+    {
+      name: "unclosed inline code marker",
+      body: "## Testing\n`<div>",
+      expected: "missing"
+    }
+  ])("covers bounded Markdown parser branch: $name", ({ body, expected }) => {
+    const result = evaluate(policy, input({ body }));
+
+    expect(
+      result.requirements.find((requirement) => requirement.type === "pr_body_section")?.status
+    ).toBe(expected);
+  });
+
   it("ignores headings and attestations inside fenced code blocks", () => {
     const result = evaluate(
       policy,
