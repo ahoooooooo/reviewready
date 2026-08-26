@@ -243,7 +243,8 @@ const invisibleHtmlEntityNames = new Set([
   "zwj"
 ]);
 const htmlEntityPattern = /&(?:#x([0-9a-f]+)|#([0-9]+)|([A-Za-z][A-Za-z0-9]+));/giu;
-const linkReferenceDefinitionPattern = /^\s{0,3}\[([^\]\r\n]+)\]:[ \t]+/u;
+const linkReferenceDefinitionPattern = /^\s{0,3}\[([^\]\r\n]+)\]:[ \t]*(.*)$/u;
+const emptyLinkReferenceDefinitionPattern = /^\s{0,3}\[([^\]\r\n]+)\]:[ \t]*$/u;
 const indentedAtxHeadingPattern = /^[ \t]{1,3}#{1,6}(?=$|[ \t])/u;
 
 function normalizeLinkReferenceLabel(value: string): string {
@@ -273,9 +274,157 @@ interface VisibleMarkdownDocument {
   referenceLabels: Set<string>;
 }
 
+interface MultilineLinkReferenceDefinition {
+  readonly label: string;
+  readonly lineIndexes: readonly number[];
+}
+
+interface MultilineLinkReferenceDefinitions {
+  readonly byStart: ReadonlyMap<number, MultilineLinkReferenceDefinition>;
+  readonly consumedLineIndexes: ReadonlySet<number>;
+}
+
+function skipHorizontalWhitespace(value: string, start: number): number {
+  let index = start;
+  while (index < value.length && (value[index] === " " || value[index] === "\t")) {
+    index += 1;
+  }
+  return index;
+}
+
+function linkReferenceDestinationEnd(value: string, start: number): number | undefined {
+  if (value[start] === "<") {
+    for (let index = start + 1; index < value.length; index += 1) {
+      const character = value[index];
+      if (character === "\\") {
+        if (index + 1 >= value.length || value[index + 1] === "\r" || value[index + 1] === "\n") {
+          return undefined;
+        }
+        index += 1;
+        continue;
+      }
+      if (character === "<" || character === "\r" || character === "\n") {
+        return undefined;
+      }
+      if (character === ">") {
+        return index + 1;
+      }
+    }
+    return undefined;
+  }
+
+  let depth = 0;
+  let hasCharacter = false;
+  for (let index = start; index < value.length; index += 1) {
+    const character = value[index];
+    if (character === " " || character === "\t") {
+      return hasCharacter && depth === 0 ? index : undefined;
+    }
+    const codePoint = character?.codePointAt(0);
+    if (
+      character === "\r" ||
+      character === "\n" ||
+      (codePoint !== undefined && (codePoint <= 0x1f || codePoint === 0x7f))
+    ) {
+      return undefined;
+    }
+    if (character === "\\") {
+      if (index + 1 >= value.length || value[index + 1] === "\r" || value[index + 1] === "\n") {
+        return undefined;
+      }
+      hasCharacter = true;
+      index += 1;
+      continue;
+    }
+    if (character === "(") {
+      depth += 1;
+    } else if (character === ")") {
+      if (depth === 0) {
+        return undefined;
+      }
+      depth -= 1;
+    }
+    hasCharacter = true;
+  }
+  return hasCharacter && depth === 0 ? value.length : undefined;
+}
+
+function linkTitleEndWithoutLineEnding(value: string, start: number): number | undefined {
+  const quote = value[start];
+  if (quote === '"' || quote === "'") {
+    return quotedLinkTitleEnd(value, start, quote);
+  }
+  if (quote === "(") {
+    return parenthesizedLinkTitleEnd(value, start);
+  }
+  return undefined;
+}
+
+interface LinkReferenceContinuationLine {
+  readonly hasTitle: boolean;
+}
+
+function parseLinkReferenceContinuationLine(
+  value: string
+): LinkReferenceContinuationLine | undefined {
+  const destinationStart = skipHorizontalWhitespace(value, 0);
+  const destinationEnd = linkReferenceDestinationEnd(value, destinationStart);
+  if (destinationEnd === undefined) {
+    return undefined;
+  }
+  const remainderStart = skipHorizontalWhitespace(value, destinationEnd);
+  if (remainderStart === value.length) {
+    return { hasTitle: false };
+  }
+  const titleEnd = linkTitleEndWithoutLineEnding(value, remainderStart);
+  return titleEnd !== undefined && skipHorizontalWhitespace(value, titleEnd) === value.length
+    ? { hasTitle: true }
+    : undefined;
+}
+
+function isLinkReferenceTitleLine(value: string): boolean {
+  const titleStart = skipHorizontalWhitespace(value, 0);
+  const titleEnd = linkTitleEndWithoutLineEnding(value, titleStart);
+  return titleEnd !== undefined && skipHorizontalWhitespace(value, titleEnd) === value.length;
+}
+
+function findMultilineLinkReferenceDefinitions(
+  lines: readonly string[]
+): MultilineLinkReferenceDefinitions {
+  const byStart = new Map<number, MultilineLinkReferenceDefinition>();
+  const consumedLineIndexes = new Set<number>();
+  for (let index = 0; index < lines.length; index += 1) {
+    if (consumedLineIndexes.has(index)) {
+      continue;
+    }
+    const match = emptyLinkReferenceDefinitionPattern.exec(lines[index] ?? "");
+    const label = match === null ? undefined : normalizeLinkReferenceLabel(match[1] ?? "");
+    if (label === undefined || label.length === 0) {
+      continue;
+    }
+    const destinationIndex = index + 1;
+    const destination = parseLinkReferenceContinuationLine(lines[destinationIndex] ?? "");
+    if (destination === undefined) {
+      continue;
+    }
+    const lineIndexes = [index, destinationIndex];
+    if (!destination.hasTitle && isLinkReferenceTitleLine(lines[destinationIndex + 1] ?? "")) {
+      lineIndexes.push(destinationIndex + 1);
+    }
+    const definition = { label, lineIndexes } satisfies MultilineLinkReferenceDefinition;
+    byStart.set(index, definition);
+    for (const lineIndex of lineIndexes) {
+      consumedLineIndexes.add(lineIndex);
+    }
+  }
+  return { byStart, consumedLineIndexes };
+}
+
 function visibleMarkdownLines(body: string): VisibleMarkdownDocument | undefined {
   const visible: string[] = [];
   const referenceLabels = new Set<string>();
+  const rawLines = body.split(/\r?\n/u);
+  const multilineReferenceDefinitions = findMultilineLinkReferenceDefinitions(rawLines);
   let fence: MarkdownFence | undefined;
   let htmlComment = false;
   const rawHtmlTags = new Map<string, number>();
@@ -283,7 +432,7 @@ function visibleMarkdownLines(body: string): VisibleMarkdownDocument | undefined
   let rawHtmlSpecialFragment: RawHtmlSpecialFragment | undefined;
   let linkReferenceContinuation = false;
 
-  for (const rawLine of body.split(/\r?\n/u)) {
+  for (const [rawLineIndex, rawLine] of rawLines.entries()) {
     if (fence !== undefined) {
       if (closesFence(rawLine, fence)) {
         fence = undefined;
@@ -367,6 +516,14 @@ function visibleMarkdownLines(body: string): VisibleMarkdownDocument | undefined
       continue;
     }
 
+    if (multilineReferenceDefinitions.consumedLineIndexes.has(rawLineIndex)) {
+      const definition = multilineReferenceDefinitions.byStart.get(rawLineIndex);
+      if (definition !== undefined) {
+        referenceLabels.add(definition.label);
+      }
+      continue;
+    }
+
     const marker = fenceMarker(visibleLine);
     if (marker !== undefined) {
       fence = marker;
@@ -384,7 +541,7 @@ function visibleMarkdownLines(body: string): VisibleMarkdownDocument | undefined
       }
     }
     const referenceDefinition = linkReferenceDefinitionPattern.exec(visibleLine);
-    if (referenceDefinition === null) {
+    if (referenceDefinition === null || (referenceDefinition[2] ?? "").length === 0) {
       linkReferenceContinuation = false;
       visible.push(visibleLine);
     } else {
@@ -458,13 +615,36 @@ function invisibleMarkdownCharacterLength(value: string, index: number): number 
     : 0;
 }
 
-function skipMarkdownWhitespace(value: string, start: number, budget?: MarkdownScanBudget): number {
+function skipLinkWhitespace(
+  value: string,
+  start: number,
+  budget?: MarkdownScanBudget
+): number | undefined {
   let index = start;
-  while (index < value.length && markdownWhitespacePattern.test(value[index] ?? "")) {
-    if (!consumeMarkdownScanBudget(budget)) {
-      return value.length;
+  let lineEndingSeen = false;
+  while (index < value.length) {
+    const character = value[index];
+    if (character === " " || character === "\t") {
+      if (!consumeMarkdownScanBudget(budget)) {
+        return undefined;
+      }
+      index += 1;
+      continue;
     }
+    if (character !== "\r" && character !== "\n") {
+      break;
+    }
+    if (lineEndingSeen || !consumeMarkdownScanBudget(budget)) {
+      return undefined;
+    }
+    lineEndingSeen = true;
     index += 1;
+    if (character === "\r" && value[index] === "\n") {
+      if (!consumeMarkdownScanBudget(budget)) {
+        return undefined;
+      }
+      index += 1;
+    }
   }
   return index;
 }
@@ -541,7 +721,10 @@ function linkEndAfterWhitespace(
   start: number,
   budget?: MarkdownScanBudget
 ): number | undefined {
-  const index = skipMarkdownWhitespace(value, start, budget);
+  const index = skipLinkWhitespace(value, start, budget);
+  if (index === undefined) {
+    return undefined;
+  }
   if (value[index] === ")") {
     return index + 1;
   }
@@ -557,7 +740,10 @@ function linkEndAfterWhitespace(
   if (titleEnd === undefined) {
     return undefined;
   }
-  const closing = skipMarkdownWhitespace(value, titleEnd, budget);
+  const closing = skipLinkWhitespace(value, titleEnd, budget);
+  if (closing === undefined) {
+    return undefined;
+  }
   return value[closing] === ")" ? closing + 1 : undefined;
 }
 
@@ -567,6 +753,14 @@ function emptyInlineLinkEnd(
   budget?: MarkdownScanBudget
 ): number | undefined {
   let index = openIndex + 1;
+  const contentStart = skipLinkWhitespace(value, index, budget);
+  if (contentStart === undefined) {
+    return undefined;
+  }
+  if (value[contentStart] === ")") {
+    return contentStart + 1;
+  }
+  index = contentStart;
   if (value[index] === "<") {
     const angleStart = index + 1;
     for (index = angleStart; index < value.length; index += 1) {
@@ -607,7 +801,7 @@ function emptyInlineLinkEnd(
       return undefined;
     }
     if (character === "\r" || character === "\n") {
-      return undefined;
+      return depth === 0 ? linkEndAfterWhitespace(value, index, budget) : undefined;
     }
     if (character === "\\") {
       if (index + 1 >= value.length) {
@@ -799,7 +993,8 @@ function maskMarkdownLiteralContextsFromRawHtmlScan(value: string): string {
     const openParenthesis = index + 1;
     let end: number | undefined;
     if (value[openParenthesis] === "(") {
-      const contentStart = skipMarkdownWhitespace(value, openParenthesis + 1, budget);
+      const contentStart =
+        skipLinkWhitespace(value, openParenthesis + 1, budget) ?? openParenthesis + 1;
       end = emptyInlineLinkEnd(value, openParenthesis, budget);
       const parent = openingBrackets[openingBrackets.length - 1];
       if (parent !== undefined && (containsNestedLink || (end !== undefined && !isImage))) {

@@ -484,6 +484,26 @@ rules:
       expected: "missing"
     },
     {
+      name: "valid empty inline link with one line ending",
+      body: ["## Testing", "[](", ")", "", "## Notes", "Nope."].join("\n"),
+      expected: "missing"
+    },
+    {
+      name: "valid empty inline link with horizontal space and one line ending",
+      body: ["## Testing", "[]( ", ")", "", "## Notes", "Nope."].join("\n"),
+      expected: "missing"
+    },
+    {
+      name: "valid empty inline link destination with one line ending",
+      body: ["## Testing", "[](foo", ")", "", "## Notes", "Nope."].join("\n"),
+      expected: "missing"
+    },
+    {
+      name: "valid empty inline link title with one line ending",
+      body: ["## Testing", "[](foo", '"title")', "", "## Notes", "Nope."].join("\n"),
+      expected: "missing"
+    },
+    {
       name: "empty reference label remains literal",
       body: "## Testing\n[][missing]",
       expected: "satisfied"
@@ -492,6 +512,71 @@ rules:
       name: "defined empty full-reference link",
       body: ["## Testing", "[][ref]", "[ref]: /hidden"].join("\n"),
       expected: "missing"
+    },
+    {
+      name: "reference definition destination with one line ending",
+      body: ["## Testing", "[][ref]", "[ref]:", "/hidden", "", "## Notes", "Nope."].join("\n"),
+      expected: "missing"
+    },
+    {
+      name: "reference definition without a separator",
+      body: ["## Testing", "[][ref]", "[ref]:/hidden", "", "## Notes", "Nope."].join("\n"),
+      expected: "missing"
+    },
+    {
+      name: "reference definition indented destination",
+      body: ["## Testing", "[][ref]", "[ref]:", "  /hidden", "", "## Notes", "Nope."].join("\n"),
+      expected: "missing"
+    },
+    {
+      name: "reference definition angle destination",
+      body: ["## Testing", "[][ref]", "[ref]:", "<hidden>", "", "## Notes", "Nope."].join("\n"),
+      expected: "missing"
+    },
+    {
+      name: "reference definition destination with an inline title",
+      body: ["## Testing", "[][ref]", "[ref]:", '/hidden "title"', "", "## Notes", "Nope."].join(
+        "\n"
+      ),
+      expected: "missing"
+    },
+    {
+      name: "reference definition destination with a title continuation",
+      body: ["## Testing", "[][ref]", "[ref]:", "/hidden", '"title"', "", "## Notes", "Nope."].join(
+        "\n"
+      ),
+      expected: "missing"
+    },
+    {
+      name: "reference definition escaped destination",
+      body: ["## Testing", "[][ref]", "[ref]:", "/foo\\(bar\\)", "", "## Notes", "Nope."].join(
+        "\n"
+      ),
+      expected: "missing"
+    },
+    {
+      name: "invalid multiline reference destination remains visible",
+      body: ["## Testing", "[][ref]", "[ref]:", "## Notes", "Nope."].join("\n"),
+      expected: "satisfied"
+    },
+    {
+      name: "unbalanced multiline reference destination remains visible",
+      body: ["## Testing", "[][ref]", "[ref]:", "/foo(bar", "", "## Notes", "Nope."].join("\n"),
+      expected: "satisfied"
+    },
+    {
+      name: "invalid multiline reference title remains visible",
+      body: [
+        "## Testing",
+        "[][ref]",
+        "[ref]:",
+        "/hidden",
+        "not a title",
+        "",
+        "## Notes",
+        "Nope."
+      ].join("\n"),
+      expected: "satisfied"
     },
     {
       name: "indented ATX heading after reference definition remains a boundary",
@@ -621,6 +706,11 @@ rules:
     {
       name: "unmatched destination",
       body: "## Testing\n[](",
+      expected: "satisfied"
+    },
+    {
+      name: "multiple line endings do not form an empty inline link",
+      body: ["## Testing", "[](", "", ")", "", "## Notes", "Nope."].join("\n"),
       expected: "satisfied"
     },
     {
