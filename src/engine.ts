@@ -301,6 +301,35 @@ const emptyReferenceMarkdownLinkPattern =
   /!?\[[\p{White_Space}\p{Control}\p{Format}\p{Mark}\p{Default_Ignorable_Code_Point}]*\]\[[^\]]{0,999}\]/gu;
 const markdownWhitespacePattern = /\s/u;
 
+interface MarkdownScanBudget {
+  remaining: number;
+  exhausted: boolean;
+}
+
+function createMarkdownScanBudget(length: number): MarkdownScanBudget {
+  return {
+    remaining: Math.min(Number.MAX_SAFE_INTEGER, length * 8 + 256),
+    exhausted: false
+  };
+}
+
+function consumeMarkdownScanBudget(budget: MarkdownScanBudget | undefined, amount = 1): boolean {
+  if (budget === undefined) {
+    return true;
+  }
+  if (
+    budget.exhausted ||
+    !Number.isSafeInteger(amount) ||
+    amount < 0 ||
+    budget.remaining < amount
+  ) {
+    budget.exhausted = true;
+    return false;
+  }
+  budget.remaining -= amount;
+  return true;
+}
+
 function invisibleMarkdownCharacterLength(value: string, index: number): number {
   const codePoint = value.codePointAt(index);
   if (codePoint === undefined) {
@@ -312,16 +341,27 @@ function invisibleMarkdownCharacterLength(value: string, index: number): number 
     : 0;
 }
 
-function skipMarkdownWhitespace(value: string, start: number): number {
+function skipMarkdownWhitespace(value: string, start: number, budget?: MarkdownScanBudget): number {
   let index = start;
   while (index < value.length && markdownWhitespacePattern.test(value[index] ?? "")) {
+    if (!consumeMarkdownScanBudget(budget)) {
+      return value.length;
+    }
     index += 1;
   }
   return index;
 }
 
-function quotedLinkTitleEnd(value: string, start: number, quote: string): number | undefined {
+function quotedLinkTitleEnd(
+  value: string,
+  start: number,
+  quote: string,
+  budget?: MarkdownScanBudget
+): number | undefined {
   for (let index = start + 1; index < value.length; index += 1) {
+    if (!consumeMarkdownScanBudget(budget)) {
+      return undefined;
+    }
     const character = value[index];
     if (character === "\r" || character === "\n") {
       return undefined;
@@ -340,9 +380,16 @@ function quotedLinkTitleEnd(value: string, start: number, quote: string): number
   return undefined;
 }
 
-function parenthesizedLinkTitleEnd(value: string, start: number): number | undefined {
+function parenthesizedLinkTitleEnd(
+  value: string,
+  start: number,
+  budget?: MarkdownScanBudget
+): number | undefined {
   let depth = 0;
   for (let index = start; index < value.length; index += 1) {
+    if (!consumeMarkdownScanBudget(budget)) {
+      return undefined;
+    }
     const character = value[index];
     if (character === "\r" || character === "\n") {
       return undefined;
@@ -366,32 +413,43 @@ function parenthesizedLinkTitleEnd(value: string, start: number): number | undef
   return undefined;
 }
 
-function linkEndAfterWhitespace(value: string, start: number): number | undefined {
-  const index = skipMarkdownWhitespace(value, start);
+function linkEndAfterWhitespace(
+  value: string,
+  start: number,
+  budget?: MarkdownScanBudget
+): number | undefined {
+  const index = skipMarkdownWhitespace(value, start, budget);
   if (value[index] === ")") {
     return index + 1;
   }
   const titleQuote = value[index];
   let titleEnd: number | undefined;
   if (titleQuote === '"') {
-    titleEnd = quotedLinkTitleEnd(value, index, '"');
+    titleEnd = quotedLinkTitleEnd(value, index, '"', budget);
   } else if (titleQuote === "'") {
-    titleEnd = quotedLinkTitleEnd(value, index, "'");
+    titleEnd = quotedLinkTitleEnd(value, index, "'", budget);
   } else if (titleQuote === "(") {
-    titleEnd = parenthesizedLinkTitleEnd(value, index);
+    titleEnd = parenthesizedLinkTitleEnd(value, index, budget);
   }
   if (titleEnd === undefined) {
     return undefined;
   }
-  const closing = skipMarkdownWhitespace(value, titleEnd);
+  const closing = skipMarkdownWhitespace(value, titleEnd, budget);
   return value[closing] === ")" ? closing + 1 : undefined;
 }
 
-function emptyInlineLinkEnd(value: string, openIndex: number): number | undefined {
+function emptyInlineLinkEnd(
+  value: string,
+  openIndex: number,
+  budget?: MarkdownScanBudget
+): number | undefined {
   let index = openIndex + 1;
   if (value[index] === "<") {
     const angleStart = index + 1;
     for (index = angleStart; index < value.length; index += 1) {
+      if (!consumeMarkdownScanBudget(budget)) {
+        return undefined;
+      }
       const character = value[index];
       if (character === "\r" || character === "\n") {
         return undefined;
@@ -407,7 +465,7 @@ function emptyInlineLinkEnd(value: string, openIndex: number): number | undefine
         return undefined;
       }
       if (character === ">") {
-        return index === angleStart ? undefined : linkEndAfterWhitespace(value, index + 1);
+        return index === angleStart ? undefined : linkEndAfterWhitespace(value, index + 1, budget);
       }
     }
     return undefined;
@@ -415,6 +473,9 @@ function emptyInlineLinkEnd(value: string, openIndex: number): number | undefine
 
   let depth = 0;
   for (; index < value.length; index += 1) {
+    if (!consumeMarkdownScanBudget(budget)) {
+      return undefined;
+    }
     const character = value[index];
     if (character === undefined) {
       return undefined;
@@ -437,17 +498,21 @@ function emptyInlineLinkEnd(value: string, openIndex: number): number | undefine
       }
       depth -= 1;
     } else if (depth === 0 && markdownWhitespacePattern.test(character)) {
-      return linkEndAfterWhitespace(value, index);
+      return linkEndAfterWhitespace(value, index, budget);
     }
   }
   return undefined;
 }
 
 function stripEmptyInlineMarkdownLinks(value: string): string {
+  const budget = createMarkdownScanBudget(value.length);
   const pieces: string[] = [];
   let cursor = 0;
   let index = 0;
   while (index < value.length) {
+    if (!consumeMarkdownScanBudget(budget)) {
+      return value;
+    }
     const image = value[index] === "!" && value[index + 1] === "[";
     const opening = image ? index + 1 : value[index] === "[" ? index : -1;
     if (opening < 0) {
@@ -461,6 +526,9 @@ function stripEmptyInlineMarkdownLinks(value: string): string {
       if (invisibleLength === 0) {
         break;
       }
+      if (!consumeMarkdownScanBudget(budget)) {
+        return value;
+      }
       labelEnd += invisibleLength;
     }
     if (value[labelEnd] !== "]" || value[labelEnd + 1] !== "(") {
@@ -468,8 +536,11 @@ function stripEmptyInlineMarkdownLinks(value: string): string {
       continue;
     }
 
-    const end = emptyInlineLinkEnd(value, labelEnd + 1);
+    const end = emptyInlineLinkEnd(value, labelEnd + 1, budget);
     if (end === undefined) {
+      if (budget.exhausted) {
+        return value;
+      }
       break;
     }
     pieces.push(value.slice(cursor, image ? opening - 1 : opening));
@@ -480,21 +551,24 @@ function stripEmptyInlineMarkdownLinks(value: string): string {
   return pieces.join("");
 }
 
-function isEscapedMarkdownCharacter(value: string, index: number): boolean {
-  let backslashes = 0;
-  for (let cursor = index - 1; cursor >= 0 && value[cursor] === "\\"; cursor -= 1) {
-    backslashes += 1;
-  }
-  return backslashes % 2 === 1;
-}
-
-function inlineCodeSpanEnd(value: string, start: number, markerLength: number): number | undefined {
+function inlineCodeSpanEnd(
+  value: string,
+  start: number,
+  markerLength: number,
+  budget?: MarkdownScanBudget
+): number | undefined {
   for (let index = start + markerLength; index < value.length; index += 1) {
+    if (!consumeMarkdownScanBudget(budget)) {
+      return undefined;
+    }
     if (value[index] !== "`") {
       continue;
     }
     let runLength = 0;
     while (value[index + runLength] === "`") {
+      if (!consumeMarkdownScanBudget(budget)) {
+        return undefined;
+      }
       runLength += 1;
     }
     if (runLength === markerLength) {
@@ -507,15 +581,32 @@ function inlineCodeSpanEnd(value: string, start: number, markerLength: number): 
 
 function maskMarkdownLiteralContextsFromRawHtmlScan(value: string): string {
   const masked = value.split("");
+  const budget = createMarkdownScanBudget(value.length);
+  const openingBrackets: number[] = [];
+  let escaped = false;
   let index = 0;
   while (index < value.length) {
+    if (!consumeMarkdownScanBudget(budget)) {
+      return masked.join("");
+    }
     const character = value[index];
-    if (character === "`" && !isEscapedMarkdownCharacter(value, index)) {
+    if (escaped) {
+      escaped = false;
+      index += 1;
+      continue;
+    }
+    if (character === "\\") {
+      escaped = true;
+      index += 1;
+      continue;
+    }
+
+    if (character === "`") {
       let markerLength = 1;
-      while (value[index + markerLength] === "`") {
+      while (value[index + markerLength] === "`" && consumeMarkdownScanBudget(budget)) {
         markerLength += 1;
       }
-      const end = inlineCodeSpanEnd(value, index, markerLength);
+      const end = inlineCodeSpanEnd(value, index, markerLength, budget);
       if (end !== undefined) {
         for (let cursor = index; cursor < end; cursor += 1) {
           masked[cursor] = " ";
@@ -527,18 +618,34 @@ function maskMarkdownLiteralContextsFromRawHtmlScan(value: string): string {
       continue;
     }
 
-    if (character === "]" && !isEscapedMarkdownCharacter(value, index)) {
-      const openParenthesis = skipMarkdownWhitespace(value, index + 1);
-      if (value[openParenthesis] === "(") {
-        const contentStart = skipMarkdownWhitespace(value, openParenthesis + 1);
-        const end = emptyInlineLinkEnd(value, openParenthesis);
-        if (end !== undefined) {
-          for (let cursor = contentStart; cursor < end; cursor += 1) {
-            masked[cursor] = " ";
-          }
-          index = end;
-          continue;
+    if (character === "[") {
+      openingBrackets.push(index);
+      index += 1;
+      continue;
+    }
+    if (character !== "]") {
+      index += 1;
+      continue;
+    }
+    if (openingBrackets.length === 0) {
+      index += 1;
+      continue;
+    }
+
+    openingBrackets.pop();
+    const openParenthesis = skipMarkdownWhitespace(value, index + 1, budget);
+    if (value[openParenthesis] === "(") {
+      const contentStart = skipMarkdownWhitespace(value, openParenthesis + 1, budget);
+      const end = emptyInlineLinkEnd(value, openParenthesis, budget);
+      if (end !== undefined) {
+        for (let cursor = contentStart; cursor < end; cursor += 1) {
+          masked[cursor] = " ";
         }
+        index = end;
+        continue;
+      }
+      if (budget.exhausted) {
+        return masked.join("");
       }
     }
 
