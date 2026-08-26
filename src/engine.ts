@@ -87,6 +87,70 @@ const rawHtmlBlockStartPattern =
   /^\s{0,3}<(?:\/[A-Za-z][A-Za-z0-9-]*[\t\n\f\r ]*|[A-Za-z][A-Za-z0-9-]*(?=[\s/>])(?:[\t\n\f\r ]+(?:[^"'<>]|"[^"]*"|'[^']*')*)?[\t\n\f\r ]*\/?)>/u;
 const rawHtmlTagFragmentStartPattern = /^\s{0,3}<\/?[A-Za-z][A-Za-z0-9-]*(?=$|[\t\n\f\r /])/u;
 const maximumRawHtmlTagLength = 4_096;
+const maximumRawHtmlSpecialFragmentLength = 4_096;
+
+type RawHtmlSpecialFragmentKind = "processing-instruction" | "declaration" | "cdata";
+
+interface RawHtmlSpecialFragment {
+  readonly kind: RawHtmlSpecialFragmentKind;
+  text: string;
+}
+
+function isAsciiUppercase(value: string | undefined): boolean {
+  return value !== undefined && value >= "A" && value <= "Z";
+}
+
+function isAsciiLetter(value: string | undefined): boolean {
+  return isAsciiUppercase(value) || (value !== undefined && value >= "a" && value <= "z");
+}
+
+function rawHtmlSpecialFragmentKind(line: string): RawHtmlSpecialFragmentKind | undefined {
+  const content = line.replace(/^\s{0,3}/u, "");
+  if (content.startsWith("<?")) {
+    return "processing-instruction";
+  }
+  if (content.startsWith("<![CDATA[")) {
+    return "cdata";
+  }
+  if (content.startsWith("<!") && isAsciiUppercase(content[2])) {
+    return "declaration";
+  }
+  return undefined;
+}
+
+function rawHtmlSpecialFragmentIsClosed(value: string, kind: RawHtmlSpecialFragmentKind): boolean {
+  const end = kind === "processing-instruction" ? "?>" : kind === "declaration" ? ">" : "]]>";
+  return value.includes(end);
+}
+
+function hasRawHtmlSpecialTagPresence(value: string): boolean {
+  const processingInstructionStart = value.indexOf("<?");
+  if (
+    processingInstructionStart !== -1 &&
+    value.indexOf("?>", processingInstructionStart + 2) !== -1
+  ) {
+    return true;
+  }
+
+  const cdataStart = value.indexOf("<![CDATA[");
+  if (cdataStart !== -1 && value.indexOf("]]>", cdataStart + 9) !== -1) {
+    return true;
+  }
+
+  let index = value.indexOf("<!");
+  while (index !== -1) {
+    if (isAsciiLetter(value[index + 2])) {
+      return value.indexOf(">", index + 2) !== -1;
+    }
+    index = value.indexOf("<!", index + 2);
+  }
+  return false;
+}
+
+function hasRawHtmlPresence(value: string): boolean {
+  return rawHtmlTagPresencePattern.test(value) || hasRawHtmlSpecialTagPresence(value);
+}
+
 const voidHtmlTags = new Set([
   "area",
   "base",
@@ -202,6 +266,7 @@ function visibleMarkdownLines(body: string): string[] | undefined {
   let htmlComment = false;
   const rawHtmlTags = new Map<string, number>();
   let rawHtmlTagFragment: string | undefined;
+  let rawHtmlSpecialFragment: RawHtmlSpecialFragment | undefined;
   let linkReferenceContinuation = false;
 
   for (const rawLine of body.split(/\r?\n/u)) {
@@ -256,7 +321,34 @@ function visibleMarkdownLines(body: string): string[] | undefined {
       rawHtmlTagFragment = visibleLine;
       continue;
     }
-    if (rawHtmlTags.size > 0 || rawHtmlBlockStartPattern.test(visibleLine)) {
+    if (rawHtmlTags.size > 0) {
+      updateRawHtmlTags(visibleLine, rawHtmlTags);
+      continue;
+    }
+    if (rawHtmlSpecialFragment !== undefined) {
+      rawHtmlSpecialFragment.text += "\n" + visibleLine;
+      if (rawHtmlSpecialFragment.text.length > maximumRawHtmlSpecialFragmentLength) {
+        return undefined;
+      }
+      if (
+        !rawHtmlSpecialFragmentIsClosed(rawHtmlSpecialFragment.text, rawHtmlSpecialFragment.kind)
+      ) {
+        continue;
+      }
+      rawHtmlSpecialFragment = undefined;
+      continue;
+    }
+    const specialKind = rawHtmlSpecialFragmentKind(visibleLine);
+    if (specialKind !== undefined) {
+      if (visibleLine.length > maximumRawHtmlSpecialFragmentLength) {
+        return undefined;
+      }
+      if (!rawHtmlSpecialFragmentIsClosed(visibleLine, specialKind)) {
+        rawHtmlSpecialFragment = { kind: specialKind, text: visibleLine };
+      }
+      continue;
+    }
+    if (rawHtmlBlockStartPattern.test(visibleLine)) {
       updateRawHtmlTags(visibleLine, rawHtmlTags);
       continue;
     }
@@ -283,7 +375,10 @@ function visibleMarkdownLines(body: string): string[] | undefined {
     }
   }
 
-  return htmlComment || rawHtmlTagFragment !== undefined || rawHtmlTags.size > 0
+  return htmlComment ||
+    rawHtmlTagFragment !== undefined ||
+    rawHtmlSpecialFragment !== undefined ||
+    rawHtmlTags.size > 0
     ? undefined
     : visible;
 }
@@ -607,6 +702,9 @@ function maskMarkdownLiteralContextsFromRawHtmlScan(value: string): string {
     }
     const character = value[index];
     if (escaped) {
+      if (character === "<") {
+        masked[index] = " ";
+      }
       escaped = false;
       previousWasUnescapedExclamation = false;
       index += 1;
@@ -711,11 +809,7 @@ function hasVisibleMarkdownText(line: string): boolean {
     return false;
   }
   const withoutInvisibleEntities = stripInvisibleHtmlEntities(line);
-  if (
-    rawHtmlTagPresencePattern.test(
-      maskMarkdownLiteralContextsFromRawHtmlScan(withoutInvisibleEntities)
-    )
-  ) {
+  if (hasRawHtmlPresence(maskMarkdownLiteralContextsFromRawHtmlScan(withoutInvisibleEntities))) {
     return false;
   }
   const withoutEmptyMarkdownMarkers = stripEmptyInlineMarkdownLinks(
@@ -753,7 +847,7 @@ function hasNonEmptySection(body: string, wantedHeading: string): boolean {
       contentLines.join("\n")
     ).replace(emptyReferenceMarkdownLinkPattern, "");
     if (
-      rawHtmlTagPresencePattern.test(
+      hasRawHtmlPresence(
         maskMarkdownLiteralContextsFromRawHtmlScan(
           stripInvisibleHtmlEntities(withoutMultilineEmptyMarkers)
         )

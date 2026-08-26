@@ -403,6 +403,36 @@ rules:
       name: "multiline raw HTML attributes",
       body: ["## Testing", "<div", ' class="hidden">', "Tests passed.", "</div>"].join("\n"),
       expected: "missing"
+    },
+    {
+      name: "processing instruction raw HTML block",
+      body: ["## Testing", "<?xml?>"].join("\n"),
+      expected: "missing"
+    },
+    {
+      name: "declaration raw HTML block",
+      body: ["## Testing", "<!DOCTYPE html>"].join("\n"),
+      expected: "missing"
+    },
+    {
+      name: "CDATA raw HTML block",
+      body: ["## Testing", "<![CDATA[Tests passed.]]>"].join("\n"),
+      expected: "missing"
+    },
+    {
+      name: "multiline processing instruction raw HTML block",
+      body: ["## Testing", "<?php", "echo '>';", "?>"].join("\n"),
+      expected: "missing"
+    },
+    {
+      name: "multiline declaration raw HTML block",
+      body: ["## Testing", "<!DOCTYPE html", ">"].join("\n"),
+      expected: "missing"
+    },
+    {
+      name: "multiline CDATA raw HTML block",
+      body: ["## Testing", "<![CDATA[", "Tests passed.", "]]>"].join("\n"),
+      expected: "missing"
     }
   ])("classifies $name conservatively", ({ body, expected }) => {
     const result = evaluate(policy, input({ body }));
@@ -507,6 +537,36 @@ rules:
       name: "backslash-newline in a parenthesized link title does not hide HTML-like text",
       body: ["## Testing", "Evidence [](foo (title\\", "bar <div>))"].join("\n"),
       expected: "missing"
+    },
+    {
+      name: "inline processing instruction does not count as evidence",
+      body: "## Testing\nEvidence <?php echo $a; ?>",
+      expected: "missing"
+    },
+    {
+      name: "inline declaration does not count as evidence",
+      body: "## Testing\nEvidence <!ELEMENT br EMPTY>",
+      expected: "missing"
+    },
+    {
+      name: "inline lowercase declaration does not count as evidence",
+      body: "## Testing\nEvidence <!foo>",
+      expected: "missing"
+    },
+    {
+      name: "inline CDATA does not count as evidence",
+      body: "## Testing\nEvidence <![CDATA[>&<]]>",
+      expected: "missing"
+    },
+    {
+      name: "escaped raw HTML tag remains visible",
+      body: "## Testing\n\\<div>",
+      expected: "satisfied"
+    },
+    {
+      name: "escaped processing instruction remains visible",
+      body: "## Testing\n\\<?xml?>",
+      expected: "satisfied"
     },
     {
       name: "malformed link markers remain fail-closed under bounded scanning",
