@@ -569,6 +569,11 @@ rules:
       expected: "satisfied"
     },
     {
+      name: "whitespace in nested bare destination does not hide HTML-like text",
+      body: '## Testing\n[x](foo(bar "<div>"))',
+      expected: "missing"
+    },
+    {
       name: "malformed link markers remain fail-closed under bounded scanning",
       body: ["## Testing", "[x](".repeat(512) + "<div>"].join("\n"),
       expected: "missing"

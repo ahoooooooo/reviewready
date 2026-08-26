@@ -604,8 +604,8 @@ function emptyInlineLinkEnd(
         return index + 1;
       }
       depth -= 1;
-    } else if (depth === 0 && markdownWhitespacePattern.test(character)) {
-      return linkEndAfterWhitespace(value, index, budget);
+    } else if (markdownWhitespacePattern.test(character)) {
+      return depth === 0 ? linkEndAfterWhitespace(value, index, budget) : undefined;
     }
   }
   return undefined;
