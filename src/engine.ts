@@ -244,7 +244,7 @@ const invisibleHtmlEntityNames = new Set([
 ]);
 const htmlEntityPattern = /&(?:#x([0-9a-f]+)|#([0-9]+)|([A-Za-z][A-Za-z0-9]+));/giu;
 const linkReferenceDefinitionPattern = /^\s{0,3}\[([^\]\r\n]+)\]:[ \t]+/u;
-const indentedAtxHeadingPattern = /^[ \t]{1,3}#{1,6}[ \t]+/u;
+const indentedAtxHeadingPattern = /^[ \t]{1,3}#{1,6}(?=$|[ \t])/u;
 
 function normalizeLinkReferenceLabel(value: string): string {
   return value
@@ -409,7 +409,7 @@ interface MarkdownHeading {
   readonly text: string;
 }
 
-const headingPattern = /^\s{0,3}(#{1,6})[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$/u;
+const headingPattern = /^\s{0,3}(#{1,6})(?:[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*|[ \t]*)$/u;
 const visibleMarkdownTextPattern =
   /[^\p{White_Space}\p{Control}\p{Format}\p{Mark}\p{Default_Ignorable_Code_Point}]/u;
 const indentedCodePattern = /^(?: {4}|\t)/u;
@@ -831,8 +831,8 @@ function maskMarkdownLiteralContextsFromRawHtmlScan(value: string): string {
 function markdownHeading(line: string): MarkdownHeading | undefined {
   const match = headingPattern.exec(line);
   const marker = match?.[1];
-  const text = match?.[2]?.trim();
-  if (marker === undefined || text === undefined) {
+  const text = match?.[2]?.trim() ?? "";
+  if (marker === undefined) {
     return undefined;
   }
   return {
