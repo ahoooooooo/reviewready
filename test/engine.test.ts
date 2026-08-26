@@ -558,6 +558,21 @@ rules:
       expected: "missing"
     },
     {
+      name: "reference definition title on an unindented continuation",
+      body: ["## Testing", "[ref]: /hidden", '"title"'].join("\n"),
+      expected: "missing"
+    },
+    {
+      name: "reference definition multiline title continuation",
+      body: ["## Testing", "[ref]: /hidden", '"title', 'continuation"'].join("\n"),
+      expected: "missing"
+    },
+    {
+      name: "empty reference definition multiline title continuation",
+      body: ["## Testing", "[][ref]", "[ref]:", "/hidden", '"title', 'continuation"'].join("\n"),
+      expected: "missing"
+    },
+    {
       name: "reference definition escaped destination",
       body: ["## Testing", "[][ref]", "[ref]:", "/foo\\(bar\\)", "", "## Notes", "Nope."].join(
         "\n"

@@ -245,7 +245,7 @@ const invisibleHtmlEntityNames = new Set([
 const htmlEntityPattern = /&(?:#x([0-9a-f]+)|#([0-9]+)|([A-Za-z][A-Za-z0-9]+));/giu;
 const linkReferenceDefinitionPattern = /^\s{0,3}\[([^\]\r\n]+)\]:[ \t]*(.*)$/u;
 const emptyLinkReferenceDefinitionPattern = /^\s{0,3}\[([^\]\r\n]+)\]:[ \t]*$/u;
-const indentedAtxHeadingPattern = /^[ \t]{1,3}#{1,6}(?=$|[ \t])/u;
+const maximumLinkReferenceTitleLength = 4_096;
 
 function normalizeLinkReferenceLabel(value: string): string {
   return value
@@ -382,10 +382,71 @@ function parseLinkReferenceContinuationLine(
     : undefined;
 }
 
-function isLinkReferenceTitleLine(value: string): boolean {
-  const titleStart = skipHorizontalWhitespace(value, 0);
-  const titleEnd = linkTitleEndWithoutLineEnding(value, titleStart);
-  return titleEnd !== undefined && skipHorizontalWhitespace(value, titleEnd) === value.length;
+function findLinkReferenceTitleContinuation(
+  lines: readonly string[],
+  startIndex: number
+): readonly number[] | undefined {
+  const firstLine = lines[startIndex];
+  if (firstLine === undefined) {
+    return undefined;
+  }
+  const titleStart = skipHorizontalWhitespace(firstLine, 0);
+  const delimiter = firstLine[titleStart];
+  if (delimiter !== '"' && delimiter !== "'" && delimiter !== "(") {
+    return undefined;
+  }
+
+  const lineIndexes: number[] = [];
+  let escaped = false;
+  let depth = delimiter === "(" ? 1 : 0;
+  let length = 0;
+  for (let lineIndex = startIndex; lineIndex < lines.length; lineIndex += 1) {
+    const line = lines[lineIndex] ?? "";
+    if (lineIndex > startIndex && /^[ \t]*$/u.test(line)) {
+      return undefined;
+    }
+    const segment = lineIndex === startIndex ? line.slice(titleStart) : line;
+    length += segment.length + (lineIndex === startIndex ? 0 : 1);
+    if (length > maximumLinkReferenceTitleLength) {
+      return undefined;
+    }
+    lineIndexes.push(lineIndex);
+
+    let closingIndex: number | undefined;
+    const scanStart = lineIndex === startIndex ? 1 : 0;
+    for (let characterIndex = scanStart; characterIndex < segment.length; characterIndex += 1) {
+      const character = segment[characterIndex];
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (character === "\\") {
+        escaped = true;
+        continue;
+      }
+      if (delimiter === "(") {
+        if (character === "(") {
+          depth += 1;
+        } else if (character === ")") {
+          depth -= 1;
+          if (depth === 0) {
+            closingIndex = characterIndex + 1;
+            break;
+          }
+        }
+      } else if (character === delimiter) {
+        closingIndex = characterIndex + 1;
+        break;
+      }
+    }
+
+    if (closingIndex !== undefined) {
+      return skipHorizontalWhitespace(segment, closingIndex) === segment.length
+        ? lineIndexes
+        : undefined;
+    }
+  }
+  return undefined;
 }
 
 function findMultilineLinkReferenceDefinitions(
@@ -408,8 +469,11 @@ function findMultilineLinkReferenceDefinitions(
       continue;
     }
     const lineIndexes = [index, destinationIndex];
-    if (!destination.hasTitle && isLinkReferenceTitleLine(lines[destinationIndex + 1] ?? "")) {
-      lineIndexes.push(destinationIndex + 1);
+    if (!destination.hasTitle) {
+      const titleLineIndexes = findLinkReferenceTitleContinuation(lines, destinationIndex + 1);
+      if (titleLineIndexes !== undefined) {
+        lineIndexes.push(...titleLineIndexes);
+      }
     }
     const definition = { label, lineIndexes } satisfies MultilineLinkReferenceDefinition;
     byStart.set(index, definition);
@@ -420,17 +484,53 @@ function findMultilineLinkReferenceDefinitions(
   return { byStart, consumedLineIndexes };
 }
 
+interface SingleLineLinkReferenceTitleContinuations {
+  readonly consumedLineIndexes: ReadonlySet<number>;
+}
+
+function findSingleLineLinkReferenceTitleContinuations(
+  lines: readonly string[],
+  alreadyConsumedLineIndexes: ReadonlySet<number>
+): SingleLineLinkReferenceTitleContinuations {
+  const consumedLineIndexes = new Set<number>();
+  for (let index = 0; index < lines.length; index += 1) {
+    if (alreadyConsumedLineIndexes.has(index)) {
+      continue;
+    }
+    const match = linkReferenceDefinitionPattern.exec(lines[index] ?? "");
+    const remainder = match?.[2];
+    if (remainder === undefined || remainder.length === 0) {
+      continue;
+    }
+    const definition = parseLinkReferenceContinuationLine(remainder);
+    if (definition === undefined || definition.hasTitle) {
+      continue;
+    }
+    const titleLineIndexes = findLinkReferenceTitleContinuation(lines, index + 1);
+    if (titleLineIndexes === undefined) {
+      continue;
+    }
+    for (const lineIndex of titleLineIndexes) {
+      consumedLineIndexes.add(lineIndex);
+    }
+  }
+  return { consumedLineIndexes };
+}
+
 function visibleMarkdownLines(body: string): VisibleMarkdownDocument | undefined {
   const visible: string[] = [];
   const referenceLabels = new Set<string>();
   const rawLines = body.split(/\r?\n/u);
   const multilineReferenceDefinitions = findMultilineLinkReferenceDefinitions(rawLines);
+  const singleLineReferenceTitleContinuations = findSingleLineLinkReferenceTitleContinuations(
+    rawLines,
+    multilineReferenceDefinitions.consumedLineIndexes
+  );
   let fence: MarkdownFence | undefined;
   let htmlComment = false;
   const rawHtmlTags = new Map<string, number>();
   let rawHtmlTagFragment: string | undefined;
   let rawHtmlSpecialFragment: RawHtmlSpecialFragment | undefined;
-  let linkReferenceContinuation = false;
 
   for (const [rawLineIndex, rawLine] of rawLines.entries()) {
     if (fence !== undefined) {
@@ -523,6 +623,9 @@ function visibleMarkdownLines(body: string): VisibleMarkdownDocument | undefined
       }
       continue;
     }
+    if (singleLineReferenceTitleContinuations.consumedLineIndexes.has(rawLineIndex)) {
+      continue;
+    }
 
     const marker = fenceMarker(visibleLine);
     if (marker !== undefined) {
@@ -531,25 +634,17 @@ function visibleMarkdownLines(body: string): VisibleMarkdownDocument | undefined
     }
     const renderedLine = stripInvisibleHtmlEntities(visibleLine);
     if (renderedLine.trim().length === 0) {
-      linkReferenceContinuation = false;
       visible.push(visibleLine);
       continue;
     }
-    if (linkReferenceContinuation && /^[ \t]+/u.test(visibleLine)) {
-      if (!indentedAtxHeadingPattern.test(visibleLine)) {
-        continue;
-      }
-    }
     const referenceDefinition = linkReferenceDefinitionPattern.exec(visibleLine);
     if (referenceDefinition === null || (referenceDefinition[2] ?? "").length === 0) {
-      linkReferenceContinuation = false;
       visible.push(visibleLine);
     } else {
       const label = normalizeLinkReferenceLabel(referenceDefinition[1] ?? "");
       if (label.length > 0) {
         referenceLabels.add(label);
       }
-      linkReferenceContinuation = true;
     }
   }
 
