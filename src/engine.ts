@@ -401,6 +401,9 @@ function parenthesizedLinkTitleEnd(
       if (index + 1 >= value.length) {
         return undefined;
       }
+      if (value[index + 1] === "\r" || value[index + 1] === "\n") {
+        return undefined;
+      }
       index += 1;
       continue;
     }
