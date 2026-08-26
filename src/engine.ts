@@ -582,8 +582,12 @@ function inlineCodeSpanEnd(
 function maskMarkdownLiteralContextsFromRawHtmlScan(value: string): string {
   const masked = value.split("");
   const budget = createMarkdownScanBudget(value.length);
-  const openingBrackets: number[] = [];
+  const openingBrackets: Array<{
+    containsNestedLink: boolean;
+    isImage: boolean;
+  }> = [];
   let escaped = false;
+  let previousWasUnescapedExclamation = false;
   let index = 0;
   while (index < value.length) {
     if (!consumeMarkdownScanBudget(budget)) {
@@ -592,16 +596,19 @@ function maskMarkdownLiteralContextsFromRawHtmlScan(value: string): string {
     const character = value[index];
     if (escaped) {
       escaped = false;
+      previousWasUnescapedExclamation = false;
       index += 1;
       continue;
     }
     if (character === "\\") {
       escaped = true;
+      previousWasUnescapedExclamation = false;
       index += 1;
       continue;
     }
 
     if (character === "`") {
+      previousWasUnescapedExclamation = false;
       let markerLength = 1;
       while (value[index + markerLength] === "`" && consumeMarkdownScanBudget(budget)) {
         markerLength += 1;
@@ -619,34 +626,54 @@ function maskMarkdownLiteralContextsFromRawHtmlScan(value: string): string {
     }
 
     if (character === "[") {
-      openingBrackets.push(index);
+      openingBrackets.push({
+        containsNestedLink: false,
+        isImage: previousWasUnescapedExclamation
+      });
+      previousWasUnescapedExclamation = false;
       index += 1;
       continue;
     }
     if (character !== "]") {
+      previousWasUnescapedExclamation = character === "!";
       index += 1;
       continue;
     }
     if (openingBrackets.length === 0) {
+      previousWasUnescapedExclamation = false;
       index += 1;
       continue;
     }
 
-    openingBrackets.pop();
+    previousWasUnescapedExclamation = false;
+    const bracket = openingBrackets.pop();
+    const containsNestedLink = bracket?.containsNestedLink ?? false;
+    const isImage = bracket?.isImage ?? false;
     const openParenthesis = index + 1;
+    let end: number | undefined;
     if (value[openParenthesis] === "(") {
       const contentStart = skipMarkdownWhitespace(value, openParenthesis + 1, budget);
-      const end = emptyInlineLinkEnd(value, openParenthesis, budget);
-      if (end !== undefined) {
+      end = emptyInlineLinkEnd(value, openParenthesis, budget);
+      const parent = openingBrackets[openingBrackets.length - 1];
+      if (parent !== undefined && (containsNestedLink || (end !== undefined && !isImage))) {
+        parent.containsNestedLink = true;
+      }
+      if (end !== undefined && !containsNestedLink && (parent === undefined || isImage)) {
         for (let cursor = contentStart; cursor < end; cursor += 1) {
           masked[cursor] = " ";
         }
         index = end;
         continue;
       }
-      if (budget.exhausted) {
-        return masked.join("");
+    }
+    if (containsNestedLink) {
+      const parent = openingBrackets[openingBrackets.length - 1];
+      if (parent !== undefined) {
+        parent.containsNestedLink = true;
       }
+    }
+    if (budget.exhausted) {
+      return masked.join("");
     }
 
     index += 1;

@@ -479,6 +479,21 @@ rules:
       expected: "missing"
     },
     {
+      name: "nested link candidate does not hide inner HTML-like title",
+      body: '## Testing\nEvidence [foo [bar](/uri "<div>")](/uri)',
+      expected: "missing"
+    },
+    {
+      name: "nested links do not hide outer HTML-like title",
+      body: '## Testing\nEvidence [foo [bar](url "<div>")](url2 "<script>")',
+      expected: "missing"
+    },
+    {
+      name: "images remain valid inside link text",
+      body: '## Testing\nEvidence [foo ![bar](url "<div>")](url2)',
+      expected: "satisfied"
+    },
+    {
       name: "malformed link markers remain fail-closed under bounded scanning",
       body: ["## Testing", "[x](".repeat(512) + "<div>"].join("\n"),
       expected: "missing"
