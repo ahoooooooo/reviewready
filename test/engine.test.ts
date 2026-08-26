@@ -494,6 +494,11 @@ rules:
       expected: "missing"
     },
     {
+      name: "indented ATX heading after reference definition remains a boundary",
+      body: ["## Testing", "[ref]: /hidden", "  ## Outside", "outside text"].join("\n"),
+      expected: "missing"
+    },
+    {
       name: "valid angle destination",
       body: "## Testing\n[](<foo>)",
       expected: "missing"

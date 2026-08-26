@@ -244,6 +244,7 @@ const invisibleHtmlEntityNames = new Set([
 ]);
 const htmlEntityPattern = /&(?:#x([0-9a-f]+)|#([0-9]+)|([A-Za-z][A-Za-z0-9]+));/giu;
 const linkReferenceDefinitionPattern = /^\s{0,3}\[([^\]\r\n]+)\]:[ \t]+/u;
+const indentedAtxHeadingPattern = /^[ \t]{1,3}#{1,6}[ \t]+/u;
 
 function normalizeLinkReferenceLabel(value: string): string {
   return value
@@ -378,7 +379,9 @@ function visibleMarkdownLines(body: string): VisibleMarkdownDocument | undefined
       continue;
     }
     if (linkReferenceContinuation && /^[ \t]+/u.test(visibleLine)) {
-      continue;
+      if (!indentedAtxHeadingPattern.test(visibleLine)) {
+        continue;
+      }
     }
     const referenceDefinition = linkReferenceDefinitionPattern.exec(visibleLine);
     if (referenceDefinition === null) {
