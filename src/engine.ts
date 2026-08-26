@@ -633,7 +633,7 @@ function maskMarkdownLiteralContextsFromRawHtmlScan(value: string): string {
     }
 
     openingBrackets.pop();
-    const openParenthesis = skipMarkdownWhitespace(value, index + 1, budget);
+    const openParenthesis = index + 1;
     if (value[openParenthesis] === "(") {
       const contentStart = skipMarkdownWhitespace(value, openParenthesis + 1, budget);
       const end = emptyInlineLinkEnd(value, openParenthesis, budget);

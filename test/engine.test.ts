@@ -474,6 +474,11 @@ rules:
       expected: "missing"
     },
     {
+      name: "whitespace before link parenthesis does not hide HTML-like text",
+      body: '## Testing\nEvidence [x] (foo "<div>")',
+      expected: "missing"
+    },
+    {
       name: "malformed link markers remain fail-closed under bounded scanning",
       body: ["## Testing", "[x](".repeat(512) + "<div>"].join("\n"),
       expected: "missing"
