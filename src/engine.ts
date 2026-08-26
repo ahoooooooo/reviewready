@@ -571,7 +571,7 @@ const visibleMarkdownTextPattern =
   /[^\p{White_Space}\p{Control}\p{Format}\p{Mark}\p{Default_Ignorable_Code_Point}]/u;
 const indentedCodePattern = /^(?: {4}|\t)/u;
 const emptyReferenceMarkdownLinkPattern =
-  /!?\[[\p{White_Space}\p{Control}\p{Format}\p{Mark}\p{Default_Ignorable_Code_Point}]+\]\[[^\]]{0,999}\]/gu;
+  /!?\[([\p{White_Space}\p{Control}\p{Format}\p{Mark}\p{Default_Ignorable_Code_Point}]+)\]\[([^\]\r\n]{0,999})\]/gu;
 const emptyResolvedReferenceMarkdownLinkPattern = /!?\[\]\[([^\]\r\n]{1,999})\]/gu;
 const markdownWhitespacePattern = /\s/u;
 
@@ -878,10 +878,19 @@ function stripEmptyReferenceMarkdownLinks(
   value: string,
   referenceLabels?: ReadonlySet<string>
 ): string {
-  const withoutInvisibleLabels = value.replace(emptyReferenceMarkdownLinkPattern, "");
   if (referenceLabels === undefined || referenceLabels.size === 0) {
-    return withoutInvisibleLabels;
+    return value;
   }
+  const withoutInvisibleLabels = value.replace(
+    emptyReferenceMarkdownLinkPattern,
+    (marker: string, label: string, referenceLabel: string) => {
+      const resolvedLabel =
+        referenceLabel.length === 0
+          ? normalizeLinkReferenceLabel(label)
+          : normalizeLinkReferenceLabel(referenceLabel);
+      return referenceLabels.has(resolvedLabel) ? "" : marker;
+    }
+  );
   return withoutInvisibleLabels.replace(
     emptyResolvedReferenceMarkdownLinkPattern,
     (marker, label: string) =>

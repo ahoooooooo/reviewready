@@ -509,6 +509,16 @@ rules:
       expected: "satisfied"
     },
     {
+      name: "invisible unresolved reference label remains literal",
+      body: "## Testing\n[\u200B][missing]",
+      expected: "satisfied"
+    },
+    {
+      name: "invisible resolved reference label remains empty",
+      body: ["## Testing", "[\u200B][ref]", "[ref]: /hidden"].join("\n"),
+      expected: "missing"
+    },
+    {
       name: "defined empty full-reference link",
       body: ["## Testing", "[][ref]", "[ref]: /hidden"].join("\n"),
       expected: "missing"
