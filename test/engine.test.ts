@@ -494,6 +494,11 @@ rules:
       expected: "satisfied"
     },
     {
+      name: "backslash-newline does not hide HTML-like link text",
+      body: ["## Testing", "Evidence [](foo\\", 'bar "<div>")'].join("\n"),
+      expected: "missing"
+    },
+    {
       name: "malformed link markers remain fail-closed under bounded scanning",
       body: ["## Testing", "[x](".repeat(512) + "<div>"].join("\n"),
       expected: "missing"

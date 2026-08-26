@@ -458,6 +458,9 @@ function emptyInlineLinkEnd(
         if (index + 1 >= value.length) {
           return undefined;
         }
+        if (value[index + 1] === "\r" || value[index + 1] === "\n") {
+          return undefined;
+        }
         index += 1;
         continue;
       }
@@ -485,6 +488,9 @@ function emptyInlineLinkEnd(
     }
     if (character === "\\") {
       if (index + 1 >= value.length) {
+        return undefined;
+      }
+      if (value[index + 1] === "\r" || value[index + 1] === "\n") {
         return undefined;
       }
       index += 1;
@@ -740,6 +746,15 @@ function hasNonEmptySection(body: string, wantedHeading: string): boolean {
     const withoutMultilineEmptyMarkers = stripEmptyInlineMarkdownLinks(
       contentLines.join("\n")
     ).replace(emptyReferenceMarkdownLinkPattern, "");
+    if (
+      rawHtmlTagPresencePattern.test(
+        maskMarkdownLiteralContextsFromRawHtmlScan(
+          stripInvisibleHtmlEntities(withoutMultilineEmptyMarkers)
+        )
+      )
+    ) {
+      continue;
+    }
     if (withoutMultilineEmptyMarkers.split("\n").some((line) => hasVisibleMarkdownText(line))) {
       return true;
     }
