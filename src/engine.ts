@@ -243,7 +243,14 @@ const invisibleHtmlEntityNames = new Set([
   "zwj"
 ]);
 const htmlEntityPattern = /&(?:#x([0-9a-f]+)|#([0-9]+)|([A-Za-z][A-Za-z0-9]+));/giu;
-const linkReferenceDefinitionPattern = /^\s{0,3}\[[^\]\r\n]+\]:[ \t]+/u;
+const linkReferenceDefinitionPattern = /^\s{0,3}\[([^\]\r\n]+)\]:[ \t]+/u;
+
+function normalizeLinkReferenceLabel(value: string): string {
+  return value
+    .trim()
+    .replace(/[ \t]+/gu, " ")
+    .toLocaleLowerCase("en-US");
+}
 
 function stripInvisibleHtmlEntities(line: string): string {
   return line.replace(htmlEntityPattern, (entity, hexadecimal, decimal, name) => {
@@ -260,8 +267,14 @@ function stripInvisibleHtmlEntities(line: string): string {
   });
 }
 
-function visibleMarkdownLines(body: string): string[] | undefined {
+interface VisibleMarkdownDocument {
+  lines: string[];
+  referenceLabels: Set<string>;
+}
+
+function visibleMarkdownLines(body: string): VisibleMarkdownDocument | undefined {
   const visible: string[] = [];
+  const referenceLabels = new Set<string>();
   let fence: MarkdownFence | undefined;
   let htmlComment = false;
   const rawHtmlTags = new Map<string, number>();
@@ -367,10 +380,15 @@ function visibleMarkdownLines(body: string): string[] | undefined {
     if (linkReferenceContinuation && /^[ \t]+/u.test(visibleLine)) {
       continue;
     }
-    if (!linkReferenceDefinitionPattern.test(visibleLine)) {
+    const referenceDefinition = linkReferenceDefinitionPattern.exec(visibleLine);
+    if (referenceDefinition === null) {
       linkReferenceContinuation = false;
       visible.push(visibleLine);
     } else {
+      const label = normalizeLinkReferenceLabel(referenceDefinition[1] ?? "");
+      if (label.length > 0) {
+        referenceLabels.add(label);
+      }
       linkReferenceContinuation = true;
     }
   }
@@ -380,7 +398,7 @@ function visibleMarkdownLines(body: string): string[] | undefined {
     rawHtmlSpecialFragment !== undefined ||
     rawHtmlTags.size > 0
     ? undefined
-    : visible;
+    : { lines: visible, referenceLabels };
 }
 
 interface MarkdownHeading {
@@ -394,6 +412,7 @@ const visibleMarkdownTextPattern =
 const indentedCodePattern = /^(?: {4}|\t)/u;
 const emptyReferenceMarkdownLinkPattern =
   /!?\[[\p{White_Space}\p{Control}\p{Format}\p{Mark}\p{Default_Ignorable_Code_Point}]+\]\[[^\]]{0,999}\]/gu;
+const emptyResolvedReferenceMarkdownLinkPattern = /!?\[\]\[([^\]\r\n]{1,999})\]/gu;
 const markdownWhitespacePattern = /\s/u;
 
 interface MarkdownScanBudget {
@@ -658,6 +677,21 @@ function stripEmptyInlineMarkdownLinks(value: string): string {
   return pieces.join("");
 }
 
+function stripEmptyReferenceMarkdownLinks(
+  value: string,
+  referenceLabels?: ReadonlySet<string>
+): string {
+  const withoutInvisibleLabels = value.replace(emptyReferenceMarkdownLinkPattern, "");
+  if (referenceLabels === undefined || referenceLabels.size === 0) {
+    return withoutInvisibleLabels;
+  }
+  return withoutInvisibleLabels.replace(
+    emptyResolvedReferenceMarkdownLinkPattern,
+    (marker, label: string) =>
+      referenceLabels.has(normalizeLinkReferenceLabel(label)) ? "" : marker
+  );
+}
+
 function inlineCodeSpanEnd(
   value: string,
   start: number,
@@ -804,7 +838,7 @@ function markdownHeading(line: string): MarkdownHeading | undefined {
   };
 }
 
-function hasVisibleMarkdownText(line: string): boolean {
+function hasVisibleMarkdownText(line: string, referenceLabels?: ReadonlySet<string>): boolean {
   if (indentedCodePattern.test(line)) {
     return false;
   }
@@ -812,17 +846,20 @@ function hasVisibleMarkdownText(line: string): boolean {
   if (hasRawHtmlPresence(maskMarkdownLiteralContextsFromRawHtmlScan(withoutInvisibleEntities))) {
     return false;
   }
-  const withoutEmptyMarkdownMarkers = stripEmptyInlineMarkdownLinks(
-    withoutInvisibleEntities
-  ).replace(emptyReferenceMarkdownLinkPattern, "");
-  return visibleMarkdownTextPattern.test(withoutEmptyMarkdownMarkers);
+  const withoutEmptyMarkdownMarkers = stripEmptyInlineMarkdownLinks(withoutInvisibleEntities);
+  const withoutEmptyReferenceMarkdownLinks = stripEmptyReferenceMarkdownLinks(
+    withoutEmptyMarkdownMarkers,
+    referenceLabels
+  );
+  return visibleMarkdownTextPattern.test(withoutEmptyReferenceMarkdownLinks);
 }
 
 function hasNonEmptySection(body: string, wantedHeading: string): boolean {
-  const lines = visibleMarkdownLines(body);
-  if (lines === undefined) {
+  const document = visibleMarkdownLines(body);
+  if (document === undefined) {
     return false;
   }
+  const lines = document.lines;
 
   const wanted = wantedHeading.toLocaleLowerCase("en-US");
   for (let index = 0; index < lines.length; index += 1) {
@@ -843,19 +880,25 @@ function hasNonEmptySection(body: string, wantedHeading: string): boolean {
       }
       contentLines.push(line);
     }
-    const withoutMultilineEmptyMarkers = stripEmptyInlineMarkdownLinks(
-      contentLines.join("\n")
-    ).replace(emptyReferenceMarkdownLinkPattern, "");
+    const withoutMultilineEmptyMarkers = stripEmptyInlineMarkdownLinks(contentLines.join("\n"));
+    const withoutEmptyReferenceMarkdownLinks = stripEmptyReferenceMarkdownLinks(
+      withoutMultilineEmptyMarkers,
+      document.referenceLabels
+    );
     if (
       hasRawHtmlPresence(
         maskMarkdownLiteralContextsFromRawHtmlScan(
-          stripInvisibleHtmlEntities(withoutMultilineEmptyMarkers)
+          stripInvisibleHtmlEntities(withoutEmptyReferenceMarkdownLinks)
         )
       )
     ) {
       continue;
     }
-    if (withoutMultilineEmptyMarkers.split("\n").some((line) => hasVisibleMarkdownText(line))) {
+    if (
+      withoutEmptyReferenceMarkdownLinks
+        .split("\n")
+        .some((line) => hasVisibleMarkdownText(line, document.referenceLabels))
+    ) {
       return true;
     }
   }
@@ -863,14 +906,18 @@ function hasNonEmptySection(body: string, wantedHeading: string): boolean {
 }
 
 function hasAttestation(body: string, wantedText: string): boolean {
-  const lines = visibleMarkdownLines(body);
-  if (lines === undefined) {
+  const document = visibleMarkdownLines(body);
+  if (document === undefined) {
     return false;
   }
+  const lines = document.lines;
 
   return lines.some((line) => {
     const match = /^[ \t]{0,3}[-*+][ \t]+\[[xX]\][ \t]+(.+?)[ \t]*$/u.exec(line);
-    return match?.[1]?.trim() === wantedText && hasVisibleMarkdownText(match[1]);
+    return (
+      match?.[1]?.trim() === wantedText &&
+      hasVisibleMarkdownText(match[1], document.referenceLabels)
+    );
   });
 }
 

@@ -489,6 +489,11 @@ rules:
       expected: "satisfied"
     },
     {
+      name: "defined empty full-reference link",
+      body: ["## Testing", "[][ref]", "[ref]: /hidden"].join("\n"),
+      expected: "missing"
+    },
+    {
       name: "valid angle destination",
       body: "## Testing\n[](<foo>)",
       expected: "missing"
