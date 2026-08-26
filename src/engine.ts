@@ -505,26 +505,6 @@ function inlineCodeSpanEnd(value: string, start: number, markerLength: number): 
   return undefined;
 }
 
-function angleLinkDestinationEnd(value: string, start: number): number | undefined {
-  for (let index = start + 1; index < value.length; index += 1) {
-    const character = value[index];
-    if (character === "\r" || character === "\n" || character === "<") {
-      return undefined;
-    }
-    if (character === "\\") {
-      if (index + 1 >= value.length) {
-        return undefined;
-      }
-      index += 1;
-      continue;
-    }
-    if (character === ">") {
-      return index + 1;
-    }
-  }
-  return undefined;
-}
-
 function maskMarkdownLiteralContextsFromRawHtmlScan(value: string): string {
   const masked = value.split("");
   let index = 0;
@@ -550,16 +530,14 @@ function maskMarkdownLiteralContextsFromRawHtmlScan(value: string): string {
     if (character === "]" && !isEscapedMarkdownCharacter(value, index)) {
       const openParenthesis = skipMarkdownWhitespace(value, index + 1);
       if (value[openParenthesis] === "(") {
-        const destinationStart = skipMarkdownWhitespace(value, openParenthesis + 1);
-        if (value[destinationStart] === "<") {
-          const end = angleLinkDestinationEnd(value, destinationStart);
-          if (end !== undefined) {
-            for (let cursor = destinationStart; cursor < end; cursor += 1) {
-              masked[cursor] = " ";
-            }
-            index = end;
-            continue;
+        const contentStart = skipMarkdownWhitespace(value, openParenthesis + 1);
+        const end = emptyInlineLinkEnd(value, openParenthesis);
+        if (end !== undefined) {
+          for (let cursor = contentStart; cursor < end; cursor += 1) {
+            masked[cursor] = " ";
           }
+          index = end;
+          continue;
         }
       }
     }

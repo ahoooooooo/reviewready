@@ -464,6 +464,11 @@ rules:
       expected: "missing"
     },
     {
+      name: "visible label with HTML-like quoted link title",
+      body: '## Testing\n[x](foo "<div>")',
+      expected: "satisfied"
+    },
+    {
       name: "valid parenthesized link title",
       body: "## Testing\n[](foo (title))",
       expected: "missing"
