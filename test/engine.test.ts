@@ -860,6 +860,33 @@ rules:
       expectedAttestation: "missing"
     },
     {
+      name: "does not consume visible content after a fenced definition-like block",
+      body: [
+        "## Testing",
+        "```markdown",
+        "[tests]: https://example.test/report",
+        '"hidden title',
+        "```",
+        'Tests passed"'
+      ].join("\n"),
+      expectedSection: "satisfied",
+      expectedAttestation: "missing"
+    },
+    {
+      name: "keeps a reference after a fence-like line inside a valid title",
+      body: [
+        "## Testing",
+        "[tests]: https://example.test/report",
+        '"hidden title',
+        "```",
+        'continuation"',
+        "[][other]",
+        "[other]: https://example.test/other"
+      ].join("\n"),
+      expectedSection: "missing",
+      expectedAttestation: "missing"
+    },
+    {
       name: "visible Markdown around an inline comment",
       body: [
         "## Testing <!-- ignored heading suffix -->",

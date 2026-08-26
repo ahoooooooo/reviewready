@@ -449,13 +449,41 @@ function findLinkReferenceTitleContinuation(
   return undefined;
 }
 
+function findFencedCodeLineIndexes(
+  lines: readonly string[],
+  ignoredLineIndexes: ReadonlySet<number> = new Set<number>()
+): ReadonlySet<number> {
+  const fencedCodeLineIndexes = new Set<number>();
+  let fence: MarkdownFence | undefined;
+  for (const [index, line] of lines.entries()) {
+    if (fence !== undefined) {
+      fencedCodeLineIndexes.add(index);
+      if (closesFence(line, fence)) {
+        fence = undefined;
+      }
+      continue;
+    }
+    if (ignoredLineIndexes.has(index)) {
+      continue;
+    }
+
+    const marker = fenceMarker(line);
+    if (marker !== undefined) {
+      fencedCodeLineIndexes.add(index);
+      fence = marker;
+    }
+  }
+  return fencedCodeLineIndexes;
+}
+
 function findMultilineLinkReferenceDefinitions(
-  lines: readonly string[]
+  lines: readonly string[],
+  fencedCodeLineIndexes: ReadonlySet<number>
 ): MultilineLinkReferenceDefinitions {
   const byStart = new Map<number, MultilineLinkReferenceDefinition>();
   const consumedLineIndexes = new Set<number>();
   for (let index = 0; index < lines.length; index += 1) {
-    if (consumedLineIndexes.has(index)) {
+    if (consumedLineIndexes.has(index) || fencedCodeLineIndexes.has(index)) {
       continue;
     }
     const match = emptyLinkReferenceDefinitionPattern.exec(lines[index] ?? "");
@@ -490,11 +518,12 @@ interface SingleLineLinkReferenceTitleContinuations {
 
 function findSingleLineLinkReferenceTitleContinuations(
   lines: readonly string[],
-  alreadyConsumedLineIndexes: ReadonlySet<number>
+  alreadyConsumedLineIndexes: ReadonlySet<number>,
+  fencedCodeLineIndexes: ReadonlySet<number>
 ): SingleLineLinkReferenceTitleContinuations {
   const consumedLineIndexes = new Set<number>();
   for (let index = 0; index < lines.length; index += 1) {
-    if (alreadyConsumedLineIndexes.has(index)) {
+    if (alreadyConsumedLineIndexes.has(index) || fencedCodeLineIndexes.has(index)) {
       continue;
     }
     const match = linkReferenceDefinitionPattern.exec(lines[index] ?? "");
@@ -521,10 +550,32 @@ function visibleMarkdownLines(body: string): VisibleMarkdownDocument | undefined
   const visible: string[] = [];
   const referenceLabels = new Set<string>();
   const rawLines = body.split(/\r?\n/u);
-  const multilineReferenceDefinitions = findMultilineLinkReferenceDefinitions(rawLines);
+  const preliminaryFencedCodeLineIndexes = findFencedCodeLineIndexes(rawLines);
+  const preliminaryMultilineReferenceDefinitions = findMultilineLinkReferenceDefinitions(
+    rawLines,
+    preliminaryFencedCodeLineIndexes
+  );
+  const preliminarySingleLineReferenceTitleContinuations =
+    findSingleLineLinkReferenceTitleContinuations(
+      rawLines,
+      preliminaryMultilineReferenceDefinitions.consumedLineIndexes,
+      preliminaryFencedCodeLineIndexes
+    );
+  const preliminaryConsumedLineIndexes = new Set(
+    preliminaryMultilineReferenceDefinitions.consumedLineIndexes
+  );
+  for (const lineIndex of preliminarySingleLineReferenceTitleContinuations.consumedLineIndexes) {
+    preliminaryConsumedLineIndexes.add(lineIndex);
+  }
+  const fencedCodeLineIndexes = findFencedCodeLineIndexes(rawLines, preliminaryConsumedLineIndexes);
+  const multilineReferenceDefinitions = findMultilineLinkReferenceDefinitions(
+    rawLines,
+    fencedCodeLineIndexes
+  );
   const singleLineReferenceTitleContinuations = findSingleLineLinkReferenceTitleContinuations(
     rawLines,
-    multilineReferenceDefinitions.consumedLineIndexes
+    multilineReferenceDefinitions.consumedLineIndexes,
+    fencedCodeLineIndexes
   );
   let fence: MarkdownFence | undefined;
   let htmlComment = false;
