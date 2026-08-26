@@ -499,6 +499,11 @@ rules:
       expected: "missing"
     },
     {
+      name: "backslash-newline in a link title does not hide HTML-like text",
+      body: ["## Testing", 'Evidence [](foo "title\\', 'bar <div>")'].join("\n"),
+      expected: "missing"
+    },
+    {
       name: "malformed link markers remain fail-closed under bounded scanning",
       body: ["## Testing", "[x](".repeat(512) + "<div>"].join("\n"),
       expected: "missing"
