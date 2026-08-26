@@ -393,7 +393,7 @@ const visibleMarkdownTextPattern =
   /[^\p{White_Space}\p{Control}\p{Format}\p{Mark}\p{Default_Ignorable_Code_Point}]/u;
 const indentedCodePattern = /^(?: {4}|\t)/u;
 const emptyReferenceMarkdownLinkPattern =
-  /!?\[[\p{White_Space}\p{Control}\p{Format}\p{Mark}\p{Default_Ignorable_Code_Point}]*\]\[[^\]]{0,999}\]/gu;
+  /!?\[[\p{White_Space}\p{Control}\p{Format}\p{Mark}\p{Default_Ignorable_Code_Point}]+\]\[[^\]]{0,999}\]/gu;
 const markdownWhitespacePattern = /\s/u;
 
 interface MarkdownScanBudget {
@@ -569,7 +569,7 @@ function emptyInlineLinkEnd(
         return undefined;
       }
       if (character === ">") {
-        return index === angleStart ? undefined : linkEndAfterWhitespace(value, index + 1, budget);
+        return linkEndAfterWhitespace(value, index + 1, budget);
       }
     }
     return undefined;

@@ -481,6 +481,11 @@ rules:
     {
       name: "valid empty angle destination",
       body: "## Testing\n[](<>)",
+      expected: "missing"
+    },
+    {
+      name: "empty reference label remains literal",
+      body: "## Testing\n[][missing]",
       expected: "satisfied"
     },
     {
