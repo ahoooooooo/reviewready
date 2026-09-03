@@ -11,12 +11,18 @@ coverage/
 .env
 .env.*
 !.env.example
-.codex/
-.reviewready-review/
-AGENTS.md
 .npmrc
 *.pem
 *.key
 *.p12
 *.pfx
 credentials*.json
+
+# Codex parent-agent controls and private research/review state are local-only.
+/AGENTS.md
+/HANDOFF.md
+/.agents/
+/.codex/
+/.reviewready-review/
+/docs/agent-handoff.schema.json
+/docs/research/
