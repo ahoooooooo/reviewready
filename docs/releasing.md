@@ -46,7 +46,7 @@ token secret.
 
 The one-time npm trust setup for this repository is:
 
-    npm trust github @ahoooooo/reviewready --repository ahooooooo/reviewready --file release-publish.yml --environment release --allow-publish --yes
+    npm trust github @ahoooooo/reviewready --repository ahoooooooo/reviewready --file release-publish.yml --environment release --allow-publish --yes
 
 Run it only after npm login --auth-type=web has completed. The npm package
 settings must then require two-factor authentication and disallow traditional
