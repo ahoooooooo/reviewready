@@ -46,7 +46,7 @@ A normal `pull_request` workflow remains advisory because the contribution can
 modify the merge-ref workflow that evaluates it. Loading policy contents from
 the base SHA does not by itself protect the caller workflow, Action pin, or
 `policy-path`. The checked-in trusted reference uses a metadata-only
-`pull_request_target` workflow pinned to the exact v1.0.13 release commit, but a
+`pull_request_target` workflow pinned to the exact v1.0.14 release commit, but a
 GitHub required check still does not uniquely identify one workflow definition
 or event. This repository does not provide a production GitHub App or an
 external enforcement service. The checked-in trusted workflow is a
@@ -96,10 +96,10 @@ reviewready validate --policy .reviewready.yml
 The Action can also be used in an advisory workflow:
 
 ```yaml
-- uses: ahoooooooo/reviewready@8c889b17b19e62988025401470a08b880fd74ef5 # v1.0.13
+- uses: ahoooooooo/reviewready@89714b55f0b1f03b949033c75f45a1d0358f00a2 # v1.0.14
 ```
 
-The example pins the exact audited v1.0.13 release commit. The mutable `v1` tag
+The example pins the exact audited v1.0.14 release commit. The mutable `v1` tag
 currently points to that release and is convenient for automatic patch updates,
 but an immutable verified commit is safer.
 The advisory workflow below must not be configured as the repository's only
@@ -166,7 +166,7 @@ Action-only repositories can copy the schema into the repository or reference an
 immutable release URL:
 
 ```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/ahoooooooo/reviewready/v1.0.13/reviewready.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ahoooooooo/reviewready/v1.0.14/reviewready.schema.json
 ```
 
 Keep the schema version aligned with the Action or CLI version being used. A local
@@ -212,7 +212,7 @@ jobs:
       statuses: read
       issues: read
     steps:
-      - uses: ahoooooooo/reviewready@8c889b17b19e62988025401470a08b880fd74ef5 # v1.0.13
+      - uses: ahoooooooo/reviewready@89714b55f0b1f03b949033c75f45a1d0358f00a2 # v1.0.14
 ```
 
 Replace the example test commands with the target repository's own verification.

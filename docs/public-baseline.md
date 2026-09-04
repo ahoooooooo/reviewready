@@ -15,17 +15,17 @@ check from being described as the same thing when they are not.
 
 ## Stable published coordinates
 
-The current stable coordinate set is v1.0.13:
+The current stable coordinate set is v1.0.14:
 
 | Surface                | Coordinate                                                                                 |
 | ---------------------- | ------------------------------------------------------------------------------------------ |
-| Source commit          | `8c889b17b19e62988025401470a08b880fd74ef5`                                                 |
-| Immutable semantic tag | `v1.0.13`                                                                                  |
+| Source commit          | `89714b55f0b1f03b949033c75f45a1d0358f00a2`                                                 |
+| Immutable semantic tag | `v1.0.14`                                                                                  |
 | Stable Action tag      | `v1`                                                                                       |
-| npm latest             | `@ahoooooo/reviewready@1.0.13`                                                             |
-| Immutable Action pin   | `ahoooooooo/reviewready@8c889b17b19e62988025401470a08b880fd74ef5`                          |
-| Immutable schema URL   | `https://raw.githubusercontent.com/ahoooooooo/reviewready/v1.0.13/reviewready.schema.json` |
-| Release evidence       | [v1.0.13 evidence](release-evidence-v1.0.13.md) and [JSON](release-evidence-v1.0.13.json)  |
+| npm latest             | `@ahoooooo/reviewready@1.0.14`                                                             |
+| Immutable Action pin   | `ahoooooooo/reviewready@89714b55f0b1f03b949033c75f45a1d0358f00a2`                          |
+| Immutable schema URL   | `https://raw.githubusercontent.com/ahoooooooo/reviewready/v1.0.14/reviewready.schema.json` |
+| Release evidence       | [v1.0.14 evidence](release-evidence-v1.0.14.md) and [JSON](release-evidence-v1.0.14.json)  |
 
 The semantic tag, release object, npm artifact, stable `v1` ref, and release
 evidence are immutable release surfaces. They are verified together by the
@@ -33,21 +33,22 @@ release process; a later documentation commit does not move them.
 
 ## Source versus published artifact
 
-`main` is currently a release-candidate baseline for v1.0.14. The candidate is
-not yet published and its package manifest is intentionally ahead of npm
-latest. Therefore:
+`main` is a post-release development baseline. It may be ahead of the stable
+release because documentation, dependency, or other unreleased changes can be
+merged before the next release is prepared. Therefore:
 
 - a `main` checkout is not automatically the published v1.0.14 tarball;
-- the package manifest is 1.0.14 while npm latest remains the stable 1.0.13
-  release until the protected workflow completes;
+- the package manifest remains at the last published version until release
+  preparation selects a new unused version;
 - a new release must build, audit, publish, and record one exact artifact; and
 - source, generated `dist`, package privacy, and release evidence are checked by
   `verify:public-baseline`, `verify:dist`, `verify:package`, and
   `release:preflight`.
 
-The candidate status is an explicit transition state, not a rewrite of release
-history. After publication, the baseline is updated with the actual source
-commit, artifact hashes, registry coordinates, and release refs.
+This is an explicit status distinction, not a rewrite of release history. The
+published source commit, artifact hashes, registry coordinates, and release refs
+are recorded in the v1.0.14 evidence file; later documentation commits do not
+move those immutable release surfaces.
 
 ## Capability and authority
 
