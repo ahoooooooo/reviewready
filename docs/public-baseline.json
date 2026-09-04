@@ -18,8 +18,13 @@
     "releaseNotes": "docs/release-evidence-v1.0.13.md",
     "releaseUrl": "https://github.com/ahoooooooo/reviewready/releases/tag/v1.0.13"
   },
+  "releaseCandidate": {
+    "version": "1.0.14",
+    "releaseEvidence": "docs/release-evidence-v1.0.14.json",
+    "releaseNotes": "docs/release-evidence-v1.0.14.md"
+  },
   "sourcePolicy": {
-    "mainStatus": "post-release-unreleased",
+    "mainStatus": "release-candidate",
     "mainMayDifferFromStableArtifact": true,
     "publishedArtifactsImmutable": true,
     "publishRequiresNewVersion": true,

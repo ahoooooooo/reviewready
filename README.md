@@ -25,17 +25,15 @@ pull-request code.
 
 ## Current status
 
-The stable public release is v1.0.13: immutable tag `v1.0.13`, mutable stable
-Action tag `v1`, npm `@ahoooooo/reviewready@1.0.13`, and source commit
-`8c889b17b19e62988025401470a08b880fd74ef5`. The exact coordinates and the
-source-versus-release policy are recorded in the [public baseline](docs/public-baseline.md)
-and its [machine-readable record](docs/public-baseline.json).
+The exact stable release coordinates, immutable source commit, stable Action
+tag, npm package, and source-versus-release policy are recorded in the [public
+baseline](docs/public-baseline.md) and its [machine-readable record](docs/public-baseline.json).
 
-The public `main` branch is a post-release development baseline. It may contain
-documentation or dependency changes after the stable release, so a checkout of
-`main` must not be represented as the already-published v1.0.13 tarball. A new
-release version must be selected and verified before publication; immutable
-release artifacts and historical commits are not rewritten.
+A source checkout can be ahead of the latest published artifact while a new
+release is prepared. A checkout must not be represented as a published tarball
+without the protected workflow's exact artifact, registry, provenance, and
+release evidence. Immutable release artifacts and historical commits are not
+rewritten.
 
 The npm registry and GitHub Releases are authoritative for current public
 release coordinates. Versioned release evidence is recorded in
@@ -57,7 +55,7 @@ must be provided and independently protected by the adopting repository's
 GitHub configuration. A successful named check is not a claim that ReviewReady
 is a unique enforcement provider.
 
-The v1.0.13 package includes bounded `audit collect` and offline `audit replay`
+The v1.0.14 package includes bounded `audit collect` and offline `audit replay`
 evidence-bundle commands. Live audit collection fails closed when repository
 governance is unavailable, contradictory, or uses semantics the normalized
 contract cannot represent; an incomplete audit is not a readiness result or a

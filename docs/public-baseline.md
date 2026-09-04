@@ -33,19 +33,21 @@ release process; a later documentation commit does not move them.
 
 ## Source versus published artifact
 
-`main` is a post-release development baseline. It may be ahead of the stable
-release because documentation, dependency, or other unreleased changes can be
-merged before the next release is prepared. Therefore:
+`main` is currently a release-candidate baseline for v1.0.14. The candidate is
+not yet published and its package manifest is intentionally ahead of npm
+latest. Therefore:
 
-- a `main` checkout is not automatically the published v1.0.13 tarball;
-- the package manifest remains at the last published version until release
-  preparation selects a new unused version;
+- a `main` checkout is not automatically the published v1.0.14 tarball;
+- the package manifest is 1.0.14 while npm latest remains the stable 1.0.13
+  release until the protected workflow completes;
 - a new release must build, audit, publish, and record one exact artifact; and
 - source, generated `dist`, package privacy, and release evidence are checked by
   `verify:public-baseline`, `verify:dist`, `verify:package`, and
   `release:preflight`.
 
-This is an explicit status distinction, not a rewrite of release history.
+The candidate status is an explicit transition state, not a rewrite of release
+history. After publication, the baseline is updated with the actual source
+commit, artifact hashes, registry coordinates, and release refs.
 
 ## Capability and authority
 
