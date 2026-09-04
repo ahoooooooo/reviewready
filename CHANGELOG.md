@@ -5,6 +5,8 @@ the project uses semantic versioning.
 
 ## [Unreleased]
 
+## [1.0.14] - 2026-09-04
+
 ### Documentation
 
 - Establish the ReviewReady Evidence Protocol identity and publish a
