@@ -1,0 +1,85 @@
+{
+  "schema": "reviewready.public-baseline.v1",
+  "product": {
+    "name": "ReviewReady",
+    "protocol": "ReviewReady Evidence Protocol",
+    "positioning": "Trusted Review Intake"
+  },
+  "stableRelease": {
+    "version": "1.0.13",
+    "sourceCommit": "8c889b17b19e62988025401470a08b880fd74ef5",
+    "immutableTag": "v1.0.13",
+    "stableActionTag": "v1",
+    "npmPackage": "@ahoooooo/reviewready",
+    "npmLatestVersion": "1.0.13",
+    "actionCommit": "ahoooooooo/reviewready@8c889b17b19e62988025401470a08b880fd74ef5",
+    "schemaRef": "https://raw.githubusercontent.com/ahoooooooo/reviewready/v1.0.13/reviewready.schema.json",
+    "releaseEvidence": "docs/release-evidence-v1.0.13.json",
+    "releaseNotes": "docs/release-evidence-v1.0.13.md",
+    "releaseUrl": "https://github.com/ahoooooooo/reviewready/releases/tag/v1.0.13"
+  },
+  "sourcePolicy": {
+    "mainStatus": "post-release-unreleased",
+    "mainMayDifferFromStableArtifact": true,
+    "publishedArtifactsImmutable": true,
+    "publishRequiresNewVersion": true,
+    "verificationCommands": [
+      "npm run verify:public-baseline",
+      "npm run verify:dist",
+      "npm run verify:package",
+      "npm run release:preflight"
+    ]
+  },
+  "capabilityBoundary": {
+    "action": {
+      "status": "shipped",
+      "authority": "advisory",
+      "permissions": "read-only GitHub evidence"
+    },
+    "cli": {
+      "status": "shipped",
+      "authority": "local and read-only",
+      "permissions": "named environment token only for live collection"
+    },
+    "library": {
+      "status": "shipped",
+      "exports": "CLI root and versioned schema files",
+      "authority": "not a provider or merge authority"
+    },
+    "githubApp": {
+      "status": "not-shipped",
+      "authority": "no production hosted enforcement"
+    },
+    "providerSdk": {
+      "status": "not-shipped",
+      "authority": "no public provider conformance surface"
+    }
+  },
+  "publicStatusLinks": {
+    "backlog": "https://github.com/ahoooooooo/reviewready/issues",
+    "pullRequests": "https://github.com/ahoooooooo/reviewready/pulls",
+    "branches": "https://github.com/ahoooooooo/reviewready/branches",
+    "mainCommits": "https://github.com/ahoooooooo/reviewready/commits/main",
+    "releases": "https://github.com/ahoooooooo/reviewready/releases"
+  },
+  "deliberatelyUnshipped": [
+    "production GitHub App",
+    "durable external enforcement service",
+    "provider SDK and conformance ecosystem",
+    "external pilot or adoption evidence"
+  ],
+  "excludedFromPublicSurface": [
+    "parent-agent control files",
+    "live Handoff and raw control evidence",
+    "private review history",
+    "private research documents",
+    "credentials, profiles, sessions, and other secret material"
+  ],
+  "claimsPolicy": {
+    "sourceContracts": "design evidence only",
+    "adrAndTests": "implementation evidence only",
+    "provenance": "artifact lineage evidence only",
+    "advisoryCheck": "evidence result only",
+    "mergeAuthorization": "not provided by this package"
+  }
+}

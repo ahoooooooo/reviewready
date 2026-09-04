@@ -1,13 +1,19 @@
 # ReviewReady
 
+**ReviewReady Evidence Protocol** — Trusted Review Intake for pull requests.
+
 [![CI](https://github.com/ahoooooooo/reviewready/actions/workflows/ci.yml/badge.svg)](https://github.com/ahoooooooo/reviewready/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/%40ahoooooo%2Freviewready.svg)](https://www.npmjs.com/package/@ahoooooo/reviewready)
 [![npm downloads](https://img.shields.io/npm/dm/%40ahoooooo%2Freviewready.svg)](https://www.npmjs.com/package/@ahoooooo/reviewready)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-ReviewReady is a deterministic evidence gate for pull requests. A repository
-declares what must be present before a particular kind of change consumes human
-review time; ReviewReady reports what is verified and what is still missing.
+ReviewReady is the open-source implementation of the ReviewReady Evidence
+Protocol: a deterministic Trusted Review Intake layer for pull requests. A
+repository declares what must be present before a particular kind of change
+consumes human review time; ReviewReady reports what is verified and what is
+still missing. The protocol name describes the public evidence contracts and
+trust boundaries; it does not imply a hosted service or an authoritative merge
+provider.
 
 It answers one narrow question:
 
@@ -18,6 +24,18 @@ or merge. There are no model calls, hosted service, database, or execution of
 pull-request code.
 
 ## Current status
+
+The stable public release is v1.0.13: immutable tag `v1.0.13`, mutable stable
+Action tag `v1`, npm `@ahoooooo/reviewready@1.0.13`, and source commit
+`8c889b17b19e62988025401470a08b880fd74ef5`. The exact coordinates and the
+source-versus-release policy are recorded in the [public baseline](docs/public-baseline.md)
+and its [machine-readable record](docs/public-baseline.json).
+
+The public `main` branch is a post-release development baseline. It may contain
+documentation or dependency changes after the stable release, so a checkout of
+`main` must not be represented as the already-published v1.0.13 tarball. A new
+release version must be selected and verified before publication; immutable
+release artifacts and historical commits are not rewritten.
 
 The npm registry and GitHub Releases are authoritative for current public
 release coordinates. Versioned release evidence is recorded in
@@ -30,7 +48,7 @@ A normal `pull_request` workflow remains advisory because the contribution can
 modify the merge-ref workflow that evaluates it. Loading policy contents from
 the base SHA does not by itself protect the caller workflow, Action pin, or
 `policy-path`. The checked-in trusted reference uses a metadata-only
-`pull_request_target` workflow pinned to the exact v1.0.11 release commit, but a
+`pull_request_target` workflow pinned to the exact v1.0.13 release commit, but a
 GitHub required check still does not uniquely identify one workflow definition
 or event. This repository does not provide a production GitHub App or an
 external enforcement service. The checked-in trusted workflow is a
@@ -47,6 +65,27 @@ workflow-authority claim. [SECURITY.md](SECURITY.md) lists the durable boundary
 and current limitations. Published package bytes and historical releases are not
 rewritten when repository documentation advances.
 
+Live backlog, pull requests, branches, commit verification, and release
+freshness are provider state and are intentionally linked rather than frozen as
+stale counts: [issues](https://github.com/ahoooooooo/reviewready/issues),
+[pull requests](https://github.com/ahoooooooo/reviewready/pulls),
+[branches](https://github.com/ahoooooooo/reviewready/branches),
+[main commits](https://github.com/ahoooooooo/reviewready/commits/main), and
+[releases](https://github.com/ahoooooooo/reviewready/releases).
+
+## Capability and authority boundaries
+
+| Public entry        | Shipped capability                                                                                 | Authority and permission boundary                                                                                                    |
+| ------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| GitHub Action       | Evaluates bounded pull-request evidence and emits `ready` or `not_ready`.                          | Advisory, read-only GitHub access; it is not a unique issuer or merge authority.                                                     |
+| CLI                 | Validates policies, evaluates normalized fixtures, and collects or replays bounded audit evidence. | Local and read-only; live collection reads only a caller-named environment variable and does not mutate GitHub.                      |
+| npm/library         | Exposes the CLI entry point and versioned schema files.                                            | The bundled App, webhook, and ingress modules are contracts/internal implementation, not a hosted service or supported provider SDK. |
+| GitHub App/provider | Not shipped in this repository.                                                                    | No production App, durable external store, external enforcement service, or external adoption claim is included.                     |
+
+The [public baseline](docs/public-baseline.md) is the canonical summary of
+these capabilities, live-status links, release coordinates, and deliberately
+unshipped work.
+
 ## Quick start
 
 Install the CLI from npm. Node.js 22 or newer is required:
@@ -59,10 +98,10 @@ reviewready validate --policy .reviewready.yml
 The Action can also be used in an advisory workflow:
 
 ```yaml
-- uses: ahoooooooo/reviewready@e9cd421ac106adb5731dd22b714701a136e937f8 # v1.0.11
+- uses: ahoooooooo/reviewready@8c889b17b19e62988025401470a08b880fd74ef5 # v1.0.13
 ```
 
-The example pins the exact audited v1.0.11 release commit. The mutable `v1` tag
+The example pins the exact audited v1.0.13 release commit. The mutable `v1` tag
 currently points to that release and is convenient for automatic patch updates,
 but an immutable verified commit is safer.
 The advisory workflow below must not be configured as the repository's only
@@ -129,7 +168,7 @@ Action-only repositories can copy the schema into the repository or reference an
 immutable release URL:
 
 ```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/ahoooooooo/reviewready/v1.0.12/reviewready.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ahoooooooo/reviewready/v1.0.13/reviewready.schema.json
 ```
 
 Keep the schema version aligned with the Action or CLI version being used. A local
@@ -175,7 +214,7 @@ jobs:
       statuses: read
       issues: read
     steps:
-      - uses: ahoooooooo/reviewready@e9cd421ac106adb5731dd22b714701a136e937f8 # v1.0.11
+      - uses: ahoooooooo/reviewready@8c889b17b19e62988025401470a08b880fd74ef5 # v1.0.13
 ```
 
 Replace the example test commands with the target repository's own verification.

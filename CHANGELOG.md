@@ -5,6 +5,17 @@ the project uses semantic versioning.
 
 ## [Unreleased]
 
+### Documentation
+
+- Establish the ReviewReady Evidence Protocol identity and publish a
+  machine-readable public coordinate baseline for the stable v1.0.13 release,
+  post-release `main`, and the advisory-versus-authoritative boundary.
+
+### Fixed
+
+- Pin the vulnerable `fast-uri` transitive dependency to the patched 3.1.7
+  release in the development dependency tree.
+
 ## [1.0.13] - 2026-08-25
 
 ### Documentation

@@ -1,5 +1,12 @@
 # Architecture and trust boundaries
 
+ReviewReady is the open-source implementation of the **ReviewReady Evidence
+Protocol**, positioned as Trusted Review Intake before human or AI review. The
+Action and CLI are the shipped entry points. The repository does not ship a
+hosted GitHub App, durable external store, production enforcement service, or
+provider SDK; source contracts and pure ingress primitives must not be
+described as those deployed capabilities.
+
 ## Modules
 
 1. `policy`: parses YAML and validates a closed, versioned schema.
@@ -103,7 +110,7 @@ accepting stale evidence.
 
 The Action source supports `pull_request`, `pull_request_review`, and
 `pull_request_target` events. The checked-in trusted reference uses
-`pull_request_target` and is pinned to the published v1.0.11 release commit. That
+`pull_request_target` and is pinned to the published v1.0.13 release commit. That
 protects the selected base workflow from the evaluated PR, but the current
 GitHub Actions App requirement does not uniquely identify that workflow.
 Review events may be submitted, edited, or dismissed. For GitHub review data,

@@ -9,7 +9,7 @@ const security = await readFile("SECURITY.md", "utf8");
 const architecture = await readFile("docs/architecture.md", "utf8");
 const changelog = await readFile("CHANGELOG.md", "utf8");
 const canonicalRepository = `ah${"o".repeat(8)}/reviewready`;
-const publishedReleaseCommit = "e9cd421ac106adb5731dd22b714701a136e937f8";
+const publishedReleaseCommit = "8c889b17b19e62988025401470a08b880fd74ef5";
 
 describe("trusted ReviewReady workflow", () => {
   it("uses the canonical GitHub repository as its immutable trust root", () => {
@@ -37,9 +37,9 @@ describe("trusted ReviewReady workflow", () => {
     );
   });
 
-  it("pins the trusted and documented Action examples to the published v1.0.11 release", () => {
-    expect(workflow).toContain(`uses: ${canonicalRepository}@${publishedReleaseCommit} # v1.0.11`);
-    expect(readme).toContain(`uses: ${canonicalRepository}@${publishedReleaseCommit} # v1.0.11`);
+  it("pins the trusted and documented Action examples to the published v1.0.13 release", () => {
+    expect(workflow).toContain(`uses: ${canonicalRepository}@${publishedReleaseCommit} # v1.0.13`);
+    expect(readme).toContain(`uses: ${canonicalRepository}@${publishedReleaseCommit} # v1.0.13`);
     expect(workflow).not.toContain("main v1.0.6 candidate");
     expect(readme).not.toContain("v1.0.5 bootstrap pin");
   });
@@ -59,7 +59,7 @@ describe("trusted ReviewReady workflow", () => {
     expect(readme).toContain("The npm registry and GitHub Releases are authoritative");
     expect(readme).not.toContain("This commit prepares the");
     expect(readme).not.toContain("candidate checklist");
-    expect(readme).toContain("/v1.0.12/reviewready.schema.json");
+    expect(readme).toContain("/v1.0.13/reviewready.schema.json");
     expect(readme).toContain(
       "The v" +
         version +

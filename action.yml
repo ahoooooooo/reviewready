@@ -1,5 +1,5 @@
 name: ReviewReady
-description: Check whether a pull request has the evidence required for human review.
+description: "ReviewReady Evidence Protocol: advisory, deterministic evidence intake before human review."
 author: ReviewReady contributors
 
 inputs:
