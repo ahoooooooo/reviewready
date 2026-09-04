@@ -1,7 +1,7 @@
 {
   "name": "@ahoooooo/reviewready",
   "version": "1.0.13",
-  "description": "Deterministic evidence checks before a pull request consumes human review time.",
+  "description": "ReviewReady Evidence Protocol: deterministic trusted review intake before human or AI review.",
   "homepage": "https://github.com/ahoooooooo/reviewready#readme",
   "bugs": {
     "url": "https://github.com/ahoooooooo/reviewready/issues"
@@ -20,6 +20,9 @@
     "github-actions",
     "pull-request",
     "code-review",
+    "reviewready-evidence-protocol",
+    "trusted-review-intake",
+    "evidence-admission",
     "policy-as-code",
     "developer-tools",
     "open-source",
@@ -70,11 +73,12 @@
     "audit:dependencies": "npm audit --audit-level=high",
     "verify:package": "node scripts/verify-package.mjs",
     "verify:dist": "node scripts/verify-dist.mjs",
+    "verify:public-baseline": "node scripts/verify-public-baseline.mjs",
     "package:smoke": "node scripts/package-smoke.mjs",
     "release:preflight": "node scripts/release-preflight.mjs",
     "release:verify": "node scripts/release-preflight.mjs --provenance",
-    "check": "npm run format:check && npm run lint && npm run typecheck && npm run bundle && npm run verify:dist && npm run test:coverage && npm run verify:package && npm run package:smoke",
-    "check:compat": "npm run format:check && npm run lint && npm run typecheck && npm run bundle && npm run verify:dist && npm run test:coverage && npm run verify:package && npm run package:smoke",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm run bundle && npm run verify:dist && npm run test:coverage && npm run verify:package && npm run verify:public-baseline && npm run package:smoke",
+    "check:compat": "npm run format:check && npm run lint && npm run typecheck && npm run bundle && npm run verify:dist && npm run test:coverage && npm run verify:package && npm run verify:public-baseline && npm run package:smoke",
     "prepublishOnly": "npm run check",
     "prepack": "npm run build"
   },

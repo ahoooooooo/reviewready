@@ -1,5 +1,12 @@
 # Architecture and trust boundaries
 
+ReviewReady is the open-source implementation of the **ReviewReady Evidence
+Protocol**, positioned as Trusted Review Intake before human or AI review. The
+Action and CLI are the shipped entry points. The repository does not ship a
+hosted GitHub App, durable external store, production enforcement service, or
+provider SDK; source contracts and pure ingress primitives must not be
+described as those deployed capabilities.
+
 ## Modules
 
 1. `policy`: parses YAML and validates a closed, versioned schema.
