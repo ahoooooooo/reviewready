@@ -80,7 +80,7 @@ out, download, import, cache, build, or execute pull-request code.
 - A mutable major Action tag is convenient but weaker than a full commit SHA.
   High-assurance adopters should pin the release commit and use update automation.
 - The checked-in trusted workflow is a metadata-only `pull_request_target`
-  reference pinned to the exact v1.0.13 release commit. The active ruleset selects
+  reference pinned to the exact v1.0.14 release commit. The active ruleset selects
   the GitHub Actions App as the required-check source, but GitHub required checks
   do not bind one workflow definition or event trigger. This package does not
   provide hosted ingress or external reconciliation, so it must not be called a
