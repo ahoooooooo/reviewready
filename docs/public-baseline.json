@@ -6,25 +6,20 @@
     "positioning": "Trusted Review Intake"
   },
   "stableRelease": {
-    "version": "1.0.13",
-    "sourceCommit": "8c889b17b19e62988025401470a08b880fd74ef5",
-    "immutableTag": "v1.0.13",
+    "version": "1.0.14",
+    "sourceCommit": "89714b55f0b1f03b949033c75f45a1d0358f00a2",
+    "immutableTag": "v1.0.14",
     "stableActionTag": "v1",
     "npmPackage": "@ahoooooo/reviewready",
-    "npmLatestVersion": "1.0.13",
-    "actionCommit": "ahoooooooo/reviewready@8c889b17b19e62988025401470a08b880fd74ef5",
-    "schemaRef": "https://raw.githubusercontent.com/ahoooooooo/reviewready/v1.0.13/reviewready.schema.json",
-    "releaseEvidence": "docs/release-evidence-v1.0.13.json",
-    "releaseNotes": "docs/release-evidence-v1.0.13.md",
-    "releaseUrl": "https://github.com/ahoooooooo/reviewready/releases/tag/v1.0.13"
-  },
-  "releaseCandidate": {
-    "version": "1.0.14",
+    "npmLatestVersion": "1.0.14",
+    "actionCommit": "ahoooooooo/reviewready@89714b55f0b1f03b949033c75f45a1d0358f00a2",
+    "schemaRef": "https://raw.githubusercontent.com/ahoooooooo/reviewready/v1.0.14/reviewready.schema.json",
     "releaseEvidence": "docs/release-evidence-v1.0.14.json",
-    "releaseNotes": "docs/release-evidence-v1.0.14.md"
+    "releaseNotes": "docs/release-evidence-v1.0.14.md",
+    "releaseUrl": "https://github.com/ahoooooooo/reviewready/releases/tag/v1.0.14"
   },
   "sourcePolicy": {
-    "mainStatus": "release-candidate",
+    "mainStatus": "post-release-unreleased",
     "mainMayDifferFromStableArtifact": true,
     "publishedArtifactsImmutable": true,
     "publishRequiresNewVersion": true,
