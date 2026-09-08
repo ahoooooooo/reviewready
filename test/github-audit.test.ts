@@ -891,5 +891,3 @@ describe("GitHub repository audit collector", () => {
     expect(snapshot.completeness.missing).toContain("base-revision-changed");
   });
 });
-
-void ({} as AuditSnapshot);

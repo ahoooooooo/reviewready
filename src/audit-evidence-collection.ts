@@ -708,8 +708,8 @@ export function buildAuditEvidenceBundle(input: BuildAuditEvidenceBundleInput): 
       missing: [...evidenceCompleteness.missing]
     },
     workflows: input.snapshot.workflows.map((workflow) => {
-      const { artifactSha256, ...legacyWorkflow } = workflow;
-      void artifactSha256;
+      const legacyWorkflow = { ...workflow };
+      Reflect.deleteProperty(legacyWorkflow, "artifactSha256");
       return legacyWorkflow;
     })
   };
