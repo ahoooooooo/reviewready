@@ -18,6 +18,11 @@
     "releaseNotes": "docs/release-evidence-v1.0.14.md",
     "releaseUrl": "https://github.com/ahoooooooo/reviewready/releases/tag/v1.0.14"
   },
+  "releaseCandidate": {
+    "version": "1.0.15",
+    "releaseEvidence": "docs/release-evidence-v1.0.15.json",
+    "releaseNotes": "docs/release-evidence-v1.0.15.md"
+  },
   "sourcePolicy": {
     "nextMilestone": {
       "name": "public-consistency-baseline",
@@ -36,7 +41,7 @@
         "large refactors"
       ]
     },
-    "mainStatus": "post-release-unreleased",
+    "mainStatus": "release-candidate",
     "mainMayDifferFromStableArtifact": true,
     "publishedArtifactsImmutable": true,
     "publishRequiresNewVersion": true,
