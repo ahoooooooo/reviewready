@@ -53,11 +53,11 @@ will retain that target forever.
 
 ## Source versus published artifact
 
-The public consistency baseline recorded in sourcePolicy.completedMilestone is
-complete. It covered existing documentation and checks, revalidation of #121 then
-#129 then #130 on updated bases, package/Action/PR acceptance, and the v1.0.15
-patch release. New capabilities, App/SDK hosting, a new protocol version, and
-large refactors remained outside that release scope.
+The public consistency baseline recorded in `sourcePolicy.completedMilestone`
+is being corrected in the v1.0.16 candidate. The current scope is documentation
+and parser agreement, TA-2 status accuracy, packaged README version alignment,
+and fail-closed release verification. New capabilities, App/SDK hosting, a new
+protocol version, and large refactors remain outside this release scope.
 
 The machine-readable mainStatus distinguishes post-release development from
 release-candidate preparation. Either source state may be ahead of the verified
@@ -65,24 +65,46 @@ stable artifact because documentation, dependency, or other unreleased changes
 can be merged before publication. Therefore:
 
 - a `main` checkout is not automatically the published v1.0.15 tarball;
-- the package manifest remains at the last published version until release
-  preparation selects a new unused version;
+- this checkout is a v1.0.16 release candidate, not a published npm artifact;
 - a new release must build, audit, publish, and record one exact artifact; and
 - source, generated `dist`, package privacy, and release evidence are checked by
   `verify:public-baseline`, `verify:dist`, `verify:package`, and
   `release:preflight`.
 
-Before packing a candidate, its README package version must match the package
-manifest. Verified Action and schema examples may retain the last verified
-stable release while a candidate is prepared, and are labeled separately from
-the candidate package version. The baseline's stable coordinates advance only
-after publication evidence exists. A candidate does not embed its own future
-commit SHA; the release evidence binds the actual source commit and artifact.
+Before packing a candidate, its README package version, semantic-version Action
+examples, schema URLs, and version-bound product-document links must use the same
+candidate version. The baseline's stable coordinates advance only after
+publication evidence exists. A candidate does not embed its own future commit
+SHA; the release evidence binds the actual source commit and artifact.
 
 This is an explicit status distinction, not a rewrite of release history. The
 published source commit, artifact hashes, registry coordinates, and observed release refs
 are recorded in the v1.0.15 evidence file; later documentation commits do not
 rewrite that historical record.
+
+## TA-2 dogfood acceptance
+
+Workflow run
+[`34184361828`](https://github.com/ahoooooooo/reviewready/actions/runs/34184361828)
+saved and independently replayed the artifact for revision
+`704e0da930aca14ed1ee37ce7c2f3b95184f5fd4`. Artifact digest
+`sha256:4e334e73be48d0dd97a2075661cd82304d04d09ffa9d5ea380bb9d6de9621335`
+and review job `101929673227` are recorded in the machine-readable baseline.
+
+The artifact and replay were internally consistent, so the review job succeeded.
+The repository-audit report itself was `incomplete`, with
+`settings-authority-incomplete` recorded as missing evidence. Replay integrity,
+report completeness, repository-audit status, and milestone acceptance are
+separate results; this observation is not an audit `pass`.
+
+The 19 replayed findings were: four incomplete governance observations
+(`AUDIT_BRANCH_PROTECTION_UNKNOWN`, `AUDIT_RULESET_BYPASS_UNKNOWN`,
+`AUDIT_SNAPSHOT_INCOMPLETE`, and `AUDIT_TAG_PROTECTION_UNKNOWN`); six
+`AUDIT_TRUSTED_ROOT_MISSING` and six `AUDIT_WORKFLOW_NOT_PROTECTED`
+findings, one for each inspected workflow; and one each for
+`DEPLOYMENT_SINK`, `PULL_REQUEST_TARGET_WORKFLOW`, and
+`WORKFLOW_WRITE_PERMISSION`. These findings are preserved as the historical
+result; the baseline correction does not suppress or reclassify them.
 
 ## Capability and authority
 

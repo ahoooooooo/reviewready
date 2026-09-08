@@ -25,9 +25,9 @@ pull-request code.
 
 ## Current status
 
-Package version: `1.0.15`.
+Package version: `1.0.16`.
 
-Verified Action examples: `v1.0.15`.
+Verified Action examples: `v1.0.16`.
 
 The exact stable release coordinates, immutable source commit, stable Action
 tag, npm package, and source-versus-release policy are recorded in the [public
@@ -36,10 +36,9 @@ and its [machine-readable record](https://github.com/ahoooooooo/reviewready/blob
 
 A source checkout can be ahead of the latest published artifact while a new
 release is prepared. The package version identifies this README's source or
-packaged version; it does not establish publication. Verified Action and schema
-examples identify the last verified release recorded with this README and may
-predate a candidate package. A checkout must not be represented as a published tarball
-without the protected workflow's exact artifact, registry, provenance, and
+packaged version; it does not establish publication. Action and schema examples
+use that same semantic-version coordinate. A checkout must not be represented as
+a published tarball without the protected workflow's exact artifact, registry, provenance, and
 release evidence. Immutable release artifacts and historical commits are not
 rewritten.
 
@@ -54,7 +53,8 @@ A normal `pull_request` workflow remains advisory because the contribution can
 modify the merge-ref workflow that evaluates it. Loading policy contents from
 the base SHA does not by itself protect the caller workflow, Action pin, or
 `policy-path`. The checked-in trusted reference uses a metadata-only
-`pull_request_target` workflow pinned to the exact v1.0.15 release commit, but a
+`pull_request_target` workflow pinned to the exact stable release commit recorded
+in the public baseline, but a
 GitHub required check still does not uniquely identify one workflow definition
 or event. This repository does not provide a production GitHub App or an
 external enforcement service. The checked-in trusted workflow is a
@@ -109,15 +109,16 @@ reviewready validate --policy .reviewready.yml
 The Action can also be used in an advisory workflow:
 
 ```yaml
-- uses: ahoooooooo/reviewready@53c1c679387ad4005e07a5350609cca302d882d4 # v1.0.15
+- uses: ahoooooooo/reviewready@v1.0.16 # v1.0.16
 ```
 
-The example pins the exact audited v1.0.15 release commit. Full commit SHAs
-identify fixed source revisions. Semantic-version tags and published npm versions
-are immutable under project policy. The mutable `v1` alias can move only after
-release verification; npm `latest` is also a mutable registry tag. Pin a verified
-full commit SHA when automatic alias updates are unsuitable. Release evidence
-records a historical publication observation, not the aliases' live targets.
+The example selects this package's semantic-version release. GitHub release
+immutability must lock that tag and its assets before publication can pass. Full
+commit SHAs identify fixed source revisions; the exact audited commit is recorded
+in the versioned release evidence for users who require a SHA pin. The mutable
+`v1` alias can move only after release verification; npm `latest` is also a
+mutable registry tag. Release evidence records a historical publication
+observation, not the aliases' live targets.
 The advisory workflow below must not be configured as the repository's only
 trusted merge authority unless its workflow and policy selection are protected by
 an independent repository or organization rule.
@@ -182,7 +183,7 @@ Action-only repositories can copy the schema into the repository or reference an
 immutable release URL:
 
 ```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/ahoooooooo/reviewready/v1.0.15/reviewready.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ahoooooooo/reviewready/v1.0.16/reviewready.schema.json
 ```
 
 Keep the schema version aligned with the Action or CLI version being used. A local
@@ -228,7 +229,7 @@ jobs:
       statuses: read
       issues: read
     steps:
-      - uses: ahoooooooo/reviewready@53c1c679387ad4005e07a5350609cca302d882d4 # v1.0.15
+      - uses: ahoooooooo/reviewready@v1.0.16 # v1.0.16
 ```
 
 Replace the example test commands with the target repository's own verification.
@@ -310,7 +311,7 @@ reviewready check --policy .reviewready.yml --input input.json
 ```
 
 The normalized input shape and examples are documented in the
-[product specification](https://github.com/ahoooooooo/reviewready/blob/main/docs/product-spec.md).
+[product specification](https://github.com/ahoooooooo/reviewready/blob/v1.0.16/docs/product-spec.md).
 The npm package includes the CLI and schemas; it does not include `docs/` or
 `fixtures/`. The following sample commands require a repository checkout and
 run from its root:
@@ -463,7 +464,7 @@ previous path are evaluated; the Git separator is never rewritten.
   authorship, or legal responsibility.
 
 The full editor schema is [reviewready.schema.json](reviewready.schema.json). The
-executable behavior is specified in [docs/product-spec.md](https://github.com/ahoooooooo/reviewready/blob/main/docs/product-spec.md).
+executable behavior for this version is specified in [docs/product-spec.md](https://github.com/ahoooooooo/reviewready/blob/v1.0.16/docs/product-spec.md).
 
 ReviewReady v1 intentionally does not evaluate `merge_group`: GitHub's synthetic
 merge commit does not carry a complete per-PR body, review, and closing-issue
@@ -472,7 +473,7 @@ separate trustworthy aggregation design.
 
 The ordinary pull_request caller workflow is an advisory integration unless the
 repository separately protects the workflow root and required result. See
-[the trusted workflow design](https://github.com/ahoooooooo/reviewready/blob/main/docs/adr/0001-trusted-workflow-root.md) for the
+[the trusted workflow design](https://github.com/ahoooooooo/reviewready/blob/v1.0.16/docs/adr/0001-trusted-workflow-root.md) for the
 security boundary and the settings that must be verified in GitHub.
 
 ## Security model
@@ -499,7 +500,7 @@ security boundary and the settings that must be verified in GitHub.
   it checks out, downloads, imports, caches, or executes untrusted pull-request
   code.
 
-See [SECURITY.md](https://github.com/ahoooooooo/reviewready/blob/main/SECURITY.md) and [docs/architecture.md](https://github.com/ahoooooooo/reviewready/blob/main/docs/architecture.md) for
+See the current [SECURITY.md](https://github.com/ahoooooooo/reviewready/blob/main/SECURITY.md) and this version's [docs/architecture.md](https://github.com/ahoooooooo/reviewready/blob/v1.0.16/docs/architecture.md) for
 the trust model and current known limitations.
 
 ## Development

@@ -18,15 +18,21 @@
     "releaseNotes": "docs/release-evidence-v1.0.15.md",
     "releaseUrl": "https://github.com/ahoooooooo/reviewready/releases/tag/v1.0.15"
   },
+  "releaseCandidate": {
+    "version": "1.0.16",
+    "releaseEvidence": "docs/release-evidence-v1.0.16.json",
+    "releaseNotes": "docs/release-evidence-v1.0.16.md"
+  },
   "sourcePolicy": {
     "completedMilestone": {
       "name": "public-consistency-baseline",
-      "status": "complete",
+      "status": "in-progress",
       "scope": [
-        "existing public documentation and consistency checks",
-        "revalidate and integrate #121, #129, then #130 on updated bases",
-        "installed package, committed Action bundle, and PR event acceptance",
-        "one new patch release with verified public coordinates and artifact evidence"
+        "correct current public documentation and parser contracts",
+        "record TA-2 replay integrity separately from its incomplete audit result",
+        "align packaged README examples and version-bound links with the candidate",
+        "verify immutable releases and exact-commit prerequisite checks",
+        "publish one patch release with verified GitHub, npm, and Marketplace coordinates"
       ],
       "nonGoals": [
         "new product capabilities",
@@ -37,7 +43,7 @@
         "large refactors"
       ]
     },
-    "mainStatus": "post-release-unreleased",
+    "mainStatus": "release-candidate",
     "mainMayDifferFromStableArtifact": true,
     "publishedArtifactsImmutable": true,
     "publishRequiresNewVersion": true,
@@ -47,6 +53,28 @@
       "npm run verify:package",
       "npm run release:preflight"
     ]
+  },
+  "ta2DogfoodObservation": {
+    "revision": "704e0da930aca14ed1ee37ce7c2f3b95184f5fd4",
+    "workflowRun": 34184361828,
+    "reviewJob": 101929673227,
+    "artifactName": "reviewready-ta2-evidence-704e0da930aca14ed1ee37ce7c2f3b95184f5fd4",
+    "artifactDigest": "sha256:4e334e73be48d0dd97a2075661cd82304d04d09ffa9d5ea380bb9d6de9621335",
+    "replayIntegrity": "verified",
+    "repositoryAuditStatus": "incomplete",
+    "missing": ["settings-authority-incomplete"],
+    "totalFindings": 19,
+    "findingCounts": {
+      "AUDIT_BRANCH_PROTECTION_UNKNOWN": 1,
+      "AUDIT_RULESET_BYPASS_UNKNOWN": 1,
+      "AUDIT_SNAPSHOT_INCOMPLETE": 1,
+      "AUDIT_TAG_PROTECTION_UNKNOWN": 1,
+      "AUDIT_TRUSTED_ROOT_MISSING": 6,
+      "AUDIT_WORKFLOW_NOT_PROTECTED": 6,
+      "DEPLOYMENT_SINK": 1,
+      "PULL_REQUEST_TARGET_WORKFLOW": 1,
+      "WORKFLOW_WRITE_PERMISSION": 1
+    }
   },
   "capabilityBoundary": {
     "action": {
@@ -78,7 +106,8 @@
     "pullRequests": "https://github.com/ahoooooooo/reviewready/pulls",
     "branches": "https://github.com/ahoooooooo/reviewready/branches",
     "mainCommits": "https://github.com/ahoooooooo/reviewready/commits/main",
-    "releases": "https://github.com/ahoooooooo/reviewready/releases"
+    "releases": "https://github.com/ahoooooooo/reviewready/releases",
+    "marketplace": "https://github.com/marketplace/actions/reviewready"
   },
   "deliberatelyUnshipped": [
     "production GitHub App",

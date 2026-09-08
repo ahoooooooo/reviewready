@@ -74,6 +74,21 @@ function markdownTable(text, heading) {
   return rows;
 }
 
+/** @param {string} text @param {string} heading @param {string} language */
+function markdownCodeBlock(text, heading, language) {
+  const section =
+    text
+      .replaceAll("\r\n", "\n")
+      .split("### " + heading + "\n")[1]
+      ?.split("\n### ")[0]
+      ?.split("\n## ")[0] ?? "";
+  const fence = BACKTICK.repeat(3);
+  const match = section.match(
+    new RegExp("^" + fence + language + "\\n([\\s\\S]*?)^" + fence + "\\s*$", "mu")
+  );
+  return match?.[1];
+}
+
 /** @param {unknown} value @returns {string[]} */
 function actionReferences(value) {
   if (Array.isArray(value)) return value.flatMap((entry) => actionReferences(entry));
@@ -165,11 +180,17 @@ export function verifyPackagedReadme(readme, packageVersion, packagedPaths) {
   if (markdownField(readme, "Package version") !== packageVersion) {
     errors.push("README package version does not match the packaged manifest");
   }
+  const expectedTag = `v${packageVersion}`;
+  if (markdownField(readme, "Verified Action examples") !== expectedTag) {
+    errors.push("README Action example version does not match the packaged manifest");
+  }
   for (const match of readme.matchAll(/\bThe v(\d+\.\d+\.\d+) package\b/gu)) {
     if (match[1] !== packageVersion) errors.push("README package capability version is stale");
   }
   const references = yamlActionReferences(readme);
-  if (references.length > 0) {
+  if (references.length === 0) {
+    errors.push("README has no Action example");
+  } else {
     const fence = BACKTICK.repeat(3);
     const pattern = new RegExp(
       "^" + fence + "ya?ml[^\\n]*\\n([\\s\\S]*?)^" + fence + "\\s*$",
@@ -183,14 +204,34 @@ export function verifyPackagedReadme(readme, packageVersion, packagedPaths) {
         )
       );
     }
-    if (!/^v\d+\.\d+\.\d+$/u.test(markdownField(readme, "Verified Action examples") ?? "")) {
-      errors.push("README must label the verified Action example version separately");
-    }
     if (
       new Set(references).size !== 1 ||
-      references.some((ref) => !/^ahoooooooo\/reviewready@[0-9a-f]{40}$/u.test(ref))
+      references.some((ref) => ref !== `ahoooooooo/reviewready@${expectedTag}`)
     ) {
-      errors.push("README Action examples must use one immutable verified commit");
+      errors.push("README Action examples must use the packaged semantic version");
+    }
+  }
+  const schemaRefs = [
+    ...readme.matchAll(
+      /^# yaml-language-server: \$schema=(https:\/\/raw\.githubusercontent\.com\/\S+)\s*$/gmu
+    )
+  ].map((match) => match[1]);
+  const expectedSchema = `https://raw.githubusercontent.com/ahoooooooo/reviewready/${expectedTag}/reviewready.schema.json`;
+  if (schemaRefs.length === 0 || schemaRefs.some((reference) => reference !== expectedSchema)) {
+    errors.push("README schema examples must use the packaged semantic version");
+  }
+  const versionedDocuments = [
+    "docs/product-spec.md",
+    "docs/architecture.md",
+    "docs/adr/0001-trusted-workflow-root.md"
+  ];
+  for (const path of versionedDocuments) {
+    const expectedUrl = `https://github.com/ahoooooooo/reviewready/blob/${expectedTag}/${path}`;
+    if (!readme.includes(expectedUrl)) {
+      errors.push("README version-bound document does not match the packaged version: " + path);
+    }
+    if (readme.includes(`https://github.com/ahoooooooo/reviewready/blob/main/${path}`)) {
+      errors.push("README version-bound document points to mutable main: " + path);
     }
   }
   const links = [
@@ -217,7 +258,8 @@ export function verifyPackagedReadme(readme, packageVersion, packagedPaths) {
 /** @typedef {{ authority: string }} ActionBoundary */
 /** @typedef {{ status: string }} StatusBoundary */
 /** @typedef {{ action: ActionBoundary & StatusBoundary, cli: ActionBoundary & StatusBoundary, library: ActionBoundary & StatusBoundary, githubApp: ActionBoundary & StatusBoundary, providerSdk: ActionBoundary & StatusBoundary }} CapabilityBoundary */
-/** @typedef {{ schema: string, product: ProductIdentity, stableRelease: StableRelease, releaseCandidate?: ReleaseCandidate, sourcePolicy: SourcePolicy, capabilityBoundary: CapabilityBoundary, excludedFromPublicSurface: string[] }} PublicBaseline */
+/** @typedef {{ revision: string, workflowRun: number, reviewJob: number, artifactName: string, artifactDigest: string, replayIntegrity: string, repositoryAuditStatus: string, missing: string[], totalFindings: number, findingCounts: Record<string, number> }} Ta2DogfoodObservation */
+/** @typedef {{ schema: string, product: ProductIdentity, stableRelease: StableRelease, releaseCandidate?: ReleaseCandidate, sourcePolicy: SourcePolicy & { completedMilestone?: { status?: string } }, ta2DogfoodObservation: Ta2DogfoodObservation, capabilityBoundary: CapabilityBoundary, excludedFromPublicSurface: string[] }} PublicBaseline */
 
 /**
  * @param {string} relativePath
@@ -251,11 +293,15 @@ export function verifyPublicBaseline(readSource = read) {
   const baselineDoc = readSource("docs/public-baseline.md");
   const security = readSource("SECURITY.md");
   const releasing = readSource("docs/releasing.md");
+  const productSpec = readSource("docs/product-spec.md");
+  const ta2Adr = readSource("docs/adr/0009-replayable-audit-evidence-bundle.md");
+  const ta2RulesetAdr = readSource("docs/adr/0010-ruleset-semantics-evidence-v2.md");
+  const ta2ThreatModel = readSource("docs/threat-model-ta2-evidence-bundle.md");
   const workflow = record(YAML.parse(readSource(".github/workflows/reviewready-trusted.yml")));
   /** @type {string[]} */
   const errors = [];
   const expectedSourceVersion =
-    sourceStatus === "release-candidate" ? candidate?.version : stable.version;
+    sourceStatus === "release-candidate" && candidate ? candidate.version : stable.version;
 
   /**
    * @param {boolean} condition
@@ -279,6 +325,11 @@ export function verifyPublicBaseline(readSource = read) {
   assert(
     sourceStatus !== "post-release-unreleased" || candidate === undefined,
     "post-release status still exposes stale candidate coordinates"
+  );
+  assert(
+    baseline.sourcePolicy.completedMilestone?.status ===
+      (sourceStatus === "release-candidate" ? "in-progress" : "complete"),
+    "baseline milestone status contradicts source state"
   );
   if (candidate) {
     assert(PLAIN_SEMVER.test(candidate.version), "release candidate version is invalid");
@@ -423,6 +474,12 @@ export function verifyPublicBaseline(readSource = read) {
       ),
       "security policy must distinguish internal modules from shipped App/SDK capabilities"
     );
+    assert(
+      security.includes(
+        "reference pinned to the exact stable release commit recorded in\n  `docs/public-baseline.json`"
+      ),
+      "security policy trusted-workflow pin wording is stale"
+    );
     assert(/^[0-9a-f]{40}$/u.test(stable.sourceCommit), "stable source commit is invalid");
     assert(stable.immutableTag === `v${stable.version}`, "stable immutable tag is invalid");
     assert(stable.stableActionTag === "v1", "stable Action alias is invalid");
@@ -509,14 +566,16 @@ export function verifyPublicBaseline(readSource = read) {
       "reviewready.result.schema.json"
     ];
     errors.push(...verifyPackagedReadme(readme, packageManifest.version, packagePaths));
+    const exampleTag = `v${expectedSourceVersion}`;
+    const exampleAction = `${repository}@${exampleTag}`;
     const examples = yamlActionReferences(readme);
     assert(
-      examples.length > 0 && examples.every((ref) => ref === stable.actionCommit),
-      "README Action uses values do not match verified stable pin"
+      examples.length > 0 && examples.every((ref) => ref === exampleAction),
+      "README Action uses values do not match source package version"
     );
     assert(
-      markdownField(readme, "Verified Action examples") === stable.immutableTag,
-      "README Action example version does not match stable release"
+      markdownField(readme, "Verified Action examples") === exampleTag,
+      "README Action example version does not match source package version"
     );
     const schemaRefs = [
       ...readme.matchAll(
@@ -524,9 +583,16 @@ export function verifyPublicBaseline(readSource = read) {
       )
     ].map((match) => match[1]);
     assert(
-      schemaRefs.length > 0 && schemaRefs.every((ref) => ref === stable.schemaRef),
-      "README immutable schema examples do not match stable release"
+      schemaRefs.length > 0 &&
+        schemaRefs.every(
+          (ref) =>
+            ref ===
+            `https://raw.githubusercontent.com/${repository}/${exampleTag}/reviewready.schema.json`
+        ),
+      "README schema examples do not match source package version"
     );
+    assertNormalizedInputExample();
+    assertTa2DogfoodObservation();
     assert(
       typeof action.description === "string" && /\badvisory\b/u.test(action.description),
       "Action metadata must describe advisory authority"
@@ -583,6 +649,95 @@ export function verifyPublicBaseline(readSource = read) {
         expectedTypes.every((type) => types.includes(type)),
       "trusted workflow PR event types changed"
     );
+  }
+
+  function assertNormalizedInputExample() {
+    const exampleText = markdownCodeBlock(productSpec, "Complete normalized input example", "json");
+    assert(typeof exampleText === "string", "product spec normalized input example is missing");
+    if (typeof exampleText !== "string") return;
+    let example;
+    try {
+      example = record(JSON.parse(exampleText));
+    } catch {
+      errors.push("product spec normalized input example is invalid JSON");
+      return;
+    }
+    const keys = Object.keys(example).sort();
+    const expectedKeys = [
+      "body",
+      "changedFiles",
+      "checks",
+      "labels",
+      "linkedIssues",
+      "reviews",
+      "version"
+    ].sort();
+    assert(
+      JSON.stringify(keys) === JSON.stringify(expectedKeys),
+      "product spec normalized input example does not match the readiness contract"
+    );
+    const checks = Array.isArray(example.checks) ? example.checks : [];
+    assert(checks.length > 0, "product spec normalized input example has no check evidence");
+    for (const value of checks) {
+      const check = record(value);
+      assert(
+        !("appId" in check) &&
+          typeof check.name === "string" &&
+          (check.conclusion === null || typeof check.conclusion === "string") &&
+          (check.app === undefined || typeof check.app === "string"),
+        "product spec check example does not match the readiness parser"
+      );
+    }
+  }
+
+  function assertTa2DogfoodObservation() {
+    const observation = baseline.ta2DogfoodObservation;
+    assert(
+      /^[0-9a-f]{40}$/u.test(observation.revision) &&
+        observation.workflowRun === 34184361828 &&
+        observation.reviewJob === 101929673227 &&
+        observation.artifactName === `reviewready-ta2-evidence-${observation.revision}` &&
+        observation.artifactDigest ===
+          "sha256:4e334e73be48d0dd97a2075661cd82304d04d09ffa9d5ea380bb9d6de9621335",
+      "TA-2 dogfood evidence coordinates are invalid"
+    );
+    assert(
+      observation.replayIntegrity === "verified" &&
+        observation.repositoryAuditStatus === "incomplete" &&
+        observation.missing.length === 1 &&
+        observation.missing[0] === "settings-authority-incomplete" &&
+        observation.totalFindings === 19 &&
+        JSON.stringify(observation.findingCounts) ===
+          JSON.stringify({
+            AUDIT_BRANCH_PROTECTION_UNKNOWN: 1,
+            AUDIT_RULESET_BYPASS_UNKNOWN: 1,
+            AUDIT_SNAPSHOT_INCOMPLETE: 1,
+            AUDIT_TAG_PROTECTION_UNKNOWN: 1,
+            AUDIT_TRUSTED_ROOT_MISSING: 6,
+            AUDIT_WORKFLOW_NOT_PROTECTED: 6,
+            DEPLOYMENT_SINK: 1,
+            PULL_REQUEST_TARGET_WORKFLOW: 1,
+            WORKFLOW_WRITE_PERMISSION: 1
+          }),
+      "TA-2 replay and repository-audit statuses are conflated"
+    );
+    for (const [path, text] of Object.entries({
+      "docs/public-baseline.md": baselineDoc,
+      "docs/adr/0009-replayable-audit-evidence-bundle.md": ta2Adr,
+      "docs/adr/0010-ruleset-semantics-evidence-v2.md": ta2RulesetAdr,
+      "docs/threat-model-ta2-evidence-bundle.md": ta2ThreatModel
+    })) {
+      assert(
+        text.includes(String(observation.workflowRun)) &&
+          text.includes(observation.revision) &&
+          text.includes("incomplete") &&
+          text.includes("settings-authority-incomplete") &&
+          /not\s+(?:an?\s+)?(?:audit\s+)?`?pass`?|does not satisfy\s+(?:a\s+)?repository\s+audit-pass/iu.test(
+            text
+          ),
+        `${path} does not preserve the incomplete TA-2 dogfood result`
+      );
+    }
   }
 }
 

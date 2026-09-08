@@ -1,7 +1,7 @@
 # ADR 0010: Versioned evidence for modeled GitHub ruleset semantics
 
 - Status: accepted; implementation, focused verification, and main-bound live
-  promotion complete; durable acceptance artifact review remains pending
+  artifact replay complete; repository-audit acceptance incomplete
 - Date: 2026-08-15
 - Supersedes: none; extends [ADR 0009](0009-replayable-audit-evidence-bundle.md)
 
@@ -67,3 +67,11 @@ TA-2 promotion requires the focused parser, projection, schema, and replay
 tests; `npm run check`; `git diff --check`; a main-bound authenticated
 collection that emits a valid v2 bundle; offline replay of that exact bundle;
 and inspection of the canonical artifact before release publication.
+
+Run
+[`34184361828`](https://github.com/ahoooooooo/reviewready/actions/runs/34184361828)
+completed those artifact and replay-integrity steps for revision
+`704e0da930aca14ed1ee37ce7c2f3b95184f5fd4`. The canonical replay result was
+`incomplete`, not `pass`, because `settings-authority-incomplete` remained
+in the collection's missing evidence.
+The successful review job therefore proves replay consistency only.

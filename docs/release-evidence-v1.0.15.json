@@ -40,6 +40,16 @@
     "readinessAttempt1": "failure",
     "readinessAttempt2AfterManualRerun": "success"
   },
+  "independentRegistryRecheck": {
+    "observedAt": "2026-09-08T04:20:31Z",
+    "npmLatestVersion": "1.0.15",
+    "tarballFileCount": 111,
+    "tarballSha512": "1fc59b9c44873381dc45647b66e4d660451bf00434e55bc983671f185601fa50af042819fc760d0fef2a43e8ea3b2a87436a1e44ee0eb40a037a048d02e67bed",
+    "tarballShasum": "50d1788069418447566c9722cb26b02fabea1388",
+    "packagedReadmeVersion": "1.0.15",
+    "packagedReadmeActionExampleVersion": "v1.0.14",
+    "fullProvenanceReverification": false
+  },
   "tarballUrl": "https://registry.npmjs.org/@ahoooooo/reviewready/-/reviewready-1.0.15.tgz",
   "releaseUrl": "https://github.com/ahoooooooo/reviewready/releases/tag/v1.0.15",
   "publishedAt": "2026-09-08T03:08:24Z",

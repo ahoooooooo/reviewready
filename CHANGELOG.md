@@ -5,6 +5,24 @@ the project uses semantic versioning.
 
 ## [Unreleased]
 
+## [1.0.16] - 2026-09-08
+
+### Fixed
+
+- Align the readiness input specification with the strict parser and add a
+  complete executable normalized-input example.
+- Require packaged README Action, schema, and product-document references to use
+  the package's own semantic version instead of the previous release.
+- Fail release verification when GitHub does not report an immutable Release or
+  when the exact candidate commit lacks the required Node 22, Node 24 bundle, and
+  CodeQL checks.
+
+### Documentation
+
+- Record the TA-2 dogfood replay as integrity-verified while preserving its
+  repository-audit result as `incomplete`.
+- Remove stale release numbers from durable security and architecture wording.
+
 ## [1.0.15] - 2026-09-08
 
 ### Changed

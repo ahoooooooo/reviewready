@@ -1,7 +1,7 @@
 # TA-2 replayable audit evidence: threat model
 
-- Status: design approved; implementation complete; dogfood and promotion review
-  pending
+- Status: design approved; implementation and dogfood replay complete;
+  repository-audit acceptance incomplete
 - Date: 2026-08-13
 - Governing decision: [ADR 0009](adr/0009-replayable-audit-evidence-bundle.md)
 - Delivery issue: [#55](https://github.com/ahoooooooo/reviewready/issues/55)
@@ -18,6 +18,14 @@ This objective does not establish that the bundle producer is authentic, that
 mutable GitHub settings were observed atomically, that the repository is still
 configured the same way, or that the audit result is a pull-request readiness
 decision.
+
+The 2026-09-08 dogfood artifact for
+`704e0da930aca14ed1ee37ce7c2f3b95184f5fd4` was saved and independently
+replayed in
+[workflow run 34184361828](https://github.com/ahoooooooo/reviewready/actions/runs/34184361828).
+Its integrity comparison succeeded, while its repository-audit status remained
+`incomplete` with `settings-authority-incomplete`. The successful job is not
+an audit `pass`.
 
 ## Assets
 
