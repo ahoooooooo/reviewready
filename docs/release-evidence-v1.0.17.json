@@ -52,7 +52,37 @@
     "status": "verified",
     "observedAt": "2026-09-08T11:41:43Z",
     "observedVersion": "1.0.17",
-    "url": "https://github.com/marketplace/actions/reviewready"
+    "url": "https://github.com/marketplace/actions/reviewready",
+    "anonymousRecheckAt": "2026-09-08T13:27:43Z",
+    "authenticatedRecheckAt": "2026-09-08T13:27:51Z",
+    "latestLabel": true,
+    "packagedReadmeVersion": "1.0.17",
+    "actionExampleVersion": "v1.0.17",
+    "schemaVersion": "v1.0.17",
+    "versionBoundProductDocsVersion": "v1.0.17",
+    "observationBoundary": "live browser pages; does not replace registry, tarball, or provenance verification"
+  },
+  "npmPageObservation": {
+    "status": "verified",
+    "observedAt": "2026-09-08T13:27:58Z",
+    "authentication": "anonymous",
+    "observedVersion": "1.0.17",
+    "installCommand": "npm i @ahoooooo/reviewready",
+    "packagedReadmeVersion": "1.0.17",
+    "actionExampleVersion": "v1.0.17",
+    "schemaVersion": "v1.0.17",
+    "versionBoundProductDocsVersion": "v1.0.17",
+    "url": "https://www.npmjs.com/package/@ahoooooo/reviewready",
+    "observationBoundary": "live browser page; does not replace registry, tarball, signature, or provenance verification"
+  },
+  "discussionObservation": {
+    "status": "verified",
+    "observedAt": "2026-09-08T13:28:28Z",
+    "authentication": "anonymous",
+    "discussionCount": 0,
+    "currentAnnouncementCount": 0,
+    "url": "https://github.com/ahoooooooo/reviewready/discussions",
+    "observationBoundary": "live browser page and read-only public API"
   },
   "tarballUrl": "https://registry.npmjs.org/@ahoooooo/reviewready/-/reviewready-1.0.17.tgz",
   "releaseUrl": "https://github.com/ahoooooooo/reviewready/releases/tag/v1.0.17",

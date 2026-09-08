@@ -19,8 +19,12 @@ verified against the same commit and exact artifact.
 - [x] GitHub reported `immutable: true` for Release `v1.0.17`, whose tag targets
       the verified main commit.
 - [x] Stable Action tag `v1` targets the same verified main commit.
-- [x] A fresh GitHub Marketplace page load displayed v1.0.17 as the latest
-      ReviewReady Action and rendered the v1.0.17 package README.
+- [x] Fresh anonymous and authenticated GitHub Marketplace page loads displayed
+      v1.0.17 as the latest ReviewReady Action and rendered the v1.0.17 README.
+- [x] A fresh anonymous npm package page displayed version 1.0.17, the current
+      install command, and the v1.0.17 README examples and version-bound links.
+- [x] The public Discussions page and API reported zero discussions, so there
+      was no current announcement to reconcile.
 - [x] The independently installed CLI completed the bounded regression input
       and failed closed on over-budget Markdown with the documented error code.
 - [x] This machine-readable evidence file records every final coordinate.
@@ -104,6 +108,29 @@ verified the SLSA v1 provenance subject against the tarball SHA-512. The
 provenance bound repository `ahoooooooo/reviewready`, workflow
 `.github/workflows/release-publish.yml`, `refs/heads/main`, source commit
 `2b7193f720c2a68e8ee410366e6de2b8d1922eff`, and publication attempt 1.
+
+## Public page recheck
+
+At 2026-09-08T13:27:43Z, a fresh anonymous browser session displayed
+v1.0.17 Latest on the GitHub Marketplace page. The visible README declared
+package 1.0.17 and used v1.0.17 for Action examples, the remote schema, and
+version-bound product documentation. A separate authenticated page load at
+2026-09-08T13:27:51Z displayed the same version and examples. The earlier
+stale page retrieval was therefore classified as a retrieval or cache
+observation rather than a current Marketplace publication defect.
+
+At 2026-09-08T13:27:58Z, the anonymous npm package page displayed version
+1.0.17, install command npm i @ahoooooo/reviewready, and a README declaring
+package 1.0.17 with v1.0.17 Action, schema, and version-bound product-document
+references.
+
+At 2026-09-08T13:28:28Z, the anonymous GitHub Discussions page displayed the
+empty welcome state. A read-only public API query returned zero discussions,
+so there was no current or pinned announcement to reconcile.
+
+These are time-bound browser and public-API observations. They do not replace
+the separate registry metadata, tarball-byte, signature, provenance, or
+workflow verification recorded above.
 
 ## Verification boundary
 
