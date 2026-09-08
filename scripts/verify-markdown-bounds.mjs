@@ -6,6 +6,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import process from "node:process";
+import { URL } from "node:url";
 
 const projectRoot = resolve(import.meta.dirname, "..");
 const maximumChildProcessMs = 5_000;
@@ -34,7 +35,8 @@ const input = {
 };
 
 if (process.argv[2] === "--engine") {
-  const engineModule = /** @type {unknown} */ (await import("../dist/engine.js"));
+  const engineModuleUrl = new URL("../dist/engine.js", import.meta.url).href;
+  const engineModule = /** @type {unknown} */ (await import(engineModuleUrl));
   if (
     typeof engineModule !== "object" ||
     engineModule === null ||
@@ -64,7 +66,8 @@ if (process.argv[2] === "--engine") {
 }
 
 if (process.argv[2] === "--action") {
-  const actionModule = /** @type {unknown} */ (await import("../dist/action-runner.js"));
+  const actionModuleUrl = new URL("../dist/action-runner.js", import.meta.url).href;
+  const actionModule = /** @type {unknown} */ (await import(actionModuleUrl));
   if (
     typeof actionModule !== "object" ||
     actionModule === null ||
