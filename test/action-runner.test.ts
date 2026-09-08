@@ -274,10 +274,10 @@ rules:
         }
       );
 
-      const actionReport = JSON.parse(action.outputs.get("report-json") ?? "{}");
-      const cliReport = JSON.parse(stdout.join(""));
+      const actionReport: unknown = JSON.parse(action.outputs.get("report-json") ?? "{}");
+      const cliReport: unknown = JSON.parse(stdout.join(""));
       expect(action.outputs.get("status")).toBe(expectedStatus);
-      expect(cliReport.status).toBe(expectedStatus);
+      expect(cliReport).toMatchObject({ status: expectedStatus });
       expect(exitCode).toBe(expectedStatus === "ready" ? 0 : 1);
       expect(stderr).toEqual([]);
       expect(actionReport).toEqual(cliReport);
