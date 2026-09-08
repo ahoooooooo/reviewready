@@ -19,6 +19,23 @@
     "releaseUrl": "https://github.com/ahoooooooo/reviewready/releases/tag/v1.0.14"
   },
   "sourcePolicy": {
+    "nextMilestone": {
+      "name": "public-consistency-baseline",
+      "scope": [
+        "existing public documentation and consistency checks",
+        "revalidate and integrate #121, #129, then #130 on updated bases",
+        "installed package, committed Action bundle, and PR event acceptance",
+        "one new patch release with verified public coordinates and artifact evidence"
+      ],
+      "nonGoals": [
+        "new product capabilities",
+        "production GitHub App",
+        "provider SDK",
+        "hosted services",
+        "new protocol version",
+        "large refactors"
+      ]
+    },
     "mainStatus": "post-release-unreleased",
     "mainMayDifferFromStableArtifact": true,
     "publishedArtifactsImmutable": true,

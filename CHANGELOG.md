@@ -5,6 +5,36 @@ the project uses semantic versioning.
 
 ## [Unreleased]
 
+### Changed
+
+- Update the runtime schema dependency from Zod 4.4.3 to 4.5.4 and rebuild the
+  committed Action bundle from the same dependency graph.
+
+### Fixed
+
+- Preserve visible Markdown link and code contexts while rejecting hidden or raw
+  HTML as pull-request evidence; malformed link-like input remains bounded and
+  fails closed.
+- Treat valid empty inline links and defined empty reference links as empty
+  evidence, while preserving unresolved reference text and valid multiline
+  reference definitions.
+- Keep fenced-code content, reference-title continuations, and indented heading
+  boundaries from hiding or consuming evidence outside their Markdown context.
+- Check public baseline prose, structured version coordinates, capability
+  boundaries, and trusted workflow pins together, with regression cases that
+  reject mismatched versions, pins, and capability status.
+- Verify candidate README versions and installed-package documentation against
+  the exact tarball, separately from online release verification.
+
+### Documentation
+
+- Distinguish immutable release tags and packages from the mutable `v1` and npm
+  `latest` aliases, and retain release evidence as historical observations.
+- Separate package versions from verified Action examples, label fixture commands
+  as repository-only, and link unshipped documentation to GitHub.
+- Rename the trusted workflow display to ReviewReady trusted evidence, preserving
+  `readiness`, and document manual readiness reruns after later CI-only reruns.
+
 ## [1.0.14] - 2026-09-04
 
 ### Documentation

@@ -8,6 +8,8 @@ import { dirname, resolve, sep } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
+import { verifyPackagedReadme } from "./verify-public-baseline.mjs";
+
 /** @typedef {{ path: string, content: string }} PackageAuditEntry */
 
 const REQUIRED_FILES = [
@@ -128,6 +130,17 @@ function auditPackageManifest(entries) {
     !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(manifest.version)
   ) {
     errors.push("Packaged package version must be valid semantic version text");
+  } else {
+    const readme = entries.find((candidate) => candidate.path === "README.md");
+    if (readme) {
+      errors.push(
+        ...verifyPackagedReadme(
+          readme.content,
+          manifest.version,
+          entries.map((candidate) => candidate.path)
+        )
+      );
+    }
   }
 
   const publishConfig = manifest.publishConfig;
