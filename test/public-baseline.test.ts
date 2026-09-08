@@ -199,7 +199,7 @@ describe("public baseline consistency", () => {
     const baseline = readJson(baselinePath) as Baseline;
     const manifest = readJson("package.json") as PackageManifest;
     const lock = readJson("package-lock.json") as Lockfile;
-    const version = stable.version.replace(/\d+$/u, (patch) => String(Number(patch) + 1));
+    const version = manifest.version.replace(/\d+$/u, (patch) => String(Number(patch) + 1));
     const candidate = {
       version,
       releaseEvidence: `docs/release-evidence-v${version}.json`,

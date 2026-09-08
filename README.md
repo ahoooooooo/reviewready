@@ -25,7 +25,7 @@ pull-request code.
 
 ## Current status
 
-Package version: `1.0.14`.
+Package version: `1.0.15`.
 
 Verified Action examples: `v1.0.14`.
 

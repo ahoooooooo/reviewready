@@ -5,6 +5,8 @@ the project uses semantic versioning.
 
 ## [Unreleased]
 
+## [1.0.15] - 2026-09-08
+
 ### Changed
 
 - Update the runtime schema dependency from Zod 4.4.3 to 4.5.4 and rebuild the
