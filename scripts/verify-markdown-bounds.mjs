@@ -34,8 +34,17 @@ const input = {
 };
 
 if (process.argv[2] === "--engine") {
-  const { evaluate } = /** @type {{ evaluate: typeof import("../src/engine.js").evaluate }} */ (
-    await import("../dist/engine.js")
+  const engineModule = /** @type {unknown} */ (await import("../dist/engine.js"));
+  if (
+    typeof engineModule !== "object" ||
+    engineModule === null ||
+    !("evaluate" in engineModule) ||
+    typeof engineModule.evaluate !== "function"
+  ) {
+    throw new Error("compiled engine module does not export evaluate");
+  }
+  const evaluate = /** @type {typeof import("../src/engine.js").evaluate} */ (
+    engineModule.evaluate
   );
   const result = evaluate(policy, input);
   if (result.status !== "ready") throw new Error("engine regression case changed classification");
@@ -55,10 +64,18 @@ if (process.argv[2] === "--engine") {
 }
 
 if (process.argv[2] === "--action") {
-  const { runAction } =
-    /** @type {{ runAction: typeof import("../src/action-runner.js").runAction }} */ (
-      await import("../dist/action-runner.js")
-    );
+  const actionModule = /** @type {unknown} */ (await import("../dist/action-runner.js"));
+  if (
+    typeof actionModule !== "object" ||
+    actionModule === null ||
+    !("runAction" in actionModule) ||
+    typeof actionModule.runAction !== "function"
+  ) {
+    throw new Error("compiled Action module does not export runAction");
+  }
+  const runAction = /** @type {typeof import("../src/action-runner.js").runAction} */ (
+    actionModule.runAction
+  );
   /** @param {string} actionBody */
   async function executeAction(actionBody) {
     /** @type {Map<string, string>} */
