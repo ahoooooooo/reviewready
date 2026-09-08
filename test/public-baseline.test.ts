@@ -450,16 +450,52 @@ describe("packaged README consistency", () => {
     );
   });
 
+  it("rejects a stale shortcut reference even when a correct inline link exists", () => {
+    const stale = "https://github.com/ahoooooooo/reviewready/blob/v1.0.15/docs/product-spec.md";
+    const changed =
+      readme +
+      "\n[Stale product specification]\n\n" +
+      "[Stale product specification]: " +
+      stale +
+      "\n";
+    expect(verifyPackagedReadme(changed, sourceVersion, manifest.files)).toContain(
+      "README version-bound document has a stale clickable target: docs/product-spec.md"
+    );
+  });
+
   it.each([
     ["inline", "[Repository guide](docs/releasing.md)", "docs/releasing.md"],
     [
-      "reference",
+      "full reference",
       "[Repository example][example]\n\n[example]: fixtures/ready-pr.json",
       "fixtures/ready-pr.json"
+    ],
+    [
+      "collapsed reference",
+      "[Repository example][]\n\n[Repository example]: fixtures/ready-pr.json",
+      "fixtures/ready-pr.json"
+    ],
+    [
+      "shortcut reference",
+      "[Repository guide]\n\n[Repository guide]: docs/releasing.md",
+      "docs/releasing.md"
     ]
   ])("rejects an unavailable %s link for package users", (_case, link, path) => {
     expect(
       verifyPackagedReadme(readme + "\n" + link + "\n", manifest.version, manifest.files)
     ).toContain("README links to a file absent from the package: " + path);
+  });
+
+  it("ignores shortcut reference text inside code and HTML comments", () => {
+    const tick = String.fromCharCode(96);
+    const changed =
+      readme +
+      "\n" +
+      tick +
+      "[Repository guide]" +
+      tick +
+      "\n<!-- [Repository guide] -->\n\n" +
+      "[Repository guide]: docs/releasing.md\n";
+    expect(verifyPackagedReadme(changed, manifest.version, manifest.files)).toEqual([]);
   });
 });
