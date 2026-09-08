@@ -5,6 +5,11 @@ the project uses semantic versioning.
 
 ## [Unreleased]
 
+### Changed
+
+- Update the runtime schema dependency from Zod 4.4.3 to 4.5.4 and rebuild the
+  committed Action bundle from the same dependency graph.
+
 ### Fixed
 
 - Preserve visible Markdown link and code contexts while rejecting hidden or raw

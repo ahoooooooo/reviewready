@@ -87,7 +87,7 @@
     "@actions/github": "9.1.1",
     "micromatch": "4.0.8",
     "yaml": "2.9.0",
-    "zod": "4.4.3"
+    "zod": "4.5.4"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
