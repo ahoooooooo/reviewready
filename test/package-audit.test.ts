@@ -19,9 +19,14 @@ interface PackageAuditEntry {
   content: string;
 }
 
+const packagedReadme = (await readFile("README.md", "utf8")).replace(
+  /^Package version:.*$/mu,
+  "Package version: " + String.fromCharCode(96) + "1.0.2" + String.fromCharCode(96) + "."
+);
+
 const requiredEntries = (): PackageAuditEntry[] => [
   { path: "LICENSE", content: "MIT License" },
-  { path: "README.md", content: "# ReviewReady" },
+  { path: "README.md", content: packagedReadme },
   {
     path: "package.json",
     content: JSON.stringify({
@@ -231,6 +236,33 @@ describe("auditPackageEntries", () => {
 
   it("accepts the documented package surface without private metadata", () => {
     expect(auditPackageEntries(requiredEntries())).toEqual([]);
+  });
+
+  it("checks the exact packed README against its manifest even when source documents agree", async () => {
+    const sourceReadme = await readFile("README.md", "utf8");
+    const sourceManifest = JSON.parse(await readFile("package.json", "utf8")) as {
+      version: string;
+    };
+    const entries = requiredEntries().map((entry) => {
+      if (entry.path === "README.md") {
+        return { ...entry, content: sourceReadme };
+      }
+      if (entry.path === "package.json") {
+        return { ...entry, content: JSON.stringify(sourceManifest) };
+      }
+      return entry;
+    });
+    expect(auditPackageEntries(entries)).toEqual([]);
+
+    const mismatchedVersion = sourceManifest.version === "99.0.0" ? "99.0.1" : "99.0.0";
+    const mismatchedEntries = entries.map((entry) =>
+      entry.path === "package.json"
+        ? { ...entry, content: JSON.stringify({ ...sourceManifest, version: mismatchedVersion }) }
+        : entry
+    );
+    expect(auditPackageEntries(mismatchedEntries)).toEqual(
+      expect.arrayContaining([expect.stringMatching(/README.*version|version.*README/iu)])
+    );
   });
 
   it("accepts generated source maps referenced by published runtime files", () => {

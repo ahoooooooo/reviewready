@@ -1,4 +1,4 @@
-name: ReviewReady trusted enforcement
+name: ReviewReady trusted evidence
 
 on:
   pull_request_target:

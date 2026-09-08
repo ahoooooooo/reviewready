@@ -68,7 +68,9 @@ gate. ADR 0001 defines the supported trust boundary.
 [ADR 0011](docs/adr/0011-github-app-trusted-ingress.md) and the
 [TA-3 threat model](docs/threat-model-ta3-trusted-ingress.md) define the
 checked-in provider/App contract; this repository does not ship a hosted
-GitHub App, durable external store, or production external enforcement service.
+GitHub App, durable external store, production external enforcement service, or
+supported public provider SDK. Internal modules do not establish those shipped
+capabilities.
 Candidate deployment topologies include organization ruleset workflows,
 independently protected enforcement files, and carefully limited metadata-only
 `pull_request_target` evaluation. These are adopter-owned boundaries and must
@@ -92,6 +94,11 @@ out, download, import, cache, build, or execute pull-request code.
   matters and protect workflow changes separately. The ordinary `pull_request`
   sample workflow is advisory until a trusted workflow root is protected and
   required in repository settings.
+- The trusted workflow's bounded wait observes CI only during that workflow run.
+  A later CI-only rerun does not automatically trigger a new readiness result.
+  After CI completes, manually rerun **ReviewReady trusted evidence** and verify
+  the current PR head and metadata. The configured PR events cover new commits
+  and body edits; an older readiness result is not evidence of reevaluation.
 - `linked_issue` currently uses GitHub closing issue references, not every possible
   textual or sidebar relationship.
 - Repository permissions are evaluated at Action run time. Organization role

@@ -101,10 +101,14 @@ a bounded read-only wait for the latest `check` Check Run on the exact head SHA
 from the expected GitHub Actions provider before invoking the pinned Action. A
 missing, oversized, incomplete, or still-pending check response fails closed;
 the workflow does not checkout, execute, or interpret pull-request source while
-waiting. This ordering prevents a race-affected readiness result from becoming
-the required status check and normally removes the need for a manual readiness
-rerun; if the bounded wait is exhausted, the workflow fails closed instead of
-accepting stale evidence.
+waiting. This ordering waits for CI during an already-triggered run; if the
+bounded wait is exhausted, the workflow fails closed instead of accepting stale
+evidence. It does not subscribe to later CI reruns. New PR commits and body edits
+trigger the configured `synchronize` and `edited` events, but a CI-only rerun
+after readiness has finished requires a manual rerun of **ReviewReady trusted
+evidence** after CI completes. Verify that the resulting `readiness` check
+corresponds to the current PR head and metadata. The workflow display name does
+not change the `check` or `readiness` identities used by repository rules.
 
 ## Evidence collection
 
