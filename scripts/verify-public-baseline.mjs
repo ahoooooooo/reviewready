@@ -249,7 +249,7 @@ export function verifyPackagedReadme(readme, packageVersion, packagedPaths) {
 
 /** @typedef {{ version: string, sourceCommit: string, immutableTag: string, stableActionTag: string, npmPackage: string, actionCommit: string, schemaRef: string, releaseEvidence: string, releaseNotes: string, releaseUrl: string, npmLatestVersion: string }} StableRelease */
 /** @typedef {{ version: string, releaseEvidence: string, releaseNotes: string }} ReleaseCandidate */
-/** @typedef {{ version: string, mainCommit: string, immutableTagCommit: string, stableTagCommit: string, releaseTarget: string, npmLatestVersion: string }} ReleaseEvidence */
+/** @typedef {{ version: string, mainCommit: string, immutableTagCommit: string, stableTagCommit: string, releaseTarget: string, npmLatestVersion: string, marketplaceObservation?: { status?: string, observedVersion?: string } }} ReleaseEvidence */
 /** @typedef {{ name: string, version: string, description: string, keywords: string[] }} PackageManifest */
 /** @typedef {{ version?: string }} LockPackage */
 /** @typedef {{ version?: string, packages?: Record<string, LockPackage> }} Lockfile */
@@ -326,11 +326,33 @@ export function verifyPublicBaseline(readSource = read) {
     sourceStatus !== "post-release-unreleased" || candidate === undefined,
     "post-release status still exposes stale candidate coordinates"
   );
+  const milestoneStatus = baseline.sourcePolicy.completedMilestone?.status;
+  const marketplaceStatus = releaseEvidence.marketplaceObservation?.status;
+  const marketplaceVersion = releaseEvidence.marketplaceObservation?.observedVersion;
   assert(
-    baseline.sourcePolicy.completedMilestone?.status ===
-      (sourceStatus === "release-candidate" ? "in-progress" : "complete"),
-    "baseline milestone status contradicts source state"
+    milestoneStatus === "in-progress" || milestoneStatus === "complete",
+    "baseline milestone status is invalid"
   );
+  assert(
+    sourceStatus !== "release-candidate" || milestoneStatus === "in-progress",
+    "release candidate is prematurely marked complete"
+  );
+  if (sourceStatus === "post-release-unreleased") {
+    assert(
+      marketplaceStatus === "verified" || marketplaceStatus === "propagation-pending",
+      "post-release Marketplace observation is missing"
+    );
+    assert(
+      milestoneStatus === (marketplaceStatus === "verified" ? "complete" : "in-progress"),
+      "baseline milestone status contradicts Marketplace verification"
+    );
+    if (marketplaceStatus === "verified") {
+      assert(
+        marketplaceVersion === stable.version,
+        "verified Marketplace version does not match the stable release"
+      );
+    }
+  }
   if (candidate) {
     assert(PLAIN_SEMVER.test(candidate.version), "release candidate version is invalid");
     assert(candidate.version !== stable.version, "release candidate reuses stable version");

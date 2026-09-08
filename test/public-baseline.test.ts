@@ -6,7 +6,12 @@ import { verifyPackagedReadme, verifyPublicBaseline } from "../scripts/verify-pu
 import { normalizeInput } from "../src/input.js";
 
 interface Baseline {
-  stableRelease: { version: string; sourceCommit: string; actionCommit: string };
+  stableRelease: {
+    version: string;
+    sourceCommit: string;
+    actionCommit: string;
+    releaseEvidence: string;
+  };
   sourcePolicy: { mainStatus: string; completedMilestone: { status: string } };
   releaseCandidate?: { version: string; releaseEvidence: string; releaseNotes: string };
   ta2DogfoodObservation: {
@@ -215,21 +220,42 @@ describe("public baseline consistency", () => {
     expect(verifyOverlay({ "README.md": readme })).toContain("README.md: " + error);
   });
 
-  it("keeps the release candidate distinct from stable coordinates without a future SHA", () => {
-    expect(baseline.sourcePolicy.mainStatus).toBe("release-candidate");
-    expect(baseline.sourcePolicy.completedMilestone.status).toBe("in-progress");
-    expect(baseline.releaseCandidate?.version).toBe(sourceVersion);
-    expect(sourceVersion).not.toBe(stable.version);
+  it("keeps post-release source aligned with stable coordinates without embedding the SHA", () => {
+    const evidence = readJson(stable.releaseEvidence) as {
+      marketplaceObservation?: { status?: string };
+    };
+    expect(baseline.sourcePolicy.mainStatus).toBe("post-release-unreleased");
+    expect(baseline.sourcePolicy.completedMilestone.status).toBe(
+      evidence.marketplaceObservation?.status === "verified" ? "complete" : "in-progress"
+    );
+    expect(baseline.releaseCandidate).toBeUndefined();
+    expect(sourceVersion).toBe(stable.version);
     expect(readSource("README.md")).toContain(exampleAction);
     expect(readSource("README.md")).not.toContain(stable.actionCommit);
   });
 
-  it("rejects a candidate that is prematurely marked complete", () => {
+  it("rejects a milestone status that contradicts Marketplace verification", () => {
     const changed = structuredClone(baseline);
-    changed.sourcePolicy.completedMilestone.status = "complete";
+    changed.sourcePolicy.completedMilestone.status =
+      baseline.sourcePolicy.completedMilestone.status === "complete" ? "in-progress" : "complete";
     expect(verifyOverlay({ [baselinePath]: JSON.stringify(changed) })).toContain(
-      "baseline milestone status contradicts source state"
+      "baseline milestone status contradicts Marketplace verification"
     );
+  });
+
+  it("rejects a stale version labeled as a verified Marketplace observation", () => {
+    const changedBaseline = structuredClone(baseline);
+    changedBaseline.sourcePolicy.completedMilestone.status = "complete";
+    const evidence = readJson(stable.releaseEvidence) as {
+      marketplaceObservation?: { status?: string; observedVersion?: string };
+    };
+    evidence.marketplaceObservation = { status: "verified", observedVersion: "1.0.15" };
+    expect(
+      verifyOverlay({
+        [baselinePath]: JSON.stringify(changedBaseline),
+        [stable.releaseEvidence]: JSON.stringify(evidence)
+      })
+    ).toContain("verified Marketplace version does not match the stable release");
   });
 
   it("rejects readiness documentation that uses the audit-only appId field", () => {

@@ -51,7 +51,8 @@ describe("trusted ReviewReady workflow", () => {
     );
     expect(readme).toContain(`uses: ${canonicalRepository}@v${sourceVersion} # v${sourceVersion}`);
     expect(readme).not.toContain(`uses: ${canonicalRepository}@${publishedReleaseCommit}`);
-    expect(publicBaseline.releaseCandidate?.version).toBe(sourceVersion);
+    expect(sourceVersion).toBe(publishedReleaseVersion);
+    expect(publicBaseline.releaseCandidate).toBeUndefined();
     expect(workflow).not.toContain("main v1.0.6 candidate");
     expect(readme).not.toContain("v1.0.5 bootstrap pin");
   });
