@@ -15,19 +15,19 @@ check from being described as the same thing when they are not.
 
 ## Stable published coordinates
 
-The last verified stable coordinate set recorded here is v1.0.15. The `v1` and
+The last verified stable coordinate set recorded here is v1.0.16. The `v1` and
 npm `latest` rows describe that publication observation; consult GitHub and npm
 for their live targets:
 
 | Surface                | Coordinate                                                                                 |
 | ---------------------- | ------------------------------------------------------------------------------------------ |
-| Source commit          | `53c1c679387ad4005e07a5350609cca302d882d4`                                                 |
-| Immutable semantic tag | `v1.0.15`                                                                                  |
+| Source commit          | `754bc035821b2ca89fe61c7db690e63a332c9526`                                                 |
+| Immutable semantic tag | `v1.0.16`                                                                                  |
 | Stable Action tag      | `v1`                                                                                       |
-| npm latest             | `@ahoooooo/reviewready@1.0.15`                                                             |
-| Immutable Action pin   | `ahoooooooo/reviewready@53c1c679387ad4005e07a5350609cca302d882d4`                          |
-| Immutable schema URL   | `https://raw.githubusercontent.com/ahoooooooo/reviewready/v1.0.15/reviewready.schema.json` |
-| Release evidence       | [v1.0.15 evidence](release-evidence-v1.0.15.md) and [JSON](release-evidence-v1.0.15.json)  |
+| npm latest             | `@ahoooooo/reviewready@1.0.16`                                                             |
+| Immutable Action pin   | `ahoooooooo/reviewready@754bc035821b2ca89fe61c7db690e63a332c9526`                          |
+| Immutable schema URL   | `https://raw.githubusercontent.com/ahoooooooo/reviewready/v1.0.16/reviewready.schema.json` |
+| Release evidence       | [v1.0.16 evidence](release-evidence-v1.0.16.md) and [JSON](release-evidence-v1.0.16.json)  |
 
 The fixed source commit, immutable semantic tag, published npm package, and
 historical release evidence identify one publication. The release process also
@@ -53,19 +53,22 @@ will retain that target forever.
 
 ## Source versus published artifact
 
-The public consistency baseline recorded in `sourcePolicy.completedMilestone`
-is being corrected in the v1.0.16 candidate. The current scope is documentation
-and parser agreement, TA-2 status accuracy, packaged README version alignment,
-and fail-closed release verification. New capabilities, App/SDK hosting, a new
-protocol version, and large refactors remain outside this release scope.
+Version 1.0.16 published the documentation/parser correction, accurate TA-2
+status, same-version packaged README examples, and fail-closed release
+verification. GitHub and npm coordinates have been independently rechecked.
+After its index refresh, a fresh GitHub Marketplace page load also displayed
+v1.0.16 as the latest Action and rendered the same v1.0.16 usage surface. The
+public consistency milestone is complete. New capabilities, App/SDK hosting, a
+new protocol version, and large refactors remain outside this release scope.
 
 The machine-readable mainStatus distinguishes post-release development from
 release-candidate preparation. Either source state may be ahead of the verified
 stable artifact because documentation, dependency, or other unreleased changes
 can be merged before publication. Therefore:
 
-- a `main` checkout is not automatically the published v1.0.15 tarball;
-- this checkout is a v1.0.16 release candidate, not a published npm artifact;
+- a `main` checkout is not automatically the published v1.0.16 tarball;
+- package source currently remains at v1.0.16 while post-release evidence and
+  the self-use trusted Action pin are maintained on `main`;
 - a new release must build, audit, publish, and record one exact artifact; and
 - source, generated `dist`, package privacy, and release evidence are checked by
   `verify:public-baseline`, `verify:dist`, `verify:package`, and
@@ -79,7 +82,7 @@ SHA; the release evidence binds the actual source commit and artifact.
 
 This is an explicit status distinction, not a rewrite of release history. The
 published source commit, artifact hashes, registry coordinates, and observed release refs
-are recorded in the v1.0.15 evidence file; later documentation commits do not
+are recorded in the v1.0.16 evidence file; later documentation commits do not
 rewrite that historical record.
 
 ## TA-2 dogfood acceptance
