@@ -53,13 +53,10 @@ will retain that target forever.
 
 ## Source versus published artifact
 
-Version 1.0.16 published the documentation/parser correction, accurate TA-2
-status, same-version packaged README examples, and fail-closed release
-verification. GitHub and npm coordinates have been independently rechecked.
-After its index refresh, a fresh GitHub Marketplace page load also displayed
-v1.0.16 as the latest Action and rendered the same v1.0.16 usage surface. The
-public consistency milestone is complete. New capabilities, App/SDK hosting, a
-new protocol version, and large refactors remain outside this release scope.
+The v1.0.17 candidate closes three remaining baseline gaps: bounded raw HTML
+recognition, reusable release-candidate validation, and exact Markdown link
+target checks. New capabilities, App/SDK hosting, a new protocol version, and
+large refactors remain outside this release scope.
 
 The machine-readable mainStatus distinguishes post-release development from
 release-candidate preparation. Either source state may be ahead of the verified
@@ -67,8 +64,7 @@ stable artifact because documentation, dependency, or other unreleased changes
 can be merged before publication. Therefore:
 
 - a `main` checkout is not automatically the published v1.0.16 tarball;
-- package source currently remains at v1.0.16 while post-release evidence and
-  the self-use trusted Action pin are maintained on `main`;
+- this checkout is a v1.0.17 release candidate, not a published npm artifact;
 - a new release must build, audit, publish, and record one exact artifact; and
 - source, generated `dist`, package privacy, and release evidence are checked by
   `verify:public-baseline`, `verify:dist`, `verify:package`, and

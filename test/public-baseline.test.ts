@@ -51,6 +51,62 @@ function replaceIn(path: string, search: string | RegExp, replacement: string): 
   return changed;
 }
 
+function releaseCandidateOverlay(candidateVersion = "1.0.17"): Record<string, string> {
+  const candidateBaseline = structuredClone(baseline);
+  candidateBaseline.sourcePolicy.mainStatus = "release-candidate";
+  candidateBaseline.sourcePolicy.completedMilestone.status = "in-progress";
+  candidateBaseline.releaseCandidate = {
+    version: candidateVersion,
+    releaseEvidence: `docs/release-evidence-v${candidateVersion}.json`,
+    releaseNotes: `docs/release-evidence-v${candidateVersion}.md`
+  };
+  const candidateManifest = structuredClone(manifest);
+  candidateManifest.version = candidateVersion;
+  const candidateLock = readJson("package-lock.json") as Lockfile;
+  candidateLock.version = candidateVersion;
+  candidateLock.packages[""] = {
+    ...candidateLock.packages[""],
+    version: candidateVersion
+  };
+  return {
+    [baselinePath]: JSON.stringify(candidateBaseline),
+    "package.json": JSON.stringify(candidateManifest),
+    "package-lock.json": JSON.stringify(candidateLock),
+    "README.md": readSource("README.md").replaceAll(stable.version, candidateVersion),
+    "CHANGELOG.md": readSource("CHANGELOG.md").replace(
+      "## [Unreleased]\n",
+      "## [Unreleased]\n\n## [" + candidateVersion + "] - 2026-09-08\n"
+    ),
+    [candidateBaseline.releaseCandidate.releaseEvidence]: JSON.stringify({
+      version: candidateVersion
+    }),
+    [candidateBaseline.releaseCandidate.releaseNotes]:
+      "# ReviewReady v" + candidateVersion + " release evidence\n"
+  };
+}
+
+function postReleaseOverlay(): Record<string, string> {
+  const stableBaseline = structuredClone(baseline);
+  stableBaseline.sourcePolicy.mainStatus = "post-release-unreleased";
+  delete stableBaseline.releaseCandidate;
+  const evidence = readJson(stable.releaseEvidence) as {
+    marketplaceObservation?: { status?: string };
+  };
+  stableBaseline.sourcePolicy.completedMilestone.status =
+    evidence.marketplaceObservation?.status === "verified" ? "complete" : "in-progress";
+  const stableManifest = structuredClone(manifest);
+  stableManifest.version = stable.version;
+  const stableLock = readJson("package-lock.json") as Lockfile;
+  stableLock.version = stable.version;
+  stableLock.packages[""] = { ...stableLock.packages[""], version: stable.version };
+  return {
+    [baselinePath]: JSON.stringify(stableBaseline),
+    "package.json": JSON.stringify(stableManifest),
+    "package-lock.json": JSON.stringify(stableLock),
+    "README.md": readSource("README.md").replaceAll(sourceVersion, stable.version)
+  };
+}
+
 const baselinePath = "docs/public-baseline.json";
 const documentPath = "docs/public-baseline.md";
 const workflowPath = ".github/workflows/reviewready-trusted.yml";
@@ -220,42 +276,71 @@ describe("public baseline consistency", () => {
     expect(verifyOverlay({ "README.md": readme })).toContain("README.md: " + error);
   });
 
-  it("keeps post-release source aligned with stable coordinates without embedding the SHA", () => {
-    const evidence = readJson(stable.releaseEvidence) as {
-      marketplaceObservation?: { status?: string };
-    };
-    expect(baseline.sourcePolicy.mainStatus).toBe("post-release-unreleased");
-    expect(baseline.sourcePolicy.completedMilestone.status).toBe(
-      evidence.marketplaceObservation?.status === "verified" ? "complete" : "in-progress"
+  it("accepts the explicit post-release stable state without embedding the SHA", () => {
+    const overrides = postReleaseOverlay();
+    const stableBaseline = JSON.parse(overrides[baselinePath] ?? "{}") as Baseline;
+    expect(stableBaseline.sourcePolicy.mainStatus).toBe("post-release-unreleased");
+    expect(stableBaseline.releaseCandidate).toBeUndefined();
+    expect(overrides["README.md"]).toContain(`ahoooooooo/reviewready@v${stable.version}`);
+    expect(overrides["README.md"]).not.toContain(stable.actionCommit);
+    expect(verifyOverlay(overrides)).toEqual([]);
+  });
+
+  it("accepts a legal release candidate while stable coordinates remain published", () => {
+    const overrides = releaseCandidateOverlay();
+    const candidateBaseline = JSON.parse(overrides[baselinePath] ?? "{}") as Baseline;
+    expect(candidateBaseline.stableRelease).toEqual(stable);
+    expect(candidateBaseline.releaseCandidate?.version).toBe("1.0.17");
+    expect(verifyOverlay(overrides)).toEqual([]);
+  });
+
+  it("rejects a release candidate that is prematurely marked complete", () => {
+    const overrides = releaseCandidateOverlay();
+    const candidateBaseline = JSON.parse(overrides[baselinePath] ?? "{}") as Baseline;
+    candidateBaseline.sourcePolicy.completedMilestone.status = "complete";
+    overrides[baselinePath] = JSON.stringify(candidateBaseline);
+    expect(verifyOverlay(overrides)).toContain("release candidate is prematurely marked complete");
+  });
+
+  it("rejects mixed stable and candidate source versions", () => {
+    const overrides = releaseCandidateOverlay();
+    const mixedManifest = structuredClone(manifest);
+    mixedManifest.version = stable.version;
+    overrides["package.json"] = JSON.stringify(mixedManifest);
+    expect(verifyOverlay(overrides)).toContain(
+      "package version does not match public baseline source state"
     );
-    expect(baseline.releaseCandidate).toBeUndefined();
-    expect(sourceVersion).toBe(stable.version);
-    expect(readSource("README.md")).toContain(exampleAction);
-    expect(readSource("README.md")).not.toContain(stable.actionCommit);
+  });
+
+  it("rejects a candidate that reuses the published version", () => {
+    const overrides = releaseCandidateOverlay(stable.version);
+    expect(verifyOverlay(overrides)).toContain("release candidate reuses stable version");
   });
 
   it("rejects a milestone status that contradicts Marketplace verification", () => {
-    const changed = structuredClone(baseline);
+    const overrides = postReleaseOverlay();
+    const changed = JSON.parse(overrides[baselinePath] ?? "{}") as Baseline;
     changed.sourcePolicy.completedMilestone.status =
-      baseline.sourcePolicy.completedMilestone.status === "complete" ? "in-progress" : "complete";
-    expect(verifyOverlay({ [baselinePath]: JSON.stringify(changed) })).toContain(
+      changed.sourcePolicy.completedMilestone.status === "complete" ? "in-progress" : "complete";
+    overrides[baselinePath] = JSON.stringify(changed);
+    expect(verifyOverlay(overrides)).toContain(
       "baseline milestone status contradicts Marketplace verification"
     );
   });
 
   it("rejects a stale version labeled as a verified Marketplace observation", () => {
-    const changedBaseline = structuredClone(baseline);
+    const overrides = postReleaseOverlay();
+    const changedBaseline = JSON.parse(overrides[baselinePath] ?? "{}") as Baseline;
     changedBaseline.sourcePolicy.completedMilestone.status = "complete";
     const evidence = readJson(stable.releaseEvidence) as {
       marketplaceObservation?: { status?: string; observedVersion?: string };
     };
     evidence.marketplaceObservation = { status: "verified", observedVersion: "1.0.15" };
-    expect(
-      verifyOverlay({
-        [baselinePath]: JSON.stringify(changedBaseline),
-        [stable.releaseEvidence]: JSON.stringify(evidence)
-      })
-    ).toContain("verified Marketplace version does not match the stable release");
+    overrides[baselinePath] = JSON.stringify(changedBaseline);
+    overrides[stable.releaseEvidence] = JSON.stringify(evidence);
+    expect(verifyOverlay(overrides)).toContain(
+      "verified Marketplace version does not match the stable release"
+    );
   });
 
   it("rejects readiness documentation that uses the audit-only appId field", () => {
@@ -320,6 +405,33 @@ describe("packaged README consistency", () => {
     const changed = readme.replaceAll(versioned, mutable);
     expect(verifyPackagedReadme(changed, sourceVersion, manifest.files)).toContain(
       "README version-bound document points to mutable main: docs/product-spec.md"
+    );
+  });
+
+  it("rejects a stale clickable document even when the correct URL appears in a comment", () => {
+    const expected =
+      "https://github.com/ahoooooooo/reviewready/blob/v" + sourceVersion + "/docs/product-spec.md";
+    const stale = expected.replace("/v" + sourceVersion + "/", "/v1.0.15/");
+    const changed = readme.replaceAll(expected, stale) + "\n<!-- " + expected + " -->\n";
+    const errors = verifyPackagedReadme(changed, sourceVersion, manifest.files);
+    expect(errors).toContain(
+      "README version-bound document does not match the packaged version: docs/product-spec.md"
+    );
+    expect(errors).toContain(
+      "README version-bound document has a stale clickable target: docs/product-spec.md"
+    );
+  });
+
+  it("rejects mixed inline and reference links to different document versions", () => {
+    const stale = "https://github.com/ahoooooooo/reviewready/blob/v1.0.15/docs/architecture.md";
+    const changed =
+      readme +
+      "\n[Stale architecture][stale-architecture]\n\n" +
+      "[stale-architecture]: " +
+      stale +
+      "\n";
+    expect(verifyPackagedReadme(changed, sourceVersion, manifest.files)).toContain(
+      "README version-bound document has a stale clickable target: docs/architecture.md"
     );
   });
 

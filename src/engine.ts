@@ -5,6 +5,7 @@ import type {
   Requirement,
   RequirementResult
 } from "./domain.js";
+import { InputError } from "./errors.js";
 import { normalizeInput } from "./input.js";
 import { MatchOperationBudget, matchesRule } from "./matcher.js";
 
@@ -79,15 +80,17 @@ function closesFence(line: string, fence: MarkdownFence): boolean {
   return marker !== undefined && marker[0] === fence.marker && marker.length >= fence.length;
 }
 
-const htmlTagPattern =
-  /<(?:\/([A-Za-z][A-Za-z0-9-]*)[\t\n\f\r ]*|([A-Za-z][A-Za-z0-9-]*)(?=[\s/>])(?:[\t\n\f\r ]+(?:[^"'<>]|"[^"]*"|'[^']*')*)?[\t\n\f\r ]*\/?)>/gu;
-const rawHtmlTagPresencePattern =
-  /<(?:\/[A-Za-z][A-Za-z0-9-]*[\t\n\f\r ]*|[A-Za-z][A-Za-z0-9-]*(?=[\s/>])(?:[\t\n\f\r ]+(?:[^"'<>]|"[^"]*"|'[^']*')*)?[\t\n\f\r ]*\/?)>/u;
-const rawHtmlBlockStartPattern =
-  /^\s{0,3}<(?:\/[A-Za-z][A-Za-z0-9-]*[\t\n\f\r ]*|[A-Za-z][A-Za-z0-9-]*(?=[\s/>])(?:[\t\n\f\r ]+(?:[^"'<>]|"[^"]*"|'[^']*')*)?[\t\n\f\r ]*\/?)>/u;
 const rawHtmlTagFragmentStartPattern = /^\s{0,3}<\/?[A-Za-z][A-Za-z0-9-]*(?=$|[\t\n\f\r /])/u;
 const maximumRawHtmlTagLength = 4_096;
 const maximumRawHtmlSpecialFragmentLength = 4_096;
+const maximumRawHtmlScanOperations = 1_000_000;
+
+interface RawHtmlTagMatch {
+  readonly end: number;
+  readonly tag: string;
+  readonly closing: boolean;
+  readonly selfClosing: boolean;
+}
 
 type RawHtmlSpecialFragmentKind = "processing-instruction" | "declaration" | "cdata";
 
@@ -102,6 +105,141 @@ function isAsciiUppercase(value: string | undefined): boolean {
 
 function isAsciiLetter(value: string | undefined): boolean {
   return isAsciiUppercase(value) || (value !== undefined && value >= "a" && value <= "z");
+}
+
+function isAsciiDigit(value: string | undefined): boolean {
+  return value !== undefined && value >= "0" && value <= "9";
+}
+
+function isRawHtmlWhitespace(value: string | undefined): boolean {
+  return value === "\t" || value === "\n" || value === "\f" || value === "\r" || value === " ";
+}
+
+function isRawHtmlTagNameCharacter(value: string | undefined): boolean {
+  return isAsciiLetter(value) || isAsciiDigit(value) || value === "-";
+}
+
+function rawHtmlScanBudget(length: number): MarkdownScanBudget {
+  const budget = createMarkdownScanBudget(length);
+  budget.remaining = Math.min(budget.remaining, maximumRawHtmlScanOperations);
+  return budget;
+}
+
+function rawHtmlScanBudgetExceeded(): never {
+  throw new InputError(
+    "INPUT_MARKDOWN_SCAN_BUDGET_EXCEEDED",
+    "Pull-request Markdown exceeded the deterministic raw HTML scan budget."
+  );
+}
+
+function parseRawHtmlTagAt(
+  value: string,
+  start: number,
+  budget: MarkdownScanBudget
+): RawHtmlTagMatch | undefined {
+  if (value[start] !== "<" || !consumeMarkdownScanBudget(budget)) {
+    return budget.exhausted ? rawHtmlScanBudgetExceeded() : undefined;
+  }
+  let index = start + 1;
+  let closing = false;
+  if (value[index] === "/") {
+    closing = true;
+    index += 1;
+    if (!consumeMarkdownScanBudget(budget)) rawHtmlScanBudgetExceeded();
+  }
+  if (!isAsciiLetter(value[index])) {
+    return undefined;
+  }
+  const nameStart = index;
+  while (isRawHtmlTagNameCharacter(value[index])) {
+    if (!consumeMarkdownScanBudget(budget)) rawHtmlScanBudgetExceeded();
+    index += 1;
+  }
+  const tag = value.slice(nameStart, index).toLocaleLowerCase("en-US");
+
+  if (closing) {
+    while (isRawHtmlWhitespace(value[index])) {
+      if (!consumeMarkdownScanBudget(budget)) rawHtmlScanBudgetExceeded();
+      index += 1;
+    }
+    if (value[index] !== ">") {
+      return undefined;
+    }
+    if (!consumeMarkdownScanBudget(budget)) rawHtmlScanBudgetExceeded();
+    return { end: index + 1, tag, closing: true, selfClosing: false };
+  }
+
+  if (value[index] === ">") {
+    if (!consumeMarkdownScanBudget(budget)) rawHtmlScanBudgetExceeded();
+    return { end: index + 1, tag, closing: false, selfClosing: false };
+  }
+  if (value[index] === "/" && value[index + 1] === ">") {
+    if (!consumeMarkdownScanBudget(budget, 2)) rawHtmlScanBudgetExceeded();
+    return { end: index + 2, tag, closing: false, selfClosing: true };
+  }
+  if (!isRawHtmlWhitespace(value[index])) {
+    return undefined;
+  }
+
+  let quote: "'" | '"' | undefined;
+  while (index < value.length) {
+    if (!consumeMarkdownScanBudget(budget)) rawHtmlScanBudgetExceeded();
+    const character = value[index];
+    if (quote !== undefined) {
+      if (character === quote) quote = undefined;
+      index += 1;
+      continue;
+    }
+    if (character === "'" || character === '"') {
+      quote = character;
+      index += 1;
+      continue;
+    }
+    if (character === "<") {
+      return undefined;
+    }
+    if (character === ">") {
+      return {
+        end: index + 1,
+        tag,
+        closing: false,
+        selfClosing: value[index - 1] === "/"
+      };
+    }
+    index += 1;
+  }
+  return undefined;
+}
+
+function scanRawHtmlTags(value: string, visit: (match: RawHtmlTagMatch) => boolean): boolean {
+  const budget = rawHtmlScanBudget(value.length);
+  let cursor = 0;
+  while (cursor < value.length) {
+    const start = value.indexOf("<", cursor);
+    const scanned = start === -1 ? value.length - cursor : start - cursor + 1;
+    if (!consumeMarkdownScanBudget(budget, scanned)) rawHtmlScanBudgetExceeded();
+    if (start === -1) {
+      return false;
+    }
+    const match = parseRawHtmlTagAt(value, start, budget);
+    if (match !== undefined) {
+      if (visit(match)) return true;
+      cursor = match.end;
+    } else {
+      cursor = start + 1;
+    }
+  }
+  return false;
+}
+
+function startsWithRawHtmlTag(value: string): boolean {
+  const budget = rawHtmlScanBudget(value.length);
+  let start = 0;
+  while (start < 3 && value[start] === " ") {
+    if (!consumeMarkdownScanBudget(budget)) rawHtmlScanBudgetExceeded();
+    start += 1;
+  }
+  return parseRawHtmlTagAt(value, start, budget) !== undefined;
 }
 
 function rawHtmlSpecialFragmentKind(line: string): RawHtmlSpecialFragmentKind | undefined {
@@ -148,7 +286,7 @@ function hasRawHtmlSpecialTagPresence(value: string): boolean {
 }
 
 function hasRawHtmlPresence(value: string): boolean {
-  return rawHtmlTagPresencePattern.test(value) || hasRawHtmlSpecialTagPresence(value);
+  return scanRawHtmlTags(value, () => true) || hasRawHtmlSpecialTagPresence(value);
 }
 
 const voidHtmlTags = new Set([
@@ -169,25 +307,22 @@ const voidHtmlTags = new Set([
 ]);
 
 function updateRawHtmlTags(line: string, tags: Map<string, number>): void {
-  for (const match of line.matchAll(htmlTagPattern)) {
-    const tag = (match[1] ?? match[2])?.toLocaleLowerCase("en-US");
-    const rawTag = match[0];
-    if (tag === undefined) {
-      continue;
-    }
-    if (rawTag.startsWith("</")) {
+  scanRawHtmlTags(line, (match) => {
+    if (match.closing) {
+      const tag = match.tag;
       const count = tags.get(tag);
       if (count === undefined) {
-        continue;
+        return false;
       }
       if (count === 1) tags.delete(tag);
       else tags.set(tag, count - 1);
-      continue;
+      return false;
     }
-    if (!rawTag.endsWith("/>") && !voidHtmlTags.has(tag)) {
-      tags.set(tag, (tags.get(tag) ?? 0) + 1);
+    if (!match.selfClosing && !voidHtmlTags.has(match.tag)) {
+      tags.set(match.tag, (tags.get(match.tag) ?? 0) + 1);
     }
-  }
+    return false;
+  });
 }
 
 function isInvisibleCodePoint(codePoint: number): boolean {
@@ -624,7 +759,7 @@ function visibleMarkdownLines(body: string): VisibleMarkdownDocument | undefined
       if (!rawHtmlTagFragment.includes(">")) {
         continue;
       }
-      if (!rawHtmlBlockStartPattern.test(rawHtmlTagFragment)) {
+      if (!startsWithRawHtmlTag(rawHtmlTagFragment)) {
         return undefined;
       }
       updateRawHtmlTags(rawHtmlTagFragment, rawHtmlTags);
@@ -662,7 +797,7 @@ function visibleMarkdownLines(body: string): VisibleMarkdownDocument | undefined
       }
       continue;
     }
-    if (rawHtmlBlockStartPattern.test(visibleLine)) {
+    if (startsWithRawHtmlTag(visibleLine)) {
       updateRawHtmlTags(visibleLine, rawHtmlTags);
       continue;
     }

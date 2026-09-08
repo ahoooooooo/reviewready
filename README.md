@@ -25,9 +25,9 @@ pull-request code.
 
 ## Current status
 
-Package version: `1.0.16`.
+Package version: `1.0.17`.
 
-Verified Action examples: `v1.0.16`.
+Verified Action examples: `v1.0.17`.
 
 The exact stable release coordinates, immutable source commit, stable Action
 tag, npm package, and source-versus-release policy are recorded in the [public
@@ -109,7 +109,7 @@ reviewready validate --policy .reviewready.yml
 The Action can also be used in an advisory workflow:
 
 ```yaml
-- uses: ahoooooooo/reviewready@v1.0.16 # v1.0.16
+- uses: ahoooooooo/reviewready@v1.0.17 # v1.0.17
 ```
 
 The example selects this package's semantic-version release. GitHub release
@@ -183,7 +183,7 @@ Action-only repositories can copy the schema into the repository or reference an
 immutable release URL:
 
 ```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/ahoooooooo/reviewready/v1.0.16/reviewready.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ahoooooooo/reviewready/v1.0.17/reviewready.schema.json
 ```
 
 Keep the schema version aligned with the Action or CLI version being used. A local
@@ -229,7 +229,7 @@ jobs:
       statuses: read
       issues: read
     steps:
-      - uses: ahoooooooo/reviewready@v1.0.16 # v1.0.16
+      - uses: ahoooooooo/reviewready@v1.0.17 # v1.0.17
 ```
 
 Replace the example test commands with the target repository's own verification.
@@ -311,7 +311,7 @@ reviewready check --policy .reviewready.yml --input input.json
 ```
 
 The normalized input shape and examples are documented in the
-[product specification](https://github.com/ahoooooooo/reviewready/blob/v1.0.16/docs/product-spec.md).
+[product specification](https://github.com/ahoooooooo/reviewready/blob/v1.0.17/docs/product-spec.md).
 The npm package includes the CLI and schemas; it does not include `docs/` or
 `fixtures/`. The following sample commands require a repository checkout and
 run from its root:
@@ -464,7 +464,7 @@ previous path are evaluated; the Git separator is never rewritten.
   authorship, or legal responsibility.
 
 The full editor schema is [reviewready.schema.json](reviewready.schema.json). The
-executable behavior for this version is specified in [docs/product-spec.md](https://github.com/ahoooooooo/reviewready/blob/v1.0.16/docs/product-spec.md).
+executable behavior for this version is specified in [docs/product-spec.md](https://github.com/ahoooooooo/reviewready/blob/v1.0.17/docs/product-spec.md).
 
 ReviewReady v1 intentionally does not evaluate `merge_group`: GitHub's synthetic
 merge commit does not carry a complete per-PR body, review, and closing-issue
@@ -473,7 +473,7 @@ separate trustworthy aggregation design.
 
 The ordinary pull_request caller workflow is an advisory integration unless the
 repository separately protects the workflow root and required result. See
-[the trusted workflow design](https://github.com/ahoooooooo/reviewready/blob/v1.0.16/docs/adr/0001-trusted-workflow-root.md) for the
+[the trusted workflow design](https://github.com/ahoooooooo/reviewready/blob/v1.0.17/docs/adr/0001-trusted-workflow-root.md) for the
 security boundary and the settings that must be verified in GitHub.
 
 ## Security model
@@ -500,7 +500,7 @@ security boundary and the settings that must be verified in GitHub.
   it checks out, downloads, imports, caches, or executes untrusted pull-request
   code.
 
-See the current [SECURITY.md](https://github.com/ahoooooooo/reviewready/blob/main/SECURITY.md) and this version's [docs/architecture.md](https://github.com/ahoooooooo/reviewready/blob/v1.0.16/docs/architecture.md) for
+See the current [SECURITY.md](https://github.com/ahoooooooo/reviewready/blob/main/SECURITY.md) and this version's [docs/architecture.md](https://github.com/ahoooooooo/reviewready/blob/v1.0.17/docs/architecture.md) for
 the trust model and current known limitations.
 
 ## Development

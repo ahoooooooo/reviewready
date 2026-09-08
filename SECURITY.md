@@ -115,9 +115,10 @@ out, download, import, cache, build, or execute pull-request code.
   newer failure or pending result cannot fall back to an older success, and
   same-name cross-provider ambiguity is not treated as passing evidence.
 - The Markdown parser intentionally implements a bounded evidence subset rather
-  than all of CommonMark. Fences, headings, task lists, HTML comments, and
-  invisible evidence are handled conservatively; unsupported or ambiguous input
-  fails closed.
+  than all of CommonMark. Fences, headings, task lists, HTML comments, raw HTML,
+  and invisible evidence are handled conservatively. Raw HTML recognition uses
+  a deterministic operation budget; unsupported, ambiguous, or over-budget
+  input fails closed.
 - Renamed files contribute both the new and previous repository-relative paths.
   A malformed rename or unsafe path is rejected rather than normalized.
 - `merge_group` is not supported by the v1 Action. Its synthetic commit does not

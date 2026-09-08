@@ -174,6 +174,11 @@ with a hard 4 MiB raw-byte limit before decoding. Policy text has a shared
 500-Unicode-code-point visible-text contract in the runtime parser and the
 published Draft 2020-12 schema.
 
+Readiness Markdown recognition uses bounded linear scans for raw HTML tags and
+literal link contexts. The raw HTML scan has a deterministic operation budget;
+budget exhaustion becomes the stable
+`INPUT_MARKDOWN_SCAN_BUDGET_EXCEEDED` input error rather than ready evidence.
+
 Policy matching compiles each unique glob once per evaluation, deduplicates
 paths and patterns, and shares a deterministic operation budget across all
 rules. Exceeding that budget is a stable policy error rather than a partial
