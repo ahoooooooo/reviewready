@@ -15,19 +15,19 @@ check from being described as the same thing when they are not.
 
 ## Stable published coordinates
 
-The last verified stable coordinate set recorded here is v1.0.14. The `v1` and
+The last verified stable coordinate set recorded here is v1.0.15. The `v1` and
 npm `latest` rows describe that publication observation; consult GitHub and npm
 for their live targets:
 
 | Surface                | Coordinate                                                                                 |
 | ---------------------- | ------------------------------------------------------------------------------------------ |
-| Source commit          | `89714b55f0b1f03b949033c75f45a1d0358f00a2`                                                 |
-| Immutable semantic tag | `v1.0.14`                                                                                  |
+| Source commit          | `53c1c679387ad4005e07a5350609cca302d882d4`                                                 |
+| Immutable semantic tag | `v1.0.15`                                                                                  |
 | Stable Action tag      | `v1`                                                                                       |
-| npm latest             | `@ahoooooo/reviewready@1.0.14`                                                             |
-| Immutable Action pin   | `ahoooooooo/reviewready@89714b55f0b1f03b949033c75f45a1d0358f00a2`                          |
-| Immutable schema URL   | `https://raw.githubusercontent.com/ahoooooooo/reviewready/v1.0.14/reviewready.schema.json` |
-| Release evidence       | [v1.0.14 evidence](release-evidence-v1.0.14.md) and [JSON](release-evidence-v1.0.14.json)  |
+| npm latest             | `@ahoooooo/reviewready@1.0.15`                                                             |
+| Immutable Action pin   | `ahoooooooo/reviewready@53c1c679387ad4005e07a5350609cca302d882d4`                          |
+| Immutable schema URL   | `https://raw.githubusercontent.com/ahoooooooo/reviewready/v1.0.15/reviewready.schema.json` |
+| Release evidence       | [v1.0.15 evidence](release-evidence-v1.0.15.md) and [JSON](release-evidence-v1.0.15.json)  |
 
 The fixed source commit, immutable semantic tag, published npm package, and
 historical release evidence identify one publication. The release process also
@@ -53,20 +53,18 @@ will retain that target forever.
 
 ## Source versus published artifact
 
-The next milestone is the public consistency baseline, scoped in
-sourcePolicy.nextMilestone in the machine-readable record. It covers existing
-documentation and checks, revalidation of #121 then #129 then #130 on updated
-bases, package/Action/PR acceptance, and one new patch release. New capabilities,
-App/SDK hosting, a new protocol version, and large refactors remain outside that
-milestone. This scope is a plan, not evidence that integration or publication has
-completed.
+The public consistency baseline recorded in sourcePolicy.completedMilestone is
+complete. It covered existing documentation and checks, revalidation of #121 then
+#129 then #130 on updated bases, package/Action/PR acceptance, and the v1.0.15
+patch release. New capabilities, App/SDK hosting, a new protocol version, and
+large refactors remained outside that release scope.
 
 The machine-readable mainStatus distinguishes post-release development from
 release-candidate preparation. Either source state may be ahead of the verified
 stable artifact because documentation, dependency, or other unreleased changes
 can be merged before publication. Therefore:
 
-- a `main` checkout is not automatically the published v1.0.14 tarball;
+- a `main` checkout is not automatically the published v1.0.15 tarball;
 - the package manifest remains at the last published version until release
   preparation selects a new unused version;
 - a new release must build, audit, publish, and record one exact artifact; and
@@ -83,7 +81,7 @@ commit SHA; the release evidence binds the actual source commit and artifact.
 
 This is an explicit status distinction, not a rewrite of release history. The
 published source commit, artifact hashes, registry coordinates, and observed release refs
-are recorded in the v1.0.14 evidence file; later documentation commits do not
+are recorded in the v1.0.15 evidence file; later documentation commits do not
 rewrite that historical record.
 
 ## Capability and authority
