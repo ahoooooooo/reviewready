@@ -6,27 +6,22 @@
     "positioning": "Trusted Review Intake"
   },
   "stableRelease": {
-    "version": "1.0.16",
-    "sourceCommit": "754bc035821b2ca89fe61c7db690e63a332c9526",
-    "immutableTag": "v1.0.16",
+    "version": "1.0.17",
+    "sourceCommit": "2b7193f720c2a68e8ee410366e6de2b8d1922eff",
+    "immutableTag": "v1.0.17",
     "stableActionTag": "v1",
     "npmPackage": "@ahoooooo/reviewready",
-    "npmLatestVersion": "1.0.16",
-    "actionCommit": "ahoooooooo/reviewready@754bc035821b2ca89fe61c7db690e63a332c9526",
-    "schemaRef": "https://raw.githubusercontent.com/ahoooooooo/reviewready/v1.0.16/reviewready.schema.json",
-    "releaseEvidence": "docs/release-evidence-v1.0.16.json",
-    "releaseNotes": "docs/release-evidence-v1.0.16.md",
-    "releaseUrl": "https://github.com/ahoooooooo/reviewready/releases/tag/v1.0.16"
-  },
-  "releaseCandidate": {
-    "version": "1.0.17",
+    "npmLatestVersion": "1.0.17",
+    "actionCommit": "ahoooooooo/reviewready@2b7193f720c2a68e8ee410366e6de2b8d1922eff",
+    "schemaRef": "https://raw.githubusercontent.com/ahoooooooo/reviewready/v1.0.17/reviewready.schema.json",
     "releaseEvidence": "docs/release-evidence-v1.0.17.json",
-    "releaseNotes": "docs/release-evidence-v1.0.17.md"
+    "releaseNotes": "docs/release-evidence-v1.0.17.md",
+    "releaseUrl": "https://github.com/ahoooooooo/reviewready/releases/tag/v1.0.17"
   },
   "sourcePolicy": {
     "completedMilestone": {
       "name": "public-consistency-baseline",
-      "status": "in-progress",
+      "status": "complete",
       "scope": [
         "bound Markdown raw HTML recognition without changing evidence semantics",
         "verify legal release-candidate and post-release state transitions",
@@ -42,7 +37,7 @@
         "large refactors"
       ]
     },
-    "mainStatus": "release-candidate",
+    "mainStatus": "post-release-unreleased",
     "mainMayDifferFromStableArtifact": true,
     "publishedArtifactsImmutable": true,
     "publishRequiresNewVersion": true,

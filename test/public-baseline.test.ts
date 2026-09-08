@@ -51,7 +51,21 @@ function replaceIn(path: string, search: string | RegExp, replacement: string): 
   return changed;
 }
 
-function releaseCandidateOverlay(candidateVersion = "1.0.17"): Record<string, string> {
+function nextPatchVersion(version: string): string {
+  const match = /^(\d+)\.(\d+)\.(\d+)$/u.exec(version);
+  if (match === null) throw new Error("stable test version is not plain semantic version text");
+  const major = match[1];
+  const minor = match[2];
+  const patch = match[3];
+  if (major === undefined || minor === undefined || patch === undefined) {
+    throw new Error("stable test version components are unavailable");
+  }
+  return `${major}.${minor}.${String(Number(patch) + 1)}`;
+}
+
+function releaseCandidateOverlay(
+  candidateVersion = nextPatchVersion(stable.version)
+): Record<string, string> {
   const candidateBaseline = structuredClone(baseline);
   candidateBaseline.sourcePolicy.mainStatus = "release-candidate";
   candidateBaseline.sourcePolicy.completedMilestone.status = "in-progress";
@@ -112,6 +126,7 @@ const documentPath = "docs/public-baseline.md";
 const workflowPath = ".github/workflows/reviewready-trusted.yml";
 const baseline = readJson(baselinePath) as Baseline;
 const stable = baseline.stableRelease;
+const nextCandidateVersion = nextPatchVersion(stable.version);
 const manifest = readJson("package.json") as PackageManifest;
 const sourceVersion = manifest.version;
 const exampleAction = `ahoooooooo/reviewready@v${sourceVersion}`;
@@ -290,7 +305,7 @@ describe("public baseline consistency", () => {
     const overrides = releaseCandidateOverlay();
     const candidateBaseline = JSON.parse(overrides[baselinePath] ?? "{}") as Baseline;
     expect(candidateBaseline.stableRelease).toEqual(stable);
-    expect(candidateBaseline.releaseCandidate?.version).toBe("1.0.17");
+    expect(candidateBaseline.releaseCandidate?.version).toBe(nextCandidateVersion);
     expect(verifyOverlay(overrides)).toEqual([]);
   });
 
