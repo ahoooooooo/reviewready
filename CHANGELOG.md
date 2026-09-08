@@ -7,6 +7,14 @@ the project uses semantic versioning.
 
 ### Fixed
 
+- Preserve visible Markdown link and code contexts while rejecting hidden or raw
+  HTML as pull-request evidence; malformed link-like input remains bounded and
+  fails closed.
+- Treat valid empty inline links and defined empty reference links as empty
+  evidence, while preserving unresolved reference text and valid multiline
+  reference definitions.
+- Keep fenced-code content, reference-title continuations, and indented heading
+  boundaries from hiding or consuming evidence outside their Markdown context.
 - Check public baseline prose, structured version coordinates, capability
   boundaries, and trusted workflow pins together, with regression cases that
   reject mismatched versions, pins, and capability status.
