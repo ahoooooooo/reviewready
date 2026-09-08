@@ -435,8 +435,9 @@ describe("GitHub repository audit API adapter", () => {
   });
 
   it("accepts a bounded unpaginated workflow directory without probing a fake page", async () => {
-    const request = vi.fn((route: string, params: Record<string, unknown>) => {
-      void params;
+    const request = vi.fn<
+      (route: string, params: Record<string, unknown>) => Promise<ReturnType<typeof response>>
+    >((route) => {
       if (route === "GET /repos/{owner}/{repo}/contents/.github/workflows") {
         return Promise.resolve(
           response([{ path: ".github/workflows/reviewready-trusted.yml", type: "file" }])
@@ -1248,8 +1249,7 @@ describe("GitHub repository audit API adapter", () => {
 
   it("normalizes only a confirmed protection 404 as absent", async () => {
     const request = fakeRequest();
-    request.mockImplementation((route, params) => {
-      void params;
+    request.mockImplementation((route) => {
       if (route === "GET /repos/{owner}/{repo}/branches/{branch}/protection") {
         return Promise.reject(Object.assign(new Error("missing"), { status: 404 }));
       }

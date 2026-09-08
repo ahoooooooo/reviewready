@@ -9,6 +9,8 @@ the project uses semantic versioning.
 
 - Update the runtime schema dependency from Zod 4.4.3 to 4.5.4 and rebuild the
   committed Action bundle from the same dependency graph.
+- Update the development toolchain, including `@vercel/ncc` 0.45.0, and adapt
+  source and test expressions to the current TypeScript ESLint rules.
 
 ### Fixed
 

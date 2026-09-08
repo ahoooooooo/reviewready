@@ -521,8 +521,8 @@ describe("repository audit", () => {
         }
       },
       rulesets: base.rulesets.map((ruleset) => {
-        const { bypassActorsKnown, ...withoutAuthority } = ruleset;
-        void bypassActorsKnown;
+        const withoutAuthority = { ...ruleset };
+        Reflect.deleteProperty(withoutAuthority, "bypassActorsKnown");
         return withoutAuthority;
       })
     } as unknown;
