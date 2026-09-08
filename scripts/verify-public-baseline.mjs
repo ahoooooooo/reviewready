@@ -241,19 +241,28 @@ function markdownLinkTargets(text) {
   const source = renderedMarkdownLinkSource(text);
   /** @type {Map<string, string>} */
   const definitions = new Map();
-  for (const match of source.matchAll(/^\s{0,3}\[([^\]]+)\]:\s*<?([^\s>]+)>?/gmu)) {
+  const definitionPattern = /^\s{0,3}\[([^\]]+)\]:\s*<?([^\s>]+)>?.*$/gmu;
+  for (const match of source.matchAll(definitionPattern)) {
     const label = normalizeMarkdownReferenceLabel(match[1] ?? "");
     if (label.length > 0 && !definitions.has(label)) {
       definitions.set(label, match[2] ?? "");
     }
   }
+  const linkSource = source.replace(definitionPattern, (line) => " ".repeat(line.length));
   const targets = [
-    ...[...source.matchAll(/\]\(<?([^\s)>]+)>?(?:\s+"[^"]*")?\)/gu)].map((match) => match[1] ?? "")
+    ...[...linkSource.matchAll(/\]\(<?([^\s)>]+)>?(?:\s+"[^"]*")?\)/gu)].map(
+      (match) => match[1] ?? ""
+    )
   ];
-  for (const match of source.matchAll(/!?\[([^\]]*)\]\[([^\]]*)\]/gu)) {
+  for (const match of linkSource.matchAll(/!?\[([^\]]*)\]\[([^\]]*)\]/gu)) {
     const label = normalizeMarkdownReferenceLabel(
       (match[2] ?? "").length > 0 ? (match[2] ?? "") : (match[1] ?? "")
     );
+    const target = definitions.get(label);
+    if (target !== undefined) targets.push(target);
+  }
+  for (const match of linkSource.matchAll(/!?\[([^\]\n]+)\](?![([])/gu)) {
+    const label = normalizeMarkdownReferenceLabel(match[1] ?? "");
     const target = definitions.get(label);
     if (target !== undefined) targets.push(target);
   }
