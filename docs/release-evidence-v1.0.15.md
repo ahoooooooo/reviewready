@@ -69,6 +69,32 @@ verified against the same commit and exact artifact.
   https://github.com/ahoooooooo/reviewready/releases/tag/v1.0.15
 - GitHub Release published at: `2026-09-08T03:08:24Z`
 
+## Pull-request event acceptance
+
+- [x] Opening the evidence PR produced readiness run
+      https://github.com/ahoooooooo/reviewready/actions/runs/34183219864
+      for head `61a64e0f6bf953f71fb5d63a0261d8f1f29e43be`.
+- [x] Pushing the publication-time evidence commit produced synchronize
+      readiness run
+      https://github.com/ahoooooooo/reviewready/actions/runs/34183382923
+      for the new head `1b1271e2d3e36aeaafe236136b1bdaedcf1487f3`.
+- [x] Editing only the PR body produced readiness run
+      https://github.com/ahoooooooo/reviewready/actions/runs/34183545287
+      for the unchanged head `1b1271e2d3e36aeaafe236136b1bdaedcf1487f3`.
+- [x] Temporary, never-merge PR #134 used a first-attempt-only CI canary on
+      head `f895378bd4fafd759682fce3e462fabcc74edcd3`. CI run
+      https://github.com/ahoooooooo/reviewready/actions/runs/34183711488
+      failed `check` on attempt 1 and passed the full gate on a same-head
+      attempt 2 rerun.
+- [x] Readiness run
+      https://github.com/ahoooooooo/reviewready/actions/runs/34183711749
+      failed on attempt 1, did not automatically rerun when CI later passed,
+      and passed on the documented manual rerun without a new commit.
+
+The temporary acceptance PR was closed without merge and its branch was deleted
+after these observations. A later CI-only rerun still requires a manual rerun of
+**ReviewReady trusted evidence** after CI completes.
+
 ## Verification boundary
 
 The first workflow attempt published the exact audited artifact through npm

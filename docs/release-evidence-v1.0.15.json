@@ -28,6 +28,18 @@
   "verificationPublishJob": "https://github.com/ahoooooooo/reviewready/actions/runs/34182179568/job/101924055261",
   "transparencyLogIndex": "2754460134",
   "registrySmokeJob": "https://github.com/ahoooooooo/reviewready/actions/runs/34182179568/job/101924173146",
+  "prEventAcceptance": {
+    "openedReadinessRun": "https://github.com/ahoooooooo/reviewready/actions/runs/34183219864",
+    "synchronizeReadinessRun": "https://github.com/ahoooooooo/reviewready/actions/runs/34183382923",
+    "editedReadinessRun": "https://github.com/ahoooooooo/reviewready/actions/runs/34183545287",
+    "sameHeadCommit": "f895378bd4fafd759682fce3e462fabcc74edcd3",
+    "sameHeadCiRun": "https://github.com/ahoooooooo/reviewready/actions/runs/34183711488",
+    "sameHeadReadinessRun": "https://github.com/ahoooooooo/reviewready/actions/runs/34183711749",
+    "ciAttempt1": "failure",
+    "ciAttempt2": "success",
+    "readinessAttempt1": "failure",
+    "readinessAttempt2AfterManualRerun": "success"
+  },
   "tarballUrl": "https://registry.npmjs.org/@ahoooooo/reviewready/-/reviewready-1.0.15.tgz",
   "releaseUrl": "https://github.com/ahoooooooo/reviewready/releases/tag/v1.0.15",
   "publishedAt": "2026-09-08T03:08:24Z",
