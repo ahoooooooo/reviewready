@@ -15,7 +15,9 @@ check from being described as the same thing when they are not.
 
 ## Stable published coordinates
 
-The current stable coordinate set is v1.0.14:
+The last verified stable coordinate set recorded here is v1.0.14. The `v1` and
+npm `latest` rows describe that publication observation; consult GitHub and npm
+for their live targets:
 
 | Surface                | Coordinate                                                                                 |
 | ---------------------- | ------------------------------------------------------------------------------------------ |
@@ -27,15 +29,42 @@ The current stable coordinate set is v1.0.14:
 | Immutable schema URL   | `https://raw.githubusercontent.com/ahoooooooo/reviewready/v1.0.14/reviewready.schema.json` |
 | Release evidence       | [v1.0.14 evidence](release-evidence-v1.0.14.md) and [JSON](release-evidence-v1.0.14.json)  |
 
-The semantic tag, release object, npm artifact, stable `v1` ref, and release
-evidence are immutable release surfaces. They are verified together by the
-release process; a later documentation commit does not move them.
+The fixed source commit, immutable semantic tag, published npm package, and
+historical release evidence identify one publication. The release process also
+verifies the mutable `v1` alias and npm `latest` tag at publication time. Later
+releases may update those aliases after verification; later documentation commits
+do not rewrite historical package bytes, tags, or observations.
+
+## Reference policy
+
+| Surface               | Policy                                        |
+| --------------------- | --------------------------------------------- |
+| Full commit SHA       | Fixed source revision                         |
+| `vX.Y.Z`              | Immutable release tag                         |
+| Published npm version | Immutable package                             |
+| `v1`                  | Mutable alias updated only after verification |
+| npm latest            | Mutable registry tag                          |
+| Release evidence      | Historical publication observation            |
+
+A full commit SHA fixes source identity. A semantic-version tag and published
+package must not be moved, overwritten, or reused. Release evidence records
+what was verified for that publication; it does not promise that a mutable alias
+will retain that target forever.
 
 ## Source versus published artifact
 
-`main` is a post-release development baseline. It may be ahead of the stable
-release because documentation, dependency, or other unreleased changes can be
-merged before the next release is prepared. Therefore:
+The next milestone is the public consistency baseline, scoped in
+sourcePolicy.nextMilestone in the machine-readable record. It covers existing
+documentation and checks, revalidation of #121 then #129 then #130 on updated
+bases, package/Action/PR acceptance, and one new patch release. New capabilities,
+App/SDK hosting, a new protocol version, and large refactors remain outside that
+milestone. This scope is a plan, not evidence that integration or publication has
+completed.
+
+The machine-readable mainStatus distinguishes post-release development from
+release-candidate preparation. Either source state may be ahead of the verified
+stable artifact because documentation, dependency, or other unreleased changes
+can be merged before publication. Therefore:
 
 - a `main` checkout is not automatically the published v1.0.14 tarball;
 - the package manifest remains at the last published version until release
@@ -45,10 +74,17 @@ merged before the next release is prepared. Therefore:
   `verify:public-baseline`, `verify:dist`, `verify:package`, and
   `release:preflight`.
 
+Before packing a candidate, its README package version must match the package
+manifest. Verified Action and schema examples may retain the last verified
+stable release while a candidate is prepared, and are labeled separately from
+the candidate package version. The baseline's stable coordinates advance only
+after publication evidence exists. A candidate does not embed its own future
+commit SHA; the release evidence binds the actual source commit and artifact.
+
 This is an explicit status distinction, not a rewrite of release history. The
-published source commit, artifact hashes, registry coordinates, and release refs
+published source commit, artifact hashes, registry coordinates, and observed release refs
 are recorded in the v1.0.14 evidence file; later documentation commits do not
-move those immutable release surfaces.
+rewrite that historical record.
 
 ## Capability and authority
 
@@ -63,6 +99,20 @@ conformance ecosystem, or external pilot is shipped or implied. A successful
 named check is evidence output, not unique issuer identity or merge
 authorization.
 
+| Capability  | Status      | Authority                              |
+| ----------- | ----------- | -------------------------------------- |
+| action      | shipped     | advisory                               |
+| cli         | shipped     | local and read-only                    |
+| library     | shipped     | not a provider or merge authority      |
+| githubApp   | not-shipped | no production hosted enforcement       |
+| providerSdk | not-shipped | no public provider conformance surface |
+
+The checked-in workflow is displayed as **ReviewReady trusted evidence** and
+keeps its `readiness` check identity. Its bounded wait does not subscribe to
+later CI reruns: a CI-only rerun after readiness completes requires a manual
+trusted-workflow rerun once CI finishes. Configured PR events cover new commits
+and body edits; the resulting check must match the current head and metadata.
+
 ## Live project truth
 
 Backlog, branches, pull requests, review state, commit verification, and release
@@ -75,8 +125,12 @@ relying on frozen counts in documentation.
 
 ## Public-surface boundary
 
-The public tree and npm archive contain product source, generated Action output,
-schemas, tests, and intentional product documentation. Parent-agent controls,
+The public repository contains product source, generated Action output, schemas,
+tests, and intentional product documentation. The npm allowlist ships the CLI
+runtime, declarations and source maps, schemas, README, and license; repository
+`docs/` and `fixtures/` are not installed. README links to those documents use
+explicit GitHub URLs, and fixture commands are labeled as requiring a checkout.
+Parent-agent controls,
 the live Handoff, raw control/review evidence, private research, credentials,
 profiles, sessions, and other secret material remain local-only and are checked
 by the repository ignore and package privacy gates.

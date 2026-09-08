@@ -5,6 +5,23 @@ the project uses semantic versioning.
 
 ## [Unreleased]
 
+### Fixed
+
+- Check public baseline prose, structured version coordinates, capability
+  boundaries, and trusted workflow pins together, with regression cases that
+  reject mismatched versions, pins, and capability status.
+- Verify candidate README versions and installed-package documentation against
+  the exact tarball, separately from online release verification.
+
+### Documentation
+
+- Distinguish immutable release tags and packages from the mutable `v1` and npm
+  `latest` aliases, and retain release evidence as historical observations.
+- Separate package versions from verified Action examples, label fixture commands
+  as repository-only, and link unshipped documentation to GitHub.
+- Rename the trusted workflow display to ReviewReady trusted evidence, preserving
+  `readiness`, and document manual readiness reruns after later CI-only reruns.
+
 ## [1.0.14] - 2026-09-04
 
 ### Documentation

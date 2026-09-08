@@ -71,9 +71,10 @@ describe("trusted ReviewReady workflow", () => {
     expect(readme).not.toContain("candidate checklist");
     expect(readme).toContain(publishedSchemaRef);
     expect(readme).toContain(
-      "The v" +
-        version +
-        " package includes bounded " +
+      "Package version: " + String.fromCharCode(96) + version + String.fromCharCode(96) + "."
+    );
+    expect(readme).toContain(
+      "The package includes bounded " +
         String.fromCharCode(96) +
         "audit collect" +
         String.fromCharCode(96) +
