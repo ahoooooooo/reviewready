@@ -34,7 +34,9 @@ const input = {
 };
 
 if (process.argv[2] === "--engine") {
-  const { evaluate } = await import("../dist/engine.js");
+  const { evaluate } = /** @type {{ evaluate: typeof import("../src/engine.js").evaluate }} */ (
+    await import("../dist/engine.js")
+  );
   const result = evaluate(policy, input);
   if (result.status !== "ready") throw new Error("engine regression case changed classification");
   try {
@@ -53,7 +55,10 @@ if (process.argv[2] === "--engine") {
 }
 
 if (process.argv[2] === "--action") {
-  const { runAction } = await import("../dist/action-runner.js");
+  const { runAction } =
+    /** @type {{ runAction: typeof import("../src/action-runner.js").runAction }} */ (
+      await import("../dist/action-runner.js")
+    );
   /** @param {string} actionBody */
   async function executeAction(actionBody) {
     /** @type {Map<string, string>} */
