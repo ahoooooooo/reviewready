@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 const packageManifest = JSON.parse(await readFile("package.json", "utf8")) as { version?: unknown };
 const publicBaseline = JSON.parse(await readFile("docs/public-baseline.json", "utf8")) as {
   stableRelease?: { version?: unknown; sourceCommit?: unknown; schemaRef?: unknown };
+  releaseCandidate?: { version?: unknown };
 };
 const workflow = await readFile(".github/workflows/reviewready-trusted.yml", "utf8");
 const readme = await readFile("README.md", "utf8");
@@ -15,7 +16,8 @@ const canonicalRepository = `ah${"o".repeat(8)}/reviewready`;
 const stableRelease = publicBaseline.stableRelease ?? {};
 const publishedReleaseVersion = String(stableRelease.version);
 const publishedReleaseCommit = String(stableRelease.sourceCommit);
-const publishedSchemaRef = String(stableRelease.schemaRef);
+const sourceVersion = String(packageManifest.version);
+const sourceSchemaRef = `https://raw.githubusercontent.com/${canonicalRepository}/v${sourceVersion}/reviewready.schema.json`;
 
 describe("trusted ReviewReady workflow", () => {
   it("uses the canonical GitHub repository as its immutable trust root", () => {
@@ -43,13 +45,13 @@ describe("trusted ReviewReady workflow", () => {
     );
   });
 
-  it("pins the trusted and documented Action examples to the published stable release", () => {
+  it("keeps the trusted workflow on stable SHA and README examples on the source version", () => {
     expect(workflow).toContain(
       `uses: ${canonicalRepository}@${publishedReleaseCommit} # v${publishedReleaseVersion}`
     );
-    expect(readme).toContain(
-      `uses: ${canonicalRepository}@${publishedReleaseCommit} # v${publishedReleaseVersion}`
-    );
+    expect(readme).toContain(`uses: ${canonicalRepository}@v${sourceVersion} # v${sourceVersion}`);
+    expect(readme).not.toContain(`uses: ${canonicalRepository}@${publishedReleaseCommit}`);
+    expect(publicBaseline.releaseCandidate?.version).toBe(sourceVersion);
     expect(workflow).not.toContain("main v1.0.6 candidate");
     expect(readme).not.toContain("v1.0.5 bootstrap pin");
   });
@@ -65,11 +67,11 @@ describe("trusted ReviewReady workflow", () => {
 
   it("keeps package release text authoritative and changelog-aligned", () => {
     expect(typeof packageManifest.version).toBe("string");
-    const version = String(packageManifest.version);
+    const version = sourceVersion;
     expect(readme).toContain("The npm registry and GitHub Releases are authoritative");
     expect(readme).not.toContain("This commit prepares the");
     expect(readme).not.toContain("candidate checklist");
-    expect(readme).toContain(publishedSchemaRef);
+    expect(readme).toContain(sourceSchemaRef);
     expect(readme).toContain(
       "Package version: " + String.fromCharCode(96) + version + String.fromCharCode(96) + "."
     );

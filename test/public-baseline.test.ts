@@ -3,11 +3,17 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { verifyPackagedReadme, verifyPublicBaseline } from "../scripts/verify-public-baseline.mjs";
+import { normalizeInput } from "../src/input.js";
 
 interface Baseline {
   stableRelease: { version: string; sourceCommit: string; actionCommit: string };
-  sourcePolicy: { mainStatus: string };
+  sourcePolicy: { mainStatus: string; completedMilestone: { status: string } };
   releaseCandidate?: { version: string; releaseEvidence: string; releaseNotes: string };
+  ta2DogfoodObservation: {
+    repositoryAuditStatus: string;
+    replayIntegrity: string;
+    missing: string[];
+  };
   capabilityBoundary: Record<string, { status: string; authority: string }>;
 }
 
@@ -43,10 +49,15 @@ function replaceIn(path: string, search: string | RegExp, replacement: string): 
 const baselinePath = "docs/public-baseline.json";
 const documentPath = "docs/public-baseline.md";
 const workflowPath = ".github/workflows/reviewready-trusted.yml";
-const stable = (readJson(baselinePath) as Baseline).stableRelease;
+const baseline = readJson(baselinePath) as Baseline;
+const stable = baseline.stableRelease;
+const manifest = readJson("package.json") as PackageManifest;
+const sourceVersion = manifest.version;
+const exampleAction = `ahoooooooo/reviewready@v${sourceVersion}`;
 const wrongVersion = "999.999.999";
 const wrongCommit = "0".repeat(40);
 const wrongAction = stable.actionCommit.replace(stable.sourceCommit, wrongCommit);
+const wrongExampleAction = "ahoooooooo/reviewready@v" + wrongVersion;
 
 describe("public baseline consistency", () => {
   it("accepts the real public documents and structured source coordinates", () => {
@@ -92,22 +103,20 @@ describe("public baseline consistency", () => {
   });
 
   it("rejects one incorrect README YAML example despite another correct example", () => {
-    const readme = replaceIn("README.md", "uses: " + stable.actionCommit, "uses: " + wrongAction);
-    expect(readme).toContain("uses: " + stable.actionCommit);
+    const readme = replaceIn("README.md", "uses: " + exampleAction, "uses: " + wrongExampleAction);
+    expect(readme).toContain("uses: " + exampleAction);
     expect(verifyOverlay({ "README.md": readme })).toContain(
-      "README Action uses values do not match verified stable pin"
+      "README Action uses values do not match source package version"
     );
   });
 
   it.each(["README.md", workflowPath])(
     "rejects a stale version annotation on a correct Action pin in %s",
     (path) => {
-      const document = replaceIn(
-        path,
-        stable.actionCommit + " # v" + stable.version,
-        stable.actionCommit + " # v" + wrongVersion
-      );
-      expect(document).toContain("uses: " + stable.actionCommit);
+      const action = path === "README.md" ? exampleAction : stable.actionCommit;
+      const version = path === "README.md" ? sourceVersion : stable.version;
+      const document = replaceIn(path, action + " # v" + version, action + " # v" + wrongVersion);
+      expect(document).toContain("uses: " + action);
       expect(verifyOverlay({ [path]: document })).toContain(
         "Action pin version annotation does not match the verified example version"
       );
@@ -137,6 +146,17 @@ describe("public baseline consistency", () => {
     const security = replaceIn("SECURITY.md", "does not ship a hosted", "ships a hosted");
     expect(verifyOverlay({ "SECURITY.md": security })).toContain(
       "security policy must distinguish internal modules from shipped App/SDK capabilities"
+    );
+  });
+
+  it("rejects a stale trusted-workflow release number in the security policy", () => {
+    const security = replaceIn(
+      "SECURITY.md",
+      "reference pinned to the exact stable release commit recorded in\n  `docs/public-baseline.json`",
+      "reference pinned to the exact v1.0.14 release commit"
+    );
+    expect(verifyOverlay({ "SECURITY.md": security })).toContain(
+      "security policy trusted-workflow pin wording is stale"
     );
   });
 
@@ -195,49 +215,53 @@ describe("public baseline consistency", () => {
     expect(verifyOverlay({ "README.md": readme })).toContain("README.md: " + error);
   });
 
-  it("accepts a candidate package without requiring it to embed its future commit SHA", () => {
-    const baseline = readJson(baselinePath) as Baseline;
-    const manifest = readJson("package.json") as PackageManifest;
-    const lock = readJson("package-lock.json") as Lockfile;
-    const version = manifest.version.replace(/\d+$/u, (patch) => String(Number(patch) + 1));
-    const candidate = {
-      version,
-      releaseEvidence: `docs/release-evidence-v${version}.json`,
-      releaseNotes: `docs/release-evidence-v${version}.md`
-    };
-    baseline.sourcePolicy.mainStatus = "release-candidate";
-    baseline.releaseCandidate = candidate;
-    manifest.version = version;
-    lock.version = version;
-    lock.packages[""] = { ...lock.packages[""], version };
-    const readme = replaceIn(
-      "README.md",
-      /^Package version: .+$/mu,
-      `Package version: \`${version}\`.`
-    );
-    const overrides = {
-      [baselinePath]: JSON.stringify(baseline),
-      "package.json": JSON.stringify(manifest),
-      "package-lock.json": JSON.stringify(lock),
-      "README.md": readme,
-      "CHANGELOG.md": replaceIn(
-        "CHANGELOG.md",
-        "## [Unreleased]",
-        `## [Unreleased]\n\n## [${version}]`
-      ),
-      [candidate.releaseEvidence]: JSON.stringify({ version }),
-      [candidate.releaseNotes]: `# ReviewReady v${version} release evidence\n\nPublication pending.\n`
-    };
+  it("keeps the release candidate distinct from stable coordinates without a future SHA", () => {
+    expect(baseline.sourcePolicy.mainStatus).toBe("release-candidate");
+    expect(baseline.sourcePolicy.completedMilestone.status).toBe("in-progress");
+    expect(baseline.releaseCandidate?.version).toBe(sourceVersion);
+    expect(sourceVersion).not.toBe(stable.version);
+    expect(readSource("README.md")).toContain(exampleAction);
+    expect(readSource("README.md")).not.toContain(stable.actionCommit);
+  });
 
-    expect(baseline.stableRelease).toEqual(stable);
-    expect(readme).toContain(stable.actionCommit);
-    expect(verifyOverlay(overrides)).toEqual([]);
-    expect(verifyPackagedReadme(readme, version, manifest.files)).toEqual([]);
+  it("rejects a candidate that is prematurely marked complete", () => {
+    const changed = structuredClone(baseline);
+    changed.sourcePolicy.completedMilestone.status = "complete";
+    expect(verifyOverlay({ [baselinePath]: JSON.stringify(changed) })).toContain(
+      "baseline milestone status contradicts source state"
+    );
+  });
+
+  it("rejects readiness documentation that uses the audit-only appId field", () => {
+    const productSpec = replaceIn(
+      "docs/product-spec.md",
+      '"app": "github-actions"',
+      '"appId": 15368'
+    );
+    expect(verifyOverlay({ "docs/product-spec.md": productSpec })).toContain(
+      "product spec check example does not match the readiness parser"
+    );
+  });
+
+  it("keeps the documented normalized input executable by the strict parser", () => {
+    const section = readSource("docs/product-spec.md").split(
+      "### Complete normalized input example\n"
+    )[1];
+    const json = section?.match(/```json\n([\s\S]*?)\n```/u)?.[1];
+    expect(json).toBeTypeOf("string");
+    expect(() => normalizeInput(JSON.parse(json ?? "null") as unknown)).not.toThrow();
+  });
+
+  it("rejects a TA-2 replay result relabeled as an audit pass", () => {
+    const changed = structuredClone(baseline);
+    changed.ta2DogfoodObservation.repositoryAuditStatus = "pass";
+    expect(verifyOverlay({ [baselinePath]: JSON.stringify(changed) })).toContain(
+      "TA-2 replay and repository-audit statuses are conflated"
+    );
   });
 });
 
 describe("packaged README consistency", () => {
-  const manifest = readJson("package.json") as PackageManifest;
   const readme = readSource("README.md");
 
   it("accepts the shipped README using the package allowlist", () => {
@@ -247,6 +271,29 @@ describe("packaged README consistency", () => {
   it("rejects stale documentation inside an otherwise newer package", () => {
     expect(verifyPackagedReadme(readme, wrongVersion, manifest.files)).toContain(
       "README package version does not match the packaged manifest"
+    );
+  });
+
+  it("rejects previous-version Action and schema examples in a newer package", () => {
+    const staleVersion = "1.0.15";
+    const staleReadme = readme
+      .replaceAll(
+        "ahoooooooo/reviewready@v" + sourceVersion,
+        "ahoooooooo/reviewready@v" + staleVersion
+      )
+      .replaceAll("/v" + sourceVersion + "/", "/v" + staleVersion + "/");
+    const errors = verifyPackagedReadme(staleReadme, sourceVersion, manifest.files);
+    expect(errors).toContain("README Action examples must use the packaged semantic version");
+    expect(errors).toContain("README schema examples must use the packaged semantic version");
+  });
+
+  it("rejects mutable main links for version-bound product documents", () => {
+    const versioned =
+      "https://github.com/ahoooooooo/reviewready/blob/v" + sourceVersion + "/docs/product-spec.md";
+    const mutable = "https://github.com/ahoooooooo/reviewready/blob/main/docs/product-spec.md";
+    const changed = readme.replaceAll(versioned, mutable);
+    expect(verifyPackagedReadme(changed, sourceVersion, manifest.files)).toContain(
+      "README version-bound document points to mutable main: docs/product-spec.md"
     );
   });
 

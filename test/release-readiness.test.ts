@@ -10,6 +10,7 @@ import YAML from "yaml";
 import {
   assertActionBundleClean,
   assertActionBundleSynchronized,
+  assertReleaseCheckRuns,
   assertReleaseMetadata,
   assertReleaseProvenance,
   fetchBounded,
@@ -23,6 +24,62 @@ import {
 } from "../scripts/release-preflight.mjs";
 
 describe("release readiness metadata", () => {
+  const successfulReleaseChecks = {
+    total_count: 4,
+    check_runs: [
+      "check",
+      "Node.js 22 compatibility",
+      "Analyze (actions)",
+      "Analyze (javascript-typescript)"
+    ].map((name) => ({
+      name,
+      status: "completed",
+      conclusion: "success",
+      app: { slug: "github-actions" }
+    }))
+  };
+
+  it("requires every release prerequisite on the exact candidate commit", () => {
+    expect(() => {
+      assertReleaseCheckRuns(successfulReleaseChecks);
+    }).not.toThrow();
+    expect(() => {
+      assertReleaseCheckRuns({
+        total_count: 3,
+        check_runs: successfulReleaseChecks.check_runs.filter(({ name }) => name !== "check")
+      });
+    }).toThrow("release prerequisite check is missing or ambiguous: check");
+  });
+
+  it("rejects pending, failed, non-Actions, ambiguous, or truncated release checks", () => {
+    for (const change of [
+      { status: "in_progress" },
+      { conclusion: "failure" },
+      { app: { slug: "third-party" } }
+    ]) {
+      expect(() => {
+        assertReleaseCheckRuns({
+          ...successfulReleaseChecks,
+          check_runs: successfulReleaseChecks.check_runs.map((run, index) =>
+            index === 0 ? { ...run, ...change } : run
+          )
+        });
+      }).toThrow("release prerequisite check did not pass: check");
+    }
+    expect(() => {
+      assertReleaseCheckRuns({
+        total_count: 5,
+        check_runs: successfulReleaseChecks.check_runs
+      });
+    }).toThrow("release check-run response is incomplete");
+    expect(() => {
+      assertReleaseCheckRuns({
+        total_count: 5,
+        check_runs: [...successfulReleaseChecks.check_runs, successfulReleaseChecks.check_runs[0]]
+      });
+    }).toThrow("release prerequisite check is missing or ambiguous: check");
+  });
+
   it("rejects a provenance response redirected to an untrusted host", async () => {
     const response = new Response("trusted-looking body");
     Object.defineProperty(response, "url", { value: "https://attacker.example/redirected" });
@@ -166,6 +223,10 @@ describe("release readiness metadata", () => {
 
     expect(workflow).toContain('gh release view "v$RELEASE_VERSION"');
     expect(workflow).toContain("--json tagName,targetCommitish,isDraft,isPrerelease,name,body");
+    expect(workflow).toContain(
+      "gh api \"repos/$GITHUB_REPOSITORY/releases/tags/v$RELEASE_VERSION\" --jq '.immutable'"
+    );
+    expect(workflow).toContain('if [[ "$release_immutable" != "true" ]]');
     expect(workflow).toContain("releases/latest");
     expect(workflow).toContain("git/ref/tags/v$RELEASE_VERSION");
     expect(workflow).toContain("git/ref/tags/v1");
@@ -177,6 +238,17 @@ describe("release readiness metadata", () => {
     );
     expect(registryVerification).toBeGreaterThan(-1);
     expect(tagCreation).toBeGreaterThan(registryVerification);
+  });
+
+  it("requires Node 22, Node 24 artifact parity, and CodeQL on the exact release commit", async () => {
+    const workflow = await readFile(".github/workflows/release-publish.yml", "utf8");
+    const auditStart = workflow.indexOf("  audit:");
+    const publishStart = workflow.indexOf("  publish:");
+    const auditJob = workflow.slice(auditStart, publishStart);
+
+    expect(auditJob).toContain("checks: read");
+    expect(auditJob).toContain("commits/$RELEASE_COMMIT/check-runs?per_page=100");
+    expect(auditJob).toContain("assertReleaseCheckRuns(response)");
   });
 
   it("passes the repository explicitly to release CLI calls in the checkout-free publish job", async () => {
@@ -579,6 +651,7 @@ describe("release readiness metadata", () => {
     };
     const calls: string[] = [];
     let releaseBody = "## [1.0.6] - 2026-08-12\n\nVerified release.";
+    let releaseImmutable: boolean | undefined = true;
     const fetchImpl = (input: string) => {
       calls.push(input);
       if (input === tarballUrl) {
@@ -606,6 +679,7 @@ describe("release readiness metadata", () => {
           target_commitish: commit,
           draft: false,
           prerelease: false,
+          immutable: releaseImmutable,
           name: "ReviewReady " + version,
           body: releaseBody
         };
@@ -645,6 +719,17 @@ describe("release readiness metadata", () => {
       expect(calls).toContain(previousReleaseApi);
       expect(calls).toContain(refBase + "v" + version);
       expect(calls).toContain(tagBase + annotatedTagObject);
+      for (const immutable of [false, undefined]) {
+        releaseImmutable = immutable;
+        await expect(
+          verifyReleaseProvenance(evidence, artifactPath, {
+            cwd: directory,
+            fetchImpl,
+            npmRunner
+          })
+        ).rejects.toThrow("GitHub release metadata");
+      }
+      releaseImmutable = true;
       releaseBody = "tampered release notes";
       await expect(
         verifyReleaseProvenance(evidence, artifactPath, {

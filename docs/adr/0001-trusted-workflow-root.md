@@ -3,8 +3,9 @@
 ## Status
 
 Accepted. The repository carries a metadata-only reference workflow at
-.github/workflows/reviewready-trusted.yml pinned to the exact verified v1.0.15
-release commit. The workflow is not authoritative until GitHub branch
+.github/workflows/reviewready-trusted.yml pinned to the exact stable release
+commit recorded in `docs/public-baseline.json`. The workflow is not authoritative
+until GitHub branch
 protection, rulesets, and workflow-file protection are independently configured
 and verified.
 

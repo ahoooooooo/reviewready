@@ -75,8 +75,8 @@ The policy engine receives data, not an API client:
   in path matching;
 - PR body and labels;
 - linked issue numbers;
-- completed checks or terminal commit statuses with name, conclusion, and
-  optional mutually-exclusive positive App ID or provider slug identity;
+- completed checks or terminal commit statuses with name, conclusion, and an
+  optional non-empty provider slug in the `app` string field;
 - reviews with reviewer login, maintainer status, and an optional submission
   timestamp;
 - attestations supplied through exact checked markdown task-list items.
@@ -90,6 +90,37 @@ non-control, non-format content without leading or trailing whitespace. The
 published JSON Schema and runtime parser implement the same contract.
 
 GitHub-specific fetching and normalization live outside the engine.
+
+### Complete normalized input example
+
+Save the following as `input.json`. It uses only fields accepted by the strict
+v1 readiness parser; numeric App IDs belong to the separate repository-audit
+contract.
+
+```json
+{
+  "version": 1,
+  "changedFiles": ["src/example.ts"],
+  "body": "## Testing\n\n- [x] Added and ran focused coverage.",
+  "labels": [],
+  "linkedIssues": [123],
+  "checks": [
+    {
+      "name": "test",
+      "conclusion": "success",
+      "app": "github-actions"
+    }
+  ],
+  "reviews": []
+}
+```
+
+With the policy above saved as `.reviewready.yml`, the installed package can
+evaluate the example directly:
+
+```console
+reviewready check --policy .reviewready.yml --input input.json --json
+```
 
 ## Required v1 commands
 

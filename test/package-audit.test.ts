@@ -19,9 +19,13 @@ interface PackageAuditEntry {
   content: string;
 }
 
-const packagedReadme = (await readFile("README.md", "utf8")).replace(
-  /^Package version:.*$/mu,
-  "Package version: " + String.fromCharCode(96) + "1.0.2" + String.fromCharCode(96) + "."
+const fixturePackageVersion = "1.0.2";
+const sourcePackageVersion = String(
+  (JSON.parse(await readFile("package.json", "utf8")) as { version?: unknown }).version
+);
+const packagedReadme = (await readFile("README.md", "utf8")).replaceAll(
+  sourcePackageVersion,
+  fixturePackageVersion
 );
 
 const requiredEntries = (): PackageAuditEntry[] => [
@@ -31,7 +35,7 @@ const requiredEntries = (): PackageAuditEntry[] => [
     path: "package.json",
     content: JSON.stringify({
       name: "@ahoooooo/reviewready",
-      version: "1.0.2",
+      version: fixturePackageVersion,
       publishConfig: {
         access: "public",
         registry: "https://registry.npmjs.org"

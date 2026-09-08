@@ -95,6 +95,21 @@ The temporary acceptance PR was closed without merge and its branch was deleted
 after these observations. A later CI-only rerun still requires a manual rerun of
 **ReviewReady trusted evidence** after CI completes.
 
+## Independent registry recheck
+
+At `2026-09-08T04:20:31Z`, a separate read-only query of the official npm
+registry observed `latest=1.0.15` and downloaded the published tarball. Its
+111-file list, SHA-512
+`1fc59b9c44873381dc45647b66e4d660451bf00434e55bc983671f185601fa50af042819fc760d0fef2a43e8ea3b2a87436a1e44ee0eb40a037a048d02e67bed`,
+and SHA-1 `50d1788069418447566c9722cb26b02fabea1388` matched this release
+record. The manifest, CLI, README, and four exported schemas were present.
+
+The packaged README declared package 1.0.15 but retained v1.0.14 Action/schema
+examples and mutable `main` links for version-bound product documents. That
+observed policy mismatch is corrected by the v1.0.16 candidate. This independent
+recheck did not rerun full npm provenance verification; the successful protected
+workflow evidence above remains the provenance observation.
+
 ## Verification boundary
 
 The first workflow attempt published the exact audited artifact through npm

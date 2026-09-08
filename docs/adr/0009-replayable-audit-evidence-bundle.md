@@ -1,6 +1,7 @@
 # ADR 0009: Replayable repository-audit evidence bundle
 
-- Status: accepted; v1 frozen, v2 semantic extension governed by ADR 0010, final dogfood/review gate pending
+- Status: accepted; v1 frozen, v2 semantic extension governed by ADR 0010;
+  dogfood replay verified, repository-audit acceptance incomplete
 - Date: 2026-08-13
 
 ## Context
@@ -15,6 +16,15 @@ TA-2 requires an exact-revision dogfood artifact whose saved bytes can be
 replayed offline. That artifact must not change the v1 readiness result, turn an
 audit result into a merge decision, infer a trusted root from caller input, or
 claim that several GitHub REST reads form a transaction.
+
+The 2026-09-08 dogfood
+[workflow run 34184361828](https://github.com/ahoooooooo/reviewready/actions/runs/34184361828)
+saved and independently replayed the artifact for
+`704e0da930aca14ed1ee37ce7c2f3b95184f5fd4`. Review job `101929673227`
+verified artifact/replay consistency, but the replayed audit status was
+`incomplete`, with `settings-authority-incomplete` recorded as missing.
+This satisfies the executable replay check; it does not satisfy a repository
+audit-pass or final acceptance claim.
 
 GitHub exposes repository metadata, branch protection, rulesets, tag protection,
 and repository contents through separate endpoints. Conditional requests can
@@ -295,8 +305,8 @@ saved artifact by design.
 This ADR does not authorize a release, tag movement, GitHub artifact, or
 trusted-provider deployment. The executable schema, parser, canonicalizer,
 CLI modes, bounded live collector, replay path, focused tests, and local gates
-are implemented under the TA-2 plan. A real dogfood bundle and the final
-adversarial review remain promotion evidence, not assumptions in this ADR.
+are implemented under the TA-2 plan. The real dogfood bundle has been replayed;
+repository-audit acceptance remains incomplete for the reason recorded above.
 
 ## References
 

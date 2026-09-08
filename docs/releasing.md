@@ -32,9 +32,9 @@ registry, provenance, environment, or repository observations remain incomplete.
 
 - Choose the next unused semantic version. Never reuse an unpublished version.
 - Update `package.json` and `package-lock.json` together.
-- Set the README `Package version` to that candidate version before packing.
-  The `Verified Action examples` version and immutable Action/schema examples
-  remain on the last verified release until new publication evidence is recorded.
+- Set the README `Package version`, `Verified Action examples`, semantic-version
+  Action examples, schema URLs, and version-bound documentation links to that
+  candidate version before packing.
   Keep `docs/public-baseline.json` as the sole version/capability baseline;
   its stable coordinates must not pretend the candidate is already published.
 - Move user-visible changes from `Unreleased` into a dated `CHANGELOG.md` entry.
@@ -43,14 +43,14 @@ registry, provenance, environment, or repository observations remain incomplete.
   changes.
 - Confirm every release blocker identified in the tracking issue is closed.
 
-The packaged README must describe the candidate package version and distinguish
-its historical verified examples from that version. It must not claim that `v1`
-currently points to a particular release. Do not put the candidate's own commit
-SHA into files that must be committed to create that SHA. Fix the package version
-before packing; bind the resulting commit, tarball hashes, registry results, and
-exact Action pin through release evidence after those values exist. Updating
-main's precise verified pins afterward is allowed and does not rewrite the
-published README or historical release.
+The packaged README must describe the candidate package version and use the same
+`vX.Y.Z` coordinate for Action, schema, and version-bound product documentation.
+It must not claim that `v1` currently points to a particular release. Do not put
+the candidate's own commit SHA into files that must be committed to create that
+SHA. Bind the resulting commit, tarball hashes, registry results, and exact SHA
+pin through release evidence after those values exist. The repository's own
+trusted workflow remains pinned to the last published full commit until the new
+release is verified.
 
 ## 2. Verify the release candidate
 
@@ -102,8 +102,9 @@ published bytes were audited.
 
 The local baseline check runs before packing, and the package audit checks the
 README and manifest inside the tarball. Both must agree on the candidate package
-version. The tarball's Action examples retain their explicitly labeled verified
-release coordinate, so no step depends on a self-referential release SHA.
+version. The tarball's Action examples use its own semantic-version tag, so no
+step depends on a self-referential release SHA. The release workflow must verify
+the platform's immutable-release flag before calling that tag protected.
 
 npm run release:preflight also records the committed Action bundle state before
 the build and fails if the build changes it. This prevents a stale checked-in
@@ -167,9 +168,10 @@ must not mutate the audited artifact.
 
 Only after npm verification succeeds:
 
-1. Verify GitHub release immutability is enabled for the repository. If it is
-   unavailable or disabled, record the release gate as incomplete and obtain an
-   explicit decision rather than claiming platform-enforced immutability.
+1. Verify the created GitHub Release reports `immutable: true`. Missing,
+   unreadable, or false state fails the release gate. This platform control locks
+   the release tag and assets; title, notes, latest status, and other mutable
+   metadata are checked separately against the intended release values.
 2. Create semantic-version Git tag `vX.Y.Z` at the verified release commit.
 3. Create a GitHub Release object from that exact tag.
 4. Use the matching changelog entry as the release notes and mark the newest
@@ -195,8 +197,9 @@ Verify that all of the following refer to the intended release:
 - stable Action tag `v1`;
 - Marketplace listing;
 - `CHANGELOG.md`;
-- the tarball's README package version and its separately labeled verified
-  examples, plus main's installation guidance and `docs/public-baseline.json`;
+- the tarball's README package version, matching Action/schema examples, and
+  version-bound documentation links, plus main's current status guidance and
+  `docs/public-baseline.json`;
 - release evidence documentation.
 
 Verify the trusted PR workflow separately with a new head commit, a PR body edit,

@@ -44,6 +44,12 @@ const SHASUM = /^[0-9a-f]{40}$/iu;
 const NPM_PROVENANCE_PREDICATE = "https://slsa.dev/provenance/v1";
 const RELEASE_WORKFLOW_PATH = ".github/workflows/release-publish.yml";
 const RELEASE_REPOSITORY = "https://github.com/ahoooooooo/reviewready";
+export const REQUIRED_RELEASE_CHECKS = [
+  "check",
+  "Node.js 22 compatibility",
+  "Analyze (actions)",
+  "Analyze (javascript-typescript)"
+];
 
 /**
  * @param {unknown} value
@@ -305,6 +311,44 @@ export function assertReleaseProvenance(value) {
 }
 
 /**
+ * Require the latest bounded check-run snapshot for one release commit to show
+ * every release prerequisite completed successfully under GitHub Actions.
+ * The caller is responsible for querying the exact candidate commit.
+ *
+ * @param {unknown} value
+ * @returns {void}
+ */
+export function assertReleaseCheckRuns(value) {
+  const response = record(value);
+  const checkRuns = Array.isArray(response.check_runs) ? response.check_runs : [];
+  if (
+    typeof response.total_count !== "number" ||
+    !Number.isSafeInteger(response.total_count) ||
+    response.total_count < 0 ||
+    response.total_count > checkRuns.length
+  ) {
+    throw new Error("release check-run response is incomplete");
+  }
+  for (const requiredName of REQUIRED_RELEASE_CHECKS) {
+    const matches = checkRuns.filter(
+      (candidate) => isRecord(candidate) && candidate.name === requiredName
+    );
+    if (matches.length !== 1) {
+      throw new Error("release prerequisite check is missing or ambiguous: " + requiredName);
+    }
+    const run = record(matches[0]);
+    const app = record(run.app);
+    if (
+      app.slug !== "github-actions" ||
+      run.status !== "completed" ||
+      run.conclusion !== "success"
+    ) {
+      throw new Error("release prerequisite check did not pass: " + requiredName);
+    }
+  }
+}
+
+/**
  * @typedef {(input: string, init?: RequestInit) => Promise<Response>} ReleaseFetch
  */
 
@@ -462,6 +506,7 @@ async function verifyPublicReleaseCoordinates(provenance, fetchImpl, expectedRel
     release.target_commitish !== mainCommit ||
     release.draft !== false ||
     release.prerelease !== false ||
+    release.immutable !== true ||
     release.name !== "ReviewReady " + version ||
     typeof releaseBody !== "string" ||
     releaseBody.trim() !== expectedReleaseBody
