@@ -6,26 +6,22 @@
     "positioning": "Trusted Review Intake"
   },
   "stableRelease": {
-    "version": "1.0.14",
-    "sourceCommit": "89714b55f0b1f03b949033c75f45a1d0358f00a2",
-    "immutableTag": "v1.0.14",
+    "version": "1.0.15",
+    "sourceCommit": "53c1c679387ad4005e07a5350609cca302d882d4",
+    "immutableTag": "v1.0.15",
     "stableActionTag": "v1",
     "npmPackage": "@ahoooooo/reviewready",
-    "npmLatestVersion": "1.0.14",
-    "actionCommit": "ahoooooooo/reviewready@89714b55f0b1f03b949033c75f45a1d0358f00a2",
-    "schemaRef": "https://raw.githubusercontent.com/ahoooooooo/reviewready/v1.0.14/reviewready.schema.json",
-    "releaseEvidence": "docs/release-evidence-v1.0.14.json",
-    "releaseNotes": "docs/release-evidence-v1.0.14.md",
-    "releaseUrl": "https://github.com/ahoooooooo/reviewready/releases/tag/v1.0.14"
-  },
-  "releaseCandidate": {
-    "version": "1.0.15",
+    "npmLatestVersion": "1.0.15",
+    "actionCommit": "ahoooooooo/reviewready@53c1c679387ad4005e07a5350609cca302d882d4",
+    "schemaRef": "https://raw.githubusercontent.com/ahoooooooo/reviewready/v1.0.15/reviewready.schema.json",
     "releaseEvidence": "docs/release-evidence-v1.0.15.json",
-    "releaseNotes": "docs/release-evidence-v1.0.15.md"
+    "releaseNotes": "docs/release-evidence-v1.0.15.md",
+    "releaseUrl": "https://github.com/ahoooooooo/reviewready/releases/tag/v1.0.15"
   },
   "sourcePolicy": {
-    "nextMilestone": {
+    "completedMilestone": {
       "name": "public-consistency-baseline",
+      "status": "complete",
       "scope": [
         "existing public documentation and consistency checks",
         "revalidate and integrate #121, #129, then #130 on updated bases",
@@ -41,7 +37,7 @@
         "large refactors"
       ]
     },
-    "mainStatus": "release-candidate",
+    "mainStatus": "post-release-unreleased",
     "mainMayDifferFromStableArtifact": true,
     "publishedArtifactsImmutable": true,
     "publishRequiresNewVersion": true,

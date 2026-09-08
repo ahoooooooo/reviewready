@@ -27,7 +27,7 @@ pull-request code.
 
 Package version: `1.0.15`.
 
-Verified Action examples: `v1.0.14`.
+Verified Action examples: `v1.0.15`.
 
 The exact stable release coordinates, immutable source commit, stable Action
 tag, npm package, and source-versus-release policy are recorded in the [public
@@ -54,7 +54,7 @@ A normal `pull_request` workflow remains advisory because the contribution can
 modify the merge-ref workflow that evaluates it. Loading policy contents from
 the base SHA does not by itself protect the caller workflow, Action pin, or
 `policy-path`. The checked-in trusted reference uses a metadata-only
-`pull_request_target` workflow pinned to the exact v1.0.14 release commit, but a
+`pull_request_target` workflow pinned to the exact v1.0.15 release commit, but a
 GitHub required check still does not uniquely identify one workflow definition
 or event. This repository does not provide a production GitHub App or an
 external enforcement service. The checked-in trusted workflow is a
@@ -109,10 +109,10 @@ reviewready validate --policy .reviewready.yml
 The Action can also be used in an advisory workflow:
 
 ```yaml
-- uses: ahoooooooo/reviewready@89714b55f0b1f03b949033c75f45a1d0358f00a2 # v1.0.14
+- uses: ahoooooooo/reviewready@53c1c679387ad4005e07a5350609cca302d882d4 # v1.0.15
 ```
 
-The example pins the exact audited v1.0.14 release commit. Full commit SHAs
+The example pins the exact audited v1.0.15 release commit. Full commit SHAs
 identify fixed source revisions. Semantic-version tags and published npm versions
 are immutable under project policy. The mutable `v1` alias can move only after
 release verification; npm `latest` is also a mutable registry tag. Pin a verified
@@ -182,7 +182,7 @@ Action-only repositories can copy the schema into the repository or reference an
 immutable release URL:
 
 ```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/ahoooooooo/reviewready/v1.0.14/reviewready.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ahoooooooo/reviewready/v1.0.15/reviewready.schema.json
 ```
 
 Keep the schema version aligned with the Action or CLI version being used. A local
@@ -228,7 +228,7 @@ jobs:
       statuses: read
       issues: read
     steps:
-      - uses: ahoooooooo/reviewready@89714b55f0b1f03b949033c75f45a1d0358f00a2 # v1.0.14
+      - uses: ahoooooooo/reviewready@53c1c679387ad4005e07a5350609cca302d882d4 # v1.0.15
 ```
 
 Replace the example test commands with the target repository's own verification.

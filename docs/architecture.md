@@ -114,7 +114,7 @@ not change the `check` or `readiness` identities used by repository rules.
 
 The Action source supports `pull_request`, `pull_request_review`, and
 `pull_request_target` events. The checked-in trusted reference uses
-`pull_request_target` and is pinned to the published v1.0.14 release commit. That
+`pull_request_target` and is pinned to the published v1.0.15 release commit. That
 protects the selected base workflow from the evaluated PR, but the current
 GitHub Actions App requirement does not uniquely identify that workflow.
 Review events may be submitted, edited, or dismissed. For GitHub review data,
