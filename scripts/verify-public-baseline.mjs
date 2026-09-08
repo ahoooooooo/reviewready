@@ -152,6 +152,114 @@ function verifyReferenceLanguage(text) {
   return errors;
 }
 
+/** @param {string} value */
+function normalizeMarkdownReferenceLabel(value) {
+  return value.trim().replace(/\s+/gu, " ").toLocaleLowerCase("en-US");
+}
+
+/** @param {string} line */
+function maskInlineCodeSpans(line) {
+  const characters = line.split("");
+  let index = 0;
+  while (index < line.length) {
+    if (line[index] !== BACKTICK) {
+      index += 1;
+      continue;
+    }
+    let markerLength = 1;
+    while (line[index + markerLength] === BACKTICK) markerLength += 1;
+    const marker = BACKTICK.repeat(markerLength);
+    const end = line.indexOf(marker, index + markerLength);
+    if (end === -1) {
+      index += markerLength;
+      continue;
+    }
+    for (let cursor = index; cursor < end + markerLength; cursor += 1) {
+      characters[cursor] = " ";
+    }
+    index = end + markerLength;
+  }
+  return characters.join("");
+}
+
+/** @param {string} text */
+function renderedMarkdownLinkSource(text) {
+  const rendered = [];
+  let fence;
+  let htmlComment = false;
+  for (const rawLine of text.replaceAll("\r\n", "\n").split("\n")) {
+    const fenceMatch = /^\s{0,3}(`{3,}|~{3,})/u.exec(rawLine);
+    const marker = fenceMatch?.[1];
+    if (fence !== undefined) {
+      if (
+        marker !== undefined &&
+        marker[0] === fence.marker &&
+        marker.length >= fence.length &&
+        /^\s{0,3}(`{3,}|~{3,})[ \t]*$/u.test(rawLine)
+      ) {
+        fence = undefined;
+      }
+      rendered.push("");
+      continue;
+    }
+    if (marker !== undefined) {
+      fence = { marker: marker[0], length: marker.length };
+      rendered.push("");
+      continue;
+    }
+
+    let line = rawLine;
+    let visible = "";
+    while (line.length > 0) {
+      if (htmlComment) {
+        const end = line.indexOf("-->");
+        if (end === -1) {
+          line = "";
+          continue;
+        }
+        htmlComment = false;
+        line = line.slice(end + 3);
+        continue;
+      }
+      const start = line.indexOf("<!--");
+      if (start === -1) {
+        visible += line;
+        line = "";
+      } else {
+        visible += line.slice(0, start);
+        htmlComment = true;
+        line = line.slice(start + 4);
+      }
+    }
+    rendered.push(maskInlineCodeSpans(visible));
+  }
+  return rendered.join("\n");
+}
+
+/** @param {string} text */
+function markdownLinkTargets(text) {
+  const source = renderedMarkdownLinkSource(text);
+  /** @type {Map<string, string>} */
+  const definitions = new Map();
+  for (const match of source.matchAll(/^\s{0,3}\[([^\]]+)\]:\s*<?([^\s>]+)>?/gmu)) {
+    const label = normalizeMarkdownReferenceLabel(match[1] ?? "");
+    if (label.length > 0 && !definitions.has(label)) {
+      definitions.set(label, match[2] ?? "");
+    }
+  }
+  const targets = [
+    ...[...source.matchAll(/\]\(<?([^\s)>]+)>?(?:\s+"[^"]*")?\)/gu)].map((match) => match[1] ?? "")
+  ];
+  for (const match of source.matchAll(/!?\[([^\]]*)\]\[([^\]]*)\]/gu)) {
+    const label = normalizeMarkdownReferenceLabel(
+      (match[2] ?? "").length > 0 ? (match[2] ?? "") : (match[1] ?? "")
+    );
+    const target = definitions.get(label);
+    if (target !== undefined) targets.push(target);
+  }
+  return targets;
+}
+
 /**
  * Validate README bytes supplied by the existing package audit without I/O
  * or requiring a candidate document to name its own commit SHA.
@@ -225,19 +333,28 @@ export function verifyPackagedReadme(readme, packageVersion, packagedPaths) {
     "docs/architecture.md",
     "docs/adr/0001-trusted-workflow-root.md"
   ];
+  const links = markdownLinkTargets(readme);
   for (const path of versionedDocuments) {
     const expectedUrl = `https://github.com/ahoooooooo/reviewready/blob/${expectedTag}/${path}`;
-    if (!readme.includes(expectedUrl)) {
+    const prefix = "https://github.com/ahoooooooo/reviewready/blob/";
+    const documentLinks = links
+      .map((link) => link.split(/[?#]/u)[0] ?? "")
+      .filter((link) => {
+        if (!link.startsWith(prefix)) return false;
+        const refAndPath = link.slice(prefix.length);
+        const separator = refAndPath.indexOf("/");
+        return separator > 0 && refAndPath.slice(separator + 1) === path;
+      });
+    if (documentLinks.length === 0 || !documentLinks.includes(expectedUrl)) {
       errors.push("README version-bound document does not match the packaged version: " + path);
     }
-    if (readme.includes(`https://github.com/ahoooooooo/reviewready/blob/main/${path}`)) {
+    if (documentLinks.includes(`https://github.com/ahoooooooo/reviewready/blob/main/${path}`)) {
       errors.push("README version-bound document points to mutable main: " + path);
     }
+    if (documentLinks.some((link) => link !== expectedUrl)) {
+      errors.push("README version-bound document has a stale clickable target: " + path);
+    }
   }
-  const links = [
-    ...[...readme.matchAll(/\]\(<?([^\s)>]+)>?(?:\s+"[^"]*")?\)/gu)].map((match) => match[1] ?? ""),
-    ...[...readme.matchAll(/^\s*\[[^\]]+\]:\s*<?([^\s>]+)>?/gmu)].map((match) => match[1] ?? "")
-  ];
   for (const link of links) {
     if (/^(?:[a-z][a-z\d+.-]*:|#)/iu.test(link)) continue;
     const path = link.split(/[?#]/u)[0]?.replace(/^\.\//u, "") ?? "";

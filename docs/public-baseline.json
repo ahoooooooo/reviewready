@@ -18,17 +18,20 @@
     "releaseNotes": "docs/release-evidence-v1.0.16.md",
     "releaseUrl": "https://github.com/ahoooooooo/reviewready/releases/tag/v1.0.16"
   },
+  "releaseCandidate": {
+    "version": "1.0.17",
+    "releaseEvidence": "docs/release-evidence-v1.0.17.json",
+    "releaseNotes": "docs/release-evidence-v1.0.17.md"
+  },
   "sourcePolicy": {
     "completedMilestone": {
       "name": "public-consistency-baseline",
-      "status": "complete",
+      "status": "in-progress",
       "scope": [
-        "correct current public documentation and parser contracts",
-        "record TA-2 replay integrity separately from its incomplete audit result",
-        "align packaged README examples and version-bound links with the candidate",
-        "verify immutable releases and exact-commit prerequisite checks",
-        "publish one patch release with verified GitHub and npm coordinates",
-        "verify the Marketplace listing after its release index refreshes"
+        "bound Markdown raw HTML recognition without changing evidence semantics",
+        "verify legal release-candidate and post-release state transitions",
+        "validate actual version-bound Markdown link targets",
+        "publish one patch release with verified GitHub, npm, and Marketplace coordinates"
       ],
       "nonGoals": [
         "new product capabilities",
@@ -39,7 +42,7 @@
         "large refactors"
       ]
     },
-    "mainStatus": "post-release-unreleased",
+    "mainStatus": "release-candidate",
     "mainMayDifferFromStableArtifact": true,
     "publishedArtifactsImmutable": true,
     "publishRequiresNewVersion": true,

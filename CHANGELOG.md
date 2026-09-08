@@ -5,6 +5,19 @@ the project uses semantic versioning.
 
 ## [Unreleased]
 
+## [1.0.17] - 2026-09-08
+
+### Fixed
+
+- Replace overlapping raw-HTML regular expressions with a deterministic,
+  operation-budgeted scanner and verify the compiled engine, CLI, and Action
+  runner under a hard process deadline.
+- Validate actual inline and reference-style Markdown link targets for
+  version-bound package documentation, including mixed-version and
+  comment-only decoys.
+- Exercise post-release and release-candidate baseline states independently so
+  the next candidate can pass without weakening mixed-version checks.
+
 ## [1.0.16] - 2026-09-08
 
 ### Fixed

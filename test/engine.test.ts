@@ -296,6 +296,16 @@ rules:
     ).toBe("missing");
   });
 
+  it("fails closed when raw HTML recognition exceeds its operation budget", () => {
+    const prefix = "## Testing\nVisible evidence <div";
+    const body = prefix + " ".repeat(1_000_000 - prefix.length);
+    expect(() => evaluate(policy, input({ body }))).toThrow(
+      expect.objectContaining<Partial<InputError>>({
+        code: "INPUT_MARKDOWN_SCAN_BUDGET_EXCEEDED"
+      })
+    );
+  });
+
   it.each(["## Testing\n[](#)", "## Testing\n[<!-- hidden -->](https://example.test)"])(
     "does not count empty Markdown markers as visible section content",
     (body) => {
@@ -397,6 +407,16 @@ rules:
     {
       name: "malformed self-closing tag",
       body: "## Testing\n<div/ foo>",
+      expected: "satisfied"
+    },
+    {
+      name: "spaced slash is not treated as a self-closing raw HTML tag",
+      body: ["## Testing", "<div / >", "Tests passed."].join("\n"),
+      expected: "missing"
+    },
+    {
+      name: "self-closing raw HTML tag does not hide following evidence",
+      body: ["## Testing", "<div />", "Tests passed."].join("\n"),
       expected: "satisfied"
     },
     {
