@@ -67,6 +67,7 @@ verified against the same commit and exact artifact.
   https://github.com/ahoooooooo/reviewready/actions/runs/34182179568/job/101924173146
 - GitHub Release:
   https://github.com/ahoooooooo/reviewready/releases/tag/v1.0.15
+- GitHub Release published at: `2026-09-08T03:08:24Z`
 
 ## Verification boundary
 

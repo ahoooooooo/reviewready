@@ -30,5 +30,6 @@
   "registrySmokeJob": "https://github.com/ahoooooooo/reviewready/actions/runs/34182179568/job/101924173146",
   "tarballUrl": "https://registry.npmjs.org/@ahoooooo/reviewready/-/reviewready-1.0.15.tgz",
   "releaseUrl": "https://github.com/ahoooooooo/reviewready/releases/tag/v1.0.15",
+  "publishedAt": "2026-09-08T03:08:24Z",
   "releaseTarget": "53c1c679387ad4005e07a5350609cca302d882d4"
 }
