@@ -185,6 +185,105 @@ describe("runAction", () => {
     );
   });
 
+  it.each([
+    {
+      name: "literal angle brackets inside inline code",
+      body: "## Testing\n`<div>`",
+      expectedStatus: "ready"
+    },
+    {
+      name: "visible label with an HTML-like link title",
+      body: '## Testing\n[x](foo "<div>")',
+      expectedStatus: "ready"
+    },
+    {
+      name: "inline raw HTML",
+      body: "## Testing\n[](#)<script>Tests passed.</script>",
+      expectedStatus: "not_ready"
+    },
+    {
+      name: "empty inline link with one line ending",
+      body: ["## Testing", "[](", ")", "", "## Notes", "Nope."].join("\n"),
+      expectedStatus: "not_ready"
+    },
+    {
+      name: "unresolved empty reference remains literal",
+      body: "## Testing\n[][missing]",
+      expectedStatus: "ready"
+    },
+    {
+      name: "defined empty reference",
+      body: ["## Testing", "[][ref]", "[ref]: /hidden"].join("\n"),
+      expectedStatus: "not_ready"
+    },
+    {
+      name: "fence-like line inside a reference title",
+      body: [
+        "## Testing",
+        "[tests]: https://example.test/report",
+        '"hidden title',
+        "```",
+        'continuation"',
+        "[][other]",
+        "[other]: https://example.test/other"
+      ].join("\n"),
+      expectedStatus: "not_ready"
+    },
+    {
+      name: "indented heading after a reference definition",
+      body: ["## Testing", "[ref]: /hidden", "  ## Outside", "outside text"].join("\n"),
+      expectedStatus: "not_ready"
+    },
+    {
+      name: "malformed link markers exceed bounded scanning",
+      body: ["## Testing", "[x](".repeat(512) + "<div>"].join("\n"),
+      expectedStatus: "not_ready"
+    }
+  ])(
+    "keeps Action and CLI Markdown classification equal for $name",
+    async ({ body, expectedStatus }) => {
+      const sectionPolicy = `
+version: 1
+rules:
+  - id: source
+    when:
+      paths:
+        any: [src/**]
+    require:
+      - type: pr_body_section
+        heading: Testing
+`;
+      const input = { ...evaluationInput(), body };
+      const action = runtime(gateway(input.changedFiles, body, sectionPolicy));
+      action.event = {
+        ...event,
+        pull_request: { ...event.pull_request, body }
+      };
+
+      await runAction(action);
+
+      const stdout: string[] = [];
+      const stderr: string[] = [];
+      const exitCode = await runCli(
+        ["check", "--policy", "policy.yml", "--input", "input.json", "--json"],
+        {
+          readFile: (path) =>
+            Promise.resolve(path === "policy.yml" ? sectionPolicy : JSON.stringify(input)),
+          stdout: (value) => stdout.push(value),
+          stderr: (value) => stderr.push(value)
+        }
+      );
+
+      const actionReport = JSON.parse(action.outputs.get("report-json") ?? "{}");
+      const cliReport = JSON.parse(stdout.join(""));
+      expect(action.outputs.get("status")).toBe(expectedStatus);
+      expect(cliReport.status).toBe(expectedStatus);
+      expect(exitCode).toBe(expectedStatus === "ready" ? 0 : 1);
+      expect(stderr).toEqual([]);
+      expect(actionReport).toEqual(cliReport);
+    }
+  );
+
   it("fails the check with an actionable not-ready summary", async () => {
     const action = runtime(gateway(["README.md", "src/index.ts"], ""));
     action.event = {

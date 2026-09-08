@@ -1,5 +1,12 @@
 # Architecture and trust boundaries
 
+ReviewReady is the open-source implementation of the **ReviewReady Evidence
+Protocol**, positioned as Trusted Review Intake before human or AI review. The
+Action and CLI are the shipped entry points. The repository does not ship a
+hosted GitHub App, durable external store, production enforcement service, or
+provider SDK; source contracts and pure ingress primitives must not be
+described as those deployed capabilities.
+
 ## Modules
 
 1. `policy`: parses YAML and validates a closed, versioned schema.
@@ -94,16 +101,20 @@ a bounded read-only wait for the latest `check` Check Run on the exact head SHA
 from the expected GitHub Actions provider before invoking the pinned Action. A
 missing, oversized, incomplete, or still-pending check response fails closed;
 the workflow does not checkout, execute, or interpret pull-request source while
-waiting. This ordering prevents a race-affected readiness result from becoming
-the required status check and normally removes the need for a manual readiness
-rerun; if the bounded wait is exhausted, the workflow fails closed instead of
-accepting stale evidence.
+waiting. This ordering waits for CI during an already-triggered run; if the
+bounded wait is exhausted, the workflow fails closed instead of accepting stale
+evidence. It does not subscribe to later CI reruns. New PR commits and body edits
+trigger the configured `synchronize` and `edited` events, but a CI-only rerun
+after readiness has finished requires a manual rerun of **ReviewReady trusted
+evidence** after CI completes. Verify that the resulting `readiness` check
+corresponds to the current PR head and metadata. The workflow display name does
+not change the `check` or `readiness` identities used by repository rules.
 
 ## Evidence collection
 
 The Action source supports `pull_request`, `pull_request_review`, and
 `pull_request_target` events. The checked-in trusted reference uses
-`pull_request_target` and is pinned to the published v1.0.11 release commit. That
+`pull_request_target` and is pinned to the published v1.0.14 release commit. That
 protects the selected base workflow from the evaluated PR, but the current
 GitHub Actions App requirement does not uniquely identify that workflow.
 Review events may be submitted, edited, or dismissed. For GitHub review data,

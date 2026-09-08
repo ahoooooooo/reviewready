@@ -5,6 +5,44 @@ the project uses semantic versioning.
 
 ## [Unreleased]
 
+### Fixed
+
+- Preserve visible Markdown link and code contexts while rejecting hidden or raw
+  HTML as pull-request evidence; malformed link-like input remains bounded and
+  fails closed.
+- Treat valid empty inline links and defined empty reference links as empty
+  evidence, while preserving unresolved reference text and valid multiline
+  reference definitions.
+- Keep fenced-code content, reference-title continuations, and indented heading
+  boundaries from hiding or consuming evidence outside their Markdown context.
+- Check public baseline prose, structured version coordinates, capability
+  boundaries, and trusted workflow pins together, with regression cases that
+  reject mismatched versions, pins, and capability status.
+- Verify candidate README versions and installed-package documentation against
+  the exact tarball, separately from online release verification.
+
+### Documentation
+
+- Distinguish immutable release tags and packages from the mutable `v1` and npm
+  `latest` aliases, and retain release evidence as historical observations.
+- Separate package versions from verified Action examples, label fixture commands
+  as repository-only, and link unshipped documentation to GitHub.
+- Rename the trusted workflow display to ReviewReady trusted evidence, preserving
+  `readiness`, and document manual readiness reruns after later CI-only reruns.
+
+## [1.0.14] - 2026-09-04
+
+### Documentation
+
+- Establish the ReviewReady Evidence Protocol identity and publish a
+  machine-readable public coordinate baseline for the stable v1.0.13 release,
+  post-release `main`, and the advisory-versus-authoritative boundary.
+
+### Fixed
+
+- Pin the vulnerable `fast-uri` transitive dependency to the patched 3.1.7
+  release in the development dependency tree.
+
 ## [1.0.13] - 2026-08-25
 
 ### Documentation

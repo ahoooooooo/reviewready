@@ -1,13 +1,19 @@
 # ReviewReady
 
+**ReviewReady Evidence Protocol** — Trusted Review Intake for pull requests.
+
 [![CI](https://github.com/ahoooooooo/reviewready/actions/workflows/ci.yml/badge.svg)](https://github.com/ahoooooooo/reviewready/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/%40ahoooooo%2Freviewready.svg)](https://www.npmjs.com/package/@ahoooooo/reviewready)
 [![npm downloads](https://img.shields.io/npm/dm/%40ahoooooo%2Freviewready.svg)](https://www.npmjs.com/package/@ahoooooo/reviewready)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-ReviewReady is a deterministic evidence gate for pull requests. A repository
-declares what must be present before a particular kind of change consumes human
-review time; ReviewReady reports what is verified and what is still missing.
+ReviewReady is the open-source implementation of the ReviewReady Evidence
+Protocol: a deterministic Trusted Review Intake layer for pull requests. A
+repository declares what must be present before a particular kind of change
+consumes human review time; ReviewReady reports what is verified and what is
+still missing. The protocol name describes the public evidence contracts and
+trust boundaries; it does not imply a hosted service or an authoritative merge
+provider.
 
 It answers one narrow question:
 
@@ -18,6 +24,24 @@ or merge. There are no model calls, hosted service, database, or execution of
 pull-request code.
 
 ## Current status
+
+Package version: `1.0.14`.
+
+Verified Action examples: `v1.0.14`.
+
+The exact stable release coordinates, immutable source commit, stable Action
+tag, npm package, and source-versus-release policy are recorded in the [public
+baseline](https://github.com/ahoooooooo/reviewready/blob/main/docs/public-baseline.md)
+and its [machine-readable record](https://github.com/ahoooooooo/reviewready/blob/main/docs/public-baseline.json).
+
+A source checkout can be ahead of the latest published artifact while a new
+release is prepared. The package version identifies this README's source or
+packaged version; it does not establish publication. Verified Action and schema
+examples identify the last verified release recorded with this README and may
+predate a candidate package. A checkout must not be represented as a published tarball
+without the protected workflow's exact artifact, registry, provenance, and
+release evidence. Immutable release artifacts and historical commits are not
+rewritten.
 
 The npm registry and GitHub Releases are authoritative for current public
 release coordinates. Versioned release evidence is recorded in
@@ -30,7 +54,7 @@ A normal `pull_request` workflow remains advisory because the contribution can
 modify the merge-ref workflow that evaluates it. Loading policy contents from
 the base SHA does not by itself protect the caller workflow, Action pin, or
 `policy-path`. The checked-in trusted reference uses a metadata-only
-`pull_request_target` workflow pinned to the exact v1.0.11 release commit, but a
+`pull_request_target` workflow pinned to the exact v1.0.14 release commit, but a
 GitHub required check still does not uniquely identify one workflow definition
 or event. This repository does not provide a production GitHub App or an
 external enforcement service. The checked-in trusted workflow is a
@@ -39,13 +63,34 @@ must be provided and independently protected by the adopting repository's
 GitHub configuration. A successful named check is not a claim that ReviewReady
 is a unique enforcement provider.
 
-The v1.0.13 package includes bounded `audit collect` and offline `audit replay`
+The package includes bounded `audit collect` and offline `audit replay`
 evidence-bundle commands. Live audit collection fails closed when repository
 governance is unavailable, contradictory, or uses semantics the normalized
 contract cannot represent; an incomplete audit is not a readiness result or a
-workflow-authority claim. [SECURITY.md](SECURITY.md) lists the durable boundary
+workflow-authority claim. [SECURITY.md](https://github.com/ahoooooooo/reviewready/blob/main/SECURITY.md) lists the durable boundary
 and current limitations. Published package bytes and historical releases are not
 rewritten when repository documentation advances.
+
+Live backlog, pull requests, branches, commit verification, and release
+freshness are provider state and are intentionally linked rather than frozen as
+stale counts: [issues](https://github.com/ahoooooooo/reviewready/issues),
+[pull requests](https://github.com/ahoooooooo/reviewready/pulls),
+[branches](https://github.com/ahoooooooo/reviewready/branches),
+[main commits](https://github.com/ahoooooooo/reviewready/commits/main), and
+[releases](https://github.com/ahoooooooo/reviewready/releases).
+
+## Capability and authority boundaries
+
+| Public entry        | Shipped capability                                                                                 | Authority and permission boundary                                                                                                    |
+| ------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| GitHub Action       | Evaluates bounded pull-request evidence and emits `ready` or `not_ready`.                          | Advisory, read-only GitHub access; it is not a unique issuer or merge authority.                                                     |
+| CLI                 | Validates policies, evaluates normalized fixtures, and collects or replays bounded audit evidence. | Local and read-only; live collection reads only a caller-named environment variable and does not mutate GitHub.                      |
+| npm/library         | Exposes the CLI entry point and versioned schema files.                                            | The bundled App, webhook, and ingress modules are contracts/internal implementation, not a hosted service or supported provider SDK. |
+| GitHub App/provider | Not shipped in this repository.                                                                    | No production App, durable external store, external enforcement service, or external adoption claim is included.                     |
+
+The [public baseline](https://github.com/ahoooooooo/reviewready/blob/main/docs/public-baseline.md) is the canonical summary of
+these capabilities, live-status links, release coordinates, and deliberately
+unshipped work.
 
 ## Quick start
 
@@ -53,24 +98,32 @@ Install the CLI from npm. Node.js 22 or newer is required:
 
 ```console
 npm install --global @ahoooooo/reviewready
+```
+
+Create your own `.reviewready.yml` policy, using the example below, then run:
+
+```console
 reviewready validate --policy .reviewready.yml
 ```
 
 The Action can also be used in an advisory workflow:
 
 ```yaml
-- uses: ahoooooooo/reviewready@e9cd421ac106adb5731dd22b714701a136e937f8 # v1.0.11
+- uses: ahoooooooo/reviewready@89714b55f0b1f03b949033c75f45a1d0358f00a2 # v1.0.14
 ```
 
-The example pins the exact audited v1.0.11 release commit. The mutable `v1` tag
-currently points to that release and is convenient for automatic patch updates,
-but an immutable verified commit is safer.
+The example pins the exact audited v1.0.14 release commit. Full commit SHAs
+identify fixed source revisions. Semantic-version tags and published npm versions
+are immutable under project policy. The mutable `v1` alias can move only after
+release verification; npm `latest` is also a mutable registry tag. Pin a verified
+full commit SHA when automatic alias updates are unsuitable. Release evidence
+records a historical publication observation, not the aliases' live targets.
 The advisory workflow below must not be configured as the repository's only
 trusted merge authority unless its workflow and policy selection are protected by
 an independent repository or organization rule.
 
 Version 1 keeps the policy, result, and exit-code contracts stable. See
-[CHANGELOG.md](CHANGELOG.md) for patch history; older release output is not
+[CHANGELOG.md](https://github.com/ahoooooooo/reviewready/blob/main/CHANGELOG.md) for patch history; older release output is not
 rewritten.
 
 ## How it works
@@ -129,7 +182,7 @@ Action-only repositories can copy the schema into the repository or reference an
 immutable release URL:
 
 ```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/ahoooooooo/reviewready/v1.0.12/reviewready.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ahoooooooo/reviewready/v1.0.14/reviewready.schema.json
 ```
 
 Keep the schema version aligned with the Action or CLI version being used. A local
@@ -175,7 +228,7 @@ jobs:
       statuses: read
       issues: read
     steps:
-      - uses: ahoooooooo/reviewready@e9cd421ac106adb5731dd22b714701a136e937f8 # v1.0.11
+      - uses: ahoooooooo/reviewready@89714b55f0b1f03b949033c75f45a1d0358f00a2 # v1.0.14
 ```
 
 Replace the example test commands with the target repository's own verification.
@@ -208,6 +261,17 @@ reconciliation are verified in repository settings. The trusted workflow uses
 pull_request_target, read-only permissions, and no checkout, download, cache
 restore, build, import, or command execution.
 
+The reference workflow is displayed as **ReviewReady trusted evidence**, and its
+job/check remains `readiness`. The `check` and `readiness` check names must stay
+aligned with the adopting repository's required-check rules. Its configured PR
+events include new commits (`synchronize`) and body edits (`edited`). During a
+run it waits for the latest `check` on the exact PR head, then evaluates evidence.
+This bounded wait does not subscribe to later CI reruns. If CI alone is rerun
+after readiness has finished or timed out, manually rerun the trusted evidence
+workflow after CI completes and confirm its result belongs to the current PR
+head and metadata. A previous readiness result does not prove later evidence
+was reevaluated.
+
 The Action writes a job summary and exports:
 
 - `status`: `ready` or `not_ready`;
@@ -237,7 +301,19 @@ the job as a required status check if it should block merging.
 ## CLI
 
 After installing `reviewready` globally, or as a development dependency and
-invoking it with `npx`, run:
+invoking it with `npx`, supply your own policy and normalized input files:
+
+```console
+reviewready validate --policy .reviewready.yml
+reviewready explain --policy .reviewready.yml
+reviewready check --policy .reviewready.yml --input input.json
+```
+
+The normalized input shape and examples are documented in the
+[product specification](https://github.com/ahoooooooo/reviewready/blob/main/docs/product-spec.md).
+The npm package includes the CLI and schemas; it does not include `docs/` or
+`fixtures/`. The following sample commands require a repository checkout and
+run from its root:
 
 ```console
 reviewready validate --policy fixtures/basic/.reviewready.yml
@@ -264,7 +340,14 @@ runtime parser and reviewready.schema.json.
 
 The separate audit command checks a bounded normalized repository snapshot. It
 is read-only, deterministic, and fail-closed; it does not check out or execute
-workflow source and it does not change the readiness JSON contract:
+workflow source and it does not change the readiness JSON contract. For an
+installed package, supply your own normalized snapshot as `audit-input.json`:
+
+```console
+reviewready audit --input audit-input.json --json
+```
+
+The following fixture examples require a repository checkout:
 
 ```console
 reviewready audit --input fixtures/audit/reviewready.json
@@ -340,8 +423,9 @@ The legacy live command above remains report-only and is retained for
 compatibility; it does not produce a replayable bundle. The collector
 never checks out or executes repository code.
 
-The GitHub App JWT/token and webhook HMAC/replay modules are library contracts
-for an external service. ReviewReady does not include an HTTP server, secret
+The GitHub App JWT/token and webhook HMAC/replay modules are internal
+implementation contracts, not a supported public provider SDK or a deployable
+App. ReviewReady does not include an HTTP server, secret
 manager, durable database, or in-memory replay fallback.
 
 ## Policy reference
@@ -379,7 +463,7 @@ previous path are evaluated; the Git separator is never rewritten.
   authorship, or legal responsibility.
 
 The full editor schema is [reviewready.schema.json](reviewready.schema.json). The
-executable behavior is specified in [docs/product-spec.md](docs/product-spec.md).
+executable behavior is specified in [docs/product-spec.md](https://github.com/ahoooooooo/reviewready/blob/main/docs/product-spec.md).
 
 ReviewReady v1 intentionally does not evaluate `merge_group`: GitHub's synthetic
 merge commit does not carry a complete per-PR body, review, and closing-issue
@@ -388,7 +472,7 @@ separate trustworthy aggregation design.
 
 The ordinary pull_request caller workflow is an advisory integration unless the
 repository separately protects the workflow root and required result. See
-[the trusted workflow design](docs/adr/0001-trusted-workflow-root.md) for the
+[the trusted workflow design](https://github.com/ahoooooooo/reviewready/blob/main/docs/adr/0001-trusted-workflow-root.md) for the
 security boundary and the settings that must be verified in GitHub.
 
 ## Security model
@@ -415,10 +499,12 @@ security boundary and the settings that must be verified in GitHub.
   it checks out, downloads, imports, caches, or executes untrusted pull-request
   code.
 
-See [SECURITY.md](SECURITY.md) and [docs/architecture.md](docs/architecture.md) for
+See [SECURITY.md](https://github.com/ahoooooooo/reviewready/blob/main/SECURITY.md) and [docs/architecture.md](https://github.com/ahoooooooo/reviewready/blob/main/docs/architecture.md) for
 the trust model and current known limitations.
 
 ## Development
+
+These commands require a repository checkout:
 
 ```console
 npm ci
@@ -427,7 +513,7 @@ npm run check
 
 `npm run check` enforces formatting, strict linting, TypeScript types, coverage
 thresholds, production build, generated dist parity, package privacy checks, and
-the bundled JavaScript Action. See [CONTRIBUTING.md](CONTRIBUTING.md) for the
+the bundled JavaScript Action. See [CONTRIBUTING.md](https://github.com/ahoooooooo/reviewready/blob/main/CONTRIBUTING.md) for the
 red/green/regression workflow.
 
 ## License

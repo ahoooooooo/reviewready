@@ -11,15 +11,46 @@ A release is verified only when the exact tarball submitted to npm is the same
 artifact that was audited, installed, and recorded. Verifying source files and
 then allowing a later lifecycle hook to rebuild them is not equivalent.
 
+Full commit SHAs identify fixed source revisions. Semantic-version tags and
+published npm versions must not be rewritten or overwritten. The `v1` alias can
+move only after verification, and npm `latest` is a mutable registry tag. Release
+evidence records the actual publication observation; an old observation does not
+claim an alias still points there today.
+
+Keep three verification results separate throughout the process:
+
+| Result   | What it verifies                                                                                            | Existing gate                                                                            |
+| -------- | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| LOCAL    | Source documents, declared capabilities, versions, and verified Action pins agree.                          | `npm run verify:public-baseline`                                                         |
+| PACKAGED | The exact candidate tarball has the intended manifest, README, schemas, CLI, and output contracts.          | `npm run verify:package`, `npm run package:smoke`, and `npm run release:preflight`       |
+| ONLINE   | Registry bytes, integrity, provenance, release target, and GitHub refs agree with the recorded publication. | `npm run release:verify -- docs/release-evidence-vX.Y.Z.json --artifact <exact-tarball>` |
+
+A pass for one row does not pass the other rows. Unavailable or unfinished
+registry, provenance, environment, or repository observations remain incomplete.
+
 ## 1. Prepare the release pull request
 
 - Choose the next unused semantic version. Never reuse an unpublished version.
 - Update `package.json` and `package-lock.json` together.
+- Set the README `Package version` to that candidate version before packing.
+  The `Verified Action examples` version and immutable Action/schema examples
+  remain on the last verified release until new publication evidence is recorded.
+  Keep `docs/public-baseline.json` as the sole version/capability baseline;
+  its stable coordinates must not pretend the candidate is already published.
 - Move user-visible changes from `Unreleased` into a dated `CHANGELOG.md` entry.
 - Add or update `docs/release-evidence-vX.Y.Z.md` with unchecked public steps.
 - Confirm the release contains only intended source, dependency, and documentation
   changes.
 - Confirm every release blocker identified in the tracking issue is closed.
+
+The packaged README must describe the candidate package version and distinguish
+its historical verified examples from that version. It must not claim that `v1`
+currently points to a particular release. Do not put the candidate's own commit
+SHA into files that must be committed to create that SHA. Fix the package version
+before packing; bind the resulting commit, tarball hashes, registry results, and
+exact Action pin through release evidence after those values exist. Updating
+main's precise verified pins afterward is allowed and does not rewrite the
+published README or historical release.
 
 ## 2. Verify the release candidate
 
@@ -46,7 +77,7 @@ token secret.
 
 The one-time npm trust setup for this repository is:
 
-    npm trust github @ahoooooo/reviewready --repository ahooooooo/reviewready --file release-publish.yml --environment release --allow-publish --yes
+    npm trust github @ahoooooo/reviewready --repository ahoooooooo/reviewready --file release-publish.yml --environment release --allow-publish --yes
 
 Run it only after npm login --auth-type=web has completed. The npm package
 settings must then require two-factor authentication and disallow traditional
@@ -69,6 +100,11 @@ The package-audit and release-preflight tooling inspect the files and contents
 from the exact tarball. A source-tree dry run alone is never proof that the final
 published bytes were audited.
 
+The local baseline check runs before packing, and the package audit checks the
+README and manifest inside the tarball. Both must agree on the candidate package
+version. The tarball's Action examples retain their explicitly labeled verified
+release coordinate, so no step depends on a self-referential release SHA.
+
 npm run release:preflight also records the committed Action bundle state before
 the build and fails if the build changes it. This prevents a stale checked-in
 dist/action tree from being silently replaced during release verification. The
@@ -85,6 +121,9 @@ unreviewed third-party tarball.
 Before publication:
 
 - inspect the tarball file list and package manifest;
+- verify the packaged README version, verified Action examples, and schema URLs;
+- verify README links from the installed-package perspective: only shipped files
+  may use relative links, and `docs/` links must use explicit GitHub URLs;
 - run the privacy and credential-pattern audit against bounded tarball-member
   bytes without extracting untrusted archive entries to disk;
 - verify package name, version, registry, integrity, and expected entry points;
@@ -92,6 +131,11 @@ Before publication:
 - run policy validation plus ready and not-ready CLI fixtures;
 - record the tarball checksum, source commit, and verification commands in the
   release-evidence file.
+
+Run installed CLI examples with caller-supplied policy and normalized input files.
+The package allowlist does not include repository `docs/` or `fixtures/`; those
+examples require a separate repository checkout. The clean-room smoke test must
+not rely on the consumer finding files in the source checkout.
 
 If an npm lifecycle script would rebuild package files during `npm publish`, change
 the workflow so the already-verified `.tgz` is published directly. Publication
@@ -151,7 +195,16 @@ Verify that all of the following refer to the intended release:
 - stable Action tag `v1`;
 - Marketplace listing;
 - `CHANGELOG.md`;
+- the tarball's README package version and its separately labeled verified
+  examples, plus main's installation guidance and `docs/public-baseline.json`;
 - release evidence documentation.
+
+Verify the trusted PR workflow separately with a new head commit, a PR body edit,
+and a CI failure followed by a successful CI-only rerun. Record the actual
+`readiness` results for those observations. A bounded poll does not subscribe to
+later CI reruns; manually rerun **ReviewReady trusted evidence** after CI finishes
+when needed. Keep the `check` and `readiness` identities aligned with repository
+rules and preserve the advisory authority boundary.
 
 If any step remains manual or incomplete, record it honestly instead of marking
 the release evidence complete. A missing checkbox is cheaper than forensic
